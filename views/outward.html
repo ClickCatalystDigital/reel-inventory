@@ -127,10 +127,11 @@
         </div>
         <div class="form-group">
           <label>Purchase Order <span style="color:var(--text-muted);font-weight:400;">(optional — confirmed POs only)</span></label>
-          <select id="poSelect" class="form-control" disabled>
+          <select id="poSelect" class="form-control" disabled onchange="onPOChange(this.value)">
             <option value="">Select a customer first</option>
           </select>
         </div>
+        <div id="poValidationPanel" style="display:none; margin-top:-4px; margin-bottom:4px;"></div>
         <div class="form-group">
           <label>Notes (optional)</label>
           <input type="text" id="outwardNotes" class="form-control" placeholder="e.g. Urgent shipment">
@@ -171,6 +172,8 @@
     let html5QrCode = null;
     let scannerActive = false;
     let crmCompanies = [];   // {id, name}
+    let _selectedPO = null;          // full PO object with items[]
+    let _poValidationBlocked = false;
     (async () => {
       try { crmCompanies = await api('/api/po/companies'); } catch (e) {}
     })();
@@ -206,6 +209,12 @@
       const sel = document.getElementById('poSelect');
       sel.disabled = true;
       sel.innerHTML = '<option value="">Select a customer first</option>';
+      _selectedPO = null;
+      _poValidationBlocked = false;
+      const panel = document.getElementById('poValidationPanel');
+      if (panel) panel.style.display = 'none';
+      const btn = document.getElementById('submitBtn');
+      if (btn) btn.disabled = cart.length === 0;
     }
 
     async function loadPOsForCompany(companyId) {
@@ -428,6 +437,7 @@
       } else {
         skippedEl.style.display = 'none';
       }
+      validateCartVsPO();
     }
 
     function removeFromCart(index) {
@@ -449,6 +459,129 @@
       document.getElementById('scanInput').focus();
     }
 
+    // === PO VALIDATION ===
+    async function onPOChange(poId) {
+      _selectedPO = null;
+      _poValidationBlocked = false;
+      const panel = document.getElementById('poValidationPanel');
+      if (!poId) {
+        panel.style.display = 'none';
+        const btn = document.getElementById('submitBtn');
+        if (btn) btn.disabled = cart.length === 0;
+        return;
+      }
+      try {
+        _selectedPO = await api(`/api/po/${poId}`);
+        validateCartVsPO();
+      } catch (e) {
+        showToast('Failed to load PO details', 'error');
+      }
+    }
+
+    function validateCartVsPO() {
+      const panel = document.getElementById('poValidationPanel');
+      const btn   = document.getElementById('submitBtn');
+      if (!panel) return;
+      if (!_selectedPO) {
+        panel.style.display = 'none';
+        if (btn) btn.disabled = cart.length === 0;
+        return;
+      }
+
+      // Sum cart qty per item_code
+      const cartByItem = {};
+      for (const reel of cart) {
+        cartByItem[reel.item_code] = (cartByItem[reel.item_code] || 0) + reel.quantity;
+      }
+
+      const allPoItems = _selectedPO.items || [];
+      const poItems = allPoItems.filter(i => i.item_code);
+
+      if (allPoItems.length === 0) {
+        _poValidationBlocked = true;
+        if (btn) btn.disabled = true;
+        panel.style.display = 'block';
+        panel.innerHTML = `<div style="padding:8px 12px; background:color-mix(in srgb, var(--warning) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); border-radius:var(--radius); font-size:12px; font-weight:600; color:var(--warning);">⚠ PO ${esc(_selectedPO.po_number)} has no line items — add items to this PO in the CRM before outward.</div>`;
+        return;
+      }
+
+      if (poItems.length === 0) {
+        _poValidationBlocked = true;
+        if (btn) btn.disabled = true;
+        panel.style.display = 'block';
+        panel.innerHTML = `<div style="padding:8px 12px; background:color-mix(in srgb, var(--warning) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--warning) 30%, transparent); border-radius:var(--radius); font-size:12px; font-weight:600; color:var(--warning);">⚠ PO ${esc(_selectedPO.po_number)} items have no assigned item codes yet — assign them in the CRM before outward.</div>`;
+        return;
+      }
+
+      const poItemCodes = new Set(poItems.map(i => i.item_code));
+      const issues = [];
+
+      for (const pi of poItems) {
+        const have = cartByItem[pi.item_code] || 0;
+        if (have === 0) {
+          issues.push({ type: 'missing', item_code: pi.item_code, description: pi.description, needed: pi.quantity_ordered });
+        } else if (have !== pi.quantity_ordered) {
+          issues.push({ type: have < pi.quantity_ordered ? 'short' : 'over',
+                        item_code: pi.item_code, description: pi.description,
+                        needed: pi.quantity_ordered, have });
+        }
+      }
+
+      for (const [itemCode, qty] of Object.entries(cartByItem)) {
+        if (!poItemCodes.has(itemCode)) {
+          const reel = cart.find(r => r.item_code === itemCode);
+          issues.push({ type: 'extra', item_code: itemCode, description: reel?.description || '', qty });
+        }
+      }
+
+      _poValidationBlocked = issues.length > 0;
+      if (btn) btn.disabled = _poValidationBlocked || cart.length === 0;
+
+      if (issues.length === 0) {
+        panel.style.display = 'block';
+        panel.innerHTML = `<div style="padding:8px 12px; background:color-mix(in srgb, var(--success) 10%, var(--surface)); border:1px solid color-mix(in srgb, var(--success) 30%, transparent); border-radius:var(--radius); font-size:12px; font-weight:700; color:var(--success);">✓ Cart matches PO ${esc(_selectedPO.po_number)}</div>`;
+        return;
+      }
+
+      const rows = issues.map(issue => {
+        if (issue.type === 'missing') {
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);">
+            <div><span style="font-size:10px; font-weight:800; color:var(--danger);">MISSING</span>
+              <span style="font-size:12px; font-weight:700; margin-left:6px;">${esc(issue.item_code)}</span>
+              ${issue.description ? `<span style="font-size:11px; color:var(--text-muted); margin-left:4px;">${esc(issue.description)}</span>` : ''}</div>
+            <span style="font-size:11px; font-weight:700; color:var(--danger); white-space:nowrap; margin-left:8px;">needs ${formatQty(issue.needed)} pcs</span>
+          </div>`;
+        }
+        if (issue.type === 'short' || issue.type === 'over') {
+          const color = issue.type === 'short' ? 'var(--warning)' : 'var(--danger)';
+          const label = issue.type === 'short' ? 'SHORT' : 'OVER';
+          const diff  = issue.type === 'short'
+            ? `${formatQty(issue.needed - issue.have)} still needed`
+            : `${formatQty(issue.have - issue.needed)} excess`;
+          return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);">
+            <div><span style="font-size:10px; font-weight:800; color:${color};">${label}</span>
+              <span style="font-size:12px; font-weight:700; margin-left:6px;">${esc(issue.item_code)}</span>
+              ${issue.description ? `<span style="font-size:11px; color:var(--text-muted); margin-left:4px;">${esc(issue.description)}</span>` : ''}</div>
+            <span style="font-size:11px; font-weight:700; color:${color}; white-space:nowrap; margin-left:8px;">${formatQty(issue.have)} / ${formatQty(issue.needed)} pcs · ${diff}</span>
+          </div>`;
+        }
+        // extra
+        return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--border);">
+          <div><span style="font-size:10px; font-weight:800; color:var(--danger);">NOT IN PO</span>
+            <span style="font-size:12px; font-weight:700; margin-left:6px;">${esc(issue.item_code)}</span>
+            ${issue.description ? `<span style="font-size:11px; color:var(--text-muted); margin-left:4px;">${esc(issue.description)}</span>` : ''}</div>
+          <span style="font-size:11px; font-weight:700; color:var(--danger); white-space:nowrap; margin-left:8px;">${formatQty(issue.qty)} pcs in cart</span>
+        </div>`;
+      }).join('');
+
+      panel.style.display = 'block';
+      panel.innerHTML = `
+        <div style="padding:10px 12px; background:color-mix(in srgb, var(--danger) 6%, var(--surface)); border:1px solid color-mix(in srgb, var(--danger) 30%, transparent); border-radius:var(--radius);">
+          <div style="font-size:10px; font-weight:700; text-transform:uppercase; letter-spacing:0.5px; color:var(--danger); margin-bottom:6px;">PO ${esc(_selectedPO.po_number)} — ${issues.length} mismatch${issues.length !== 1 ? 'es' : ''}</div>
+          ${rows}
+        </div>`;
+    }
+
     // === SUBMIT CART ===
     async function submitCart() {
       if (cart.length === 0) return showToast('Cart is empty', 'error');
@@ -464,6 +597,9 @@
       }
       if (!invoice_number) {
         return showToast('Invoice number is required', 'error');
+      }
+      if (_poValidationBlocked) {
+        return showToast('Resolve PO mismatches before submitting', 'error');
       }
 
       const btn = document.getElementById('submitBtn');
