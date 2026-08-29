@@ -21,6 +21,7 @@
       <a href="/">Catalog</a>
       <a href="/inward">Inward</a>
       <a href="/outward">Outward</a>
+      <a href="/transfer">Transfer</a>
       <a href="/dashboard">Dashboard</a>
       <!-- <a href="/api/logout" style="color:#dc2626;">Logout</a> -->
     </div>
@@ -88,28 +89,11 @@
       <div class="chart-container"><canvas id="itemTrendChart"></canvas></div>
     </div>
 
-    <!-- SEARCH & FILTER -->
+    <!-- UNIFIED SEARCH -->
     <div class="card">
-      <div class="card-title">Search & Trace</div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Reel Number</label>
-          <input type="text" id="searchReel" class="form-control" placeholder="REEL-XXXXX">
-        </div>
-        <div class="form-group">
-          <label>Item Code</label>
-          <input type="text" id="searchItem" class="form-control" placeholder="Item code">
-        </div>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Customer</label>
-          <input type="text" id="searchCustomer" class="form-control" placeholder="Customer name">
-        </div>
-        <div class="form-group">
-          <label>Invoice</label>
-          <input type="text" id="searchInvoice" class="form-control" placeholder="Invoice number">
-        </div>
+      <div class="card-title">Search</div>
+      <div class="form-group" style="position:relative;">
+        <input type="text" id="searchBox" class="form-control" placeholder="Search reel, item, customer, invoice, or box…" autocomplete="off">
       </div>
       <div class="form-row">
         <div class="form-group">
@@ -130,34 +114,13 @@
         </div>
       </div>
       <div class="btn-row">
-        <button class="btn btn-primary" onclick="searchReels()">Search</button>
-        <button class="btn btn-ghost" onclick="clearSearch()">Clear</button>
+        <button class="btn btn-ghost btn-sm" onclick="clearSearch()">Clear</button>
       </div>
     </div>
 
     <!-- SEARCH RESULTS -->
     <div class="card" id="resultsCard" style="display:none">
-      <div class="card-title">
-        Results <span id="resultCount" style="font-weight:400;color:var(--text-muted)"></span>
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th><input type="checkbox" id="selectAllResults" onchange="toggleSelectAllResults(this)"></th>
-              <th>Reel</th>
-              <th>Item</th>
-              <th>Qty</th>
-              <th>Status</th>
-              <th>Inwarded</th>
-              <th>Customer</th>
-              <th>Invoice</th>
-              <th>Outwarded</th>
-            </tr>
-          </thead>
-          <tbody id="resultsTable"></tbody>
-        </table>
-      </div>
+      <div id="resultsTable-container"></div>
       <div style="margin-top:12px;">
         <button class="btn btn-danger btn-sm" onclick="deleteSelected()">Delete Selected</button>
       </div>
@@ -184,7 +147,7 @@
       </div>
       <div class="btn-row">
         <button class="btn btn-success" onclick="exportCSV()">Download Full CSV</button>
-        <button class="btn btn-ghost" onclick="window.location.href='/api/dashboard/export-stock'; showToast('Stock export started');">Download Current Stock</button>
+        <button class="btn btn-ghost" onclick="exportStockCSV()">Download Current Stock</button>
       </div>
     </div>
 
@@ -359,13 +322,41 @@
           { label: 'Qty', render: l => formatQty(l.total_quantity || 0) },
         ]
       }),
+      results: new PaginatedTable({
+        containerId: 'resultsTable-container',
+        pageSize: 10,
+        serverMode: true,
+        onPageChange: (page, pageSize) => doSearch(page, pageSize),
+        titleText: 'Results',
+        columns: [
+          { label: '<input type="checkbox" id="selectAllResults" onchange="toggleSelectAllResults(this)">', render: r => `<input type="checkbox" class="result-check" value="${esc(r.reel_number)}">` },
+          { label: 'Reel', render: r => `<strong>${esc(r.reel_number)}</strong>` },
+          { label: 'Item', render: r => esc(r.item_code) },
+          { label: 'Qty', render: r => formatQty(r.quantity) },
+          { label: 'Status', render: r => statusBadge(r.status) },
+          { label: 'Inwarded', render: r => formatDate(r.inward_date) },
+          { label: 'Customer', render: r => {
+            const last = r.outward_history.length ? r.outward_history[r.outward_history.length - 1] : null;
+            return last ? esc(last.customer_name) : '—';
+          }},
+          { label: 'Invoice', render: r => {
+            const last = r.outward_history.length ? r.outward_history[r.outward_history.length - 1] : null;
+            return last ? esc(last.invoice_number) : '—';
+          }},
+          { label: 'Outwarded', render: r => {
+            const last = r.outward_history.length ? r.outward_history[r.outward_history.length - 1] : null;
+            return last ? formatDate(last.outward_date) : '—';
+          }},
+        ]
+      }),
     };
 
     document.addEventListener('DOMContentLoaded', loadSummary);
 
     async function loadSummary() {
       try {
-        const summary = await api('/api/dashboard/stock-summary');
+        const sp = storeQueryParam();
+        const summary = await api(`/api/dashboard/stock-summary${sp ? '?' + sp : ''}`);
         summary.sort((a, b) => a.item_code.localeCompare(b.item_code));
         let totalReels = 0, inStock = 0;
 
@@ -383,63 +374,54 @@
       } catch (e) {}
     }
 
-    async function searchReels() {
-      const params = new URLSearchParams();
-      const reel = document.getElementById('searchReel').value.trim();
-      const item = document.getElementById('searchItem').value.trim();
-      const customer = document.getElementById('searchCustomer').value.trim();
-      const invoice = document.getElementById('searchInvoice').value.trim();
+    function currentSearchActive() {
+      return !!(document.getElementById('searchBox').value.trim() ||
+        document.getElementById('searchStatus').value ||
+        document.getElementById('searchDateFrom').value ||
+        document.getElementById('searchDateTo').value);
+    }
+
+    async function doSearch(page = 1, pageSize = 10) {
+      const q = document.getElementById('searchBox').value.trim();
       const status = document.getElementById('searchStatus').value;
       const dateFrom = document.getElementById('searchDateFrom').value;
       const dateTo = document.getElementById('searchDateTo').value;
 
-      if (reel) params.set('reel_number', reel);
-      if (item) params.set('item_code', item);
-      if (customer) params.set('customer', customer);
-      if (invoice) params.set('invoice', invoice);
+      if (!currentSearchActive()) {
+        document.getElementById('resultsCard').style.display = 'none';
+        return;
+      }
+
+      const params = new URLSearchParams();
+      if (q) params.set('q', q);
       if (status) params.set('status', status);
       if (dateFrom) params.set('date_from', dateFrom);
       if (dateTo) params.set('date_to', dateTo);
-
-      if (!params.toString()) return showToast('Enter at least one search filter', 'error');
+      const sp = storeQueryParam();
+      if (sp) params.set('store', getSelectedStore());
+      params.set('limit', pageSize);
+      params.set('offset', (page - 1) * pageSize);
 
       try {
-        const results = await api(`/api/dashboard/search?${params}`);
-        const card = document.getElementById('resultsCard');
-        const tbody = document.getElementById('resultsTable');
-
-        card.style.display = 'block';
-        document.getElementById('resultCount').textContent = `(${results.length} found)`;
-
-        if (!results.length) {
-          tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:var(--text-muted)">No results found</td></tr>';
-          return;
-        }
-
-        tbody.innerHTML = results.map(r => {
-          const lastOutward = r.outward_history.length ? r.outward_history[r.outward_history.length - 1] : null;
-          return `
-            <tr>
-              <td><input type="checkbox" class="result-check" value="${r.reel_number}"></td>
-              <td><strong>${r.reel_number}</strong></td>
-              <td>${r.item_code}</td>
-              <td>${formatQty(r.quantity)}</td>
-              <td>${statusBadge(r.status)}</td>
-              <td>${formatDate(r.inward_date)}</td>
-              <td>${lastOutward ? lastOutward.customer_name : '—'}</td>
-              <td>${lastOutward ? lastOutward.invoice_number : '—'}</td>
-              <td>${lastOutward ? formatDate(lastOutward.outward_date) : '—'}</td>
-            </tr>
-          `;
-        }).join('');
+        const { rows, total } = await api(`/api/dashboard/search?${params}`);
+        document.getElementById('resultsCard').style.display = 'block';
+        tables.results.loadServerPage(rows, total);
       } catch (e) {}
     }
 
+    let searchDebounceTimer = null;
+    function debouncedSearch() {
+      clearTimeout(searchDebounceTimer);
+      searchDebounceTimer = setTimeout(() => doSearch(1, tables.results.pageSize), 300);
+    }
+
+    document.getElementById('searchBox').addEventListener('input', debouncedSearch);
+    document.getElementById('searchStatus').addEventListener('change', () => doSearch(1, tables.results.pageSize));
+    document.getElementById('searchDateFrom').addEventListener('change', () => doSearch(1, tables.results.pageSize));
+    document.getElementById('searchDateTo').addEventListener('change', () => doSearch(1, tables.results.pageSize));
+
     function clearSearch() {
-      document.getElementById('searchReel').value = '';
-      document.getElementById('searchItem').value = '';
-      document.getElementById('searchCustomer').value = '';
-      document.getElementById('searchInvoice').value = '';
+      document.getElementById('searchBox').value = '';
       document.getElementById('searchStatus').value = '';
       document.getElementById('searchDateFrom').value = '';
       document.getElementById('searchDateTo').value = '';
@@ -452,16 +434,20 @@
       const status = document.getElementById('exportStatus').value;
       if (date) params.set('as_on_date', date);
       if (status) params.set('status', status);
+      const sp = storeQueryParam();
+      if (sp) params.set('store', getSelectedStore());
 
       const url = `/api/dashboard/export${params.toString() ? '?' + params : ''}`;
       window.location.href = url;
       showToast('CSV download started');
     }
 
-    // Search on Enter key
-    document.querySelectorAll('#searchReel, #searchItem, #searchCustomer, #searchInvoice').forEach(el => {
-      el.addEventListener('keydown', e => { if (e.key === 'Enter') searchReels(); });
-    });
+    function exportStockCSV() {
+      const sp = storeQueryParam();
+      window.location.href = `/api/dashboard/export-stock${sp ? '?' + sp : ''}`;
+      showToast('Stock export started');
+    }
+
     function toggleSelectAllResults(el) {
       document.querySelectorAll('.result-check').forEach(cb => cb.checked = el.checked);
     }
@@ -494,7 +480,7 @@
         });
 
         showToast(result.message);
-        searchReels();
+        doSearch(tables.results.currentPage, tables.results.pageSize);
         loadSummary();
       } catch (e) { console.error('Delete failed:', e); }
     }
@@ -502,10 +488,12 @@
     // === ANALYTICS ===
     async function loadAnalytics() {
       try {
-        const data = await api('/api/dashboard/analytics');
+        const sp = storeQueryParam();
+        const data = await api(`/api/dashboard/analytics${sp ? '?' + sp : ''}`);
 
         // 1. Monthly Trends Chart
         if (data.monthlyTrends.length) {
+          Chart.getChart('trendsChart')?.destroy();
           new Chart(document.getElementById('trendsChart'), {
             type: 'bar',
             data: {
@@ -529,6 +517,7 @@
 
         // Aging - avg days to ship chart
         if (data.agingOutwarded.length) {
+          Chart.getChart('agingChart')?.destroy();
           new Chart(document.getElementById('agingChart'), {
             type: 'bar',
             data: {
@@ -551,6 +540,7 @@
 
         // 3. Velocity chart
         if (data.velocity.length) {
+          Chart.getChart('velocityChart')?.destroy();
           new Chart(document.getElementById('velocityChart'), {
             type: 'bar',
             data: {
@@ -574,6 +564,7 @@
 
         // 5. Inventory over time
         if (data.inventoryTimeline.length) {
+          Chart.getChart('inventoryChart')?.destroy();
           new Chart(document.getElementById('inventoryChart'), {
             type: 'line',
             data: {
@@ -616,7 +607,8 @@
 
     async function showItemTrend(itemCode) {
       try {
-        const data = await api(`/api/dashboard/item-trend?item_code=${itemCode}`);
+        const sp = storeQueryParam();
+        const data = await api(`/api/dashboard/item-trend?item_code=${itemCode}${sp ? '&' + sp : ''}`);
         document.getElementById('trendItemCode').textContent = itemCode;
         document.getElementById('itemTrendCard').style.display = 'block';
 
@@ -644,6 +636,12 @@
     }
 
     loadAnalytics();
+
+    window.addEventListener('storechange', () => {
+      loadSummary();
+      loadAnalytics();
+      if (currentSearchActive()) doSearch(1, tables.results.pageSize);
+    });
   </script>
 
   <nav class="bottom-nav">
@@ -658,6 +656,10 @@
     <a href="/outward">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3.75H6.912a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859M12 21v-8.25m0 0 3 3m-3-3-3 3"/></svg>
       Outward
+    </a>
+    <a href="/transfer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 3m0 0-4.5 4.5M21 3v13.5"/></svg>
+      Transfer
     </a>
     <a href="/dashboard" class="active">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>

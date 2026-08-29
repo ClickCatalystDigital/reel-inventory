@@ -19,6 +19,7 @@
       <a href="/">Catalog</a>
       <a href="/inward">Inward</a>
       <a href="/outward">Outward</a>
+      <a href="/transfer">Transfer</a>
       <a href="/dashboard">Dashboard</a>
       <!-- <a href="/api/logout" style="color:#dc2626;">Logout</a> -->
     </div>
@@ -101,9 +102,15 @@
           </div>
         </div>
 
-        <div class="form-group">
-          <label>Notes (optional)</label>
-          <input type="text" id="inwardNotes" class="form-control" placeholder="e.g. Supplier batch #, PO number">
+        <div class="form-row">
+          <div class="form-group">
+            <label>Receiving Store</label>
+            <select id="inwardStoreSelect" class="form-control"></select>
+          </div>
+          <div class="form-group">
+            <label>Notes (optional)</label>
+            <input type="text" id="inwardNotes" class="form-control" placeholder="e.g. Supplier batch #, PO number">
+          </div>
         </div>
         <div id="itemInfo" style="display:none; margin-bottom:14px;">
           <div class="reel-info">
@@ -144,6 +151,16 @@
   <script>
     let lastResult = null;
     let itemsCache = [];
+
+    async function loadStoreDropdown() {
+      try {
+        const stores = await api('/api/stores');
+        const select = document.getElementById('inwardStoreSelect');
+        select.innerHTML = stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
+        const preferred = getSelectedStore();
+        select.value = preferred !== 'all' ? preferred : 'primary';
+      } catch (e) {}
+    }
 
     async function loadItemDropdown() {
       try {
@@ -282,7 +299,8 @@
               item_code: document.getElementById('itemSelect').value,
               num_reels: numReels,
               num_boxes: numBoxes,
-              notes: document.getElementById('inwardNotes').value
+              notes: document.getElementById('inwardNotes').value,
+              store_code: document.getElementById('inwardStoreSelect').value
             }
           });
 
@@ -397,10 +415,13 @@
 
     async function loadRecent() {
       try {
-        const reels = await api(`/api/inward/recent?limit=500`);
+        const sp = storeQueryParam();
+        const reels = await api(`/api/inward/recent?limit=500${sp ? '&' + sp : ''}`);
         recentTablePT.load(reels);
       } catch (e) {}
     }
+
+    window.addEventListener('storechange', loadRecent);
 
     function toggleSelectAll(el) {
       document.querySelectorAll('.reel-check').forEach(cb => cb.checked = el.checked);
@@ -446,6 +467,7 @@
     }
 
     loadItemDropdown();
+    loadStoreDropdown();
     loadRecent();
   </script>
 
@@ -461,6 +483,10 @@
     <a href="/outward">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 3.75H6.912a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859M12 21v-8.25m0 0 3 3m-3-3-3 3"/></svg>
       Outward
+    </a>
+    <a href="/transfer">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-9L21 3m0 0-4.5 4.5M21 3v13.5"/></svg>
+      Transfer
     </a>
     <a href="/dashboard">
       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z"/></svg>

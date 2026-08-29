@@ -82,7 +82,7 @@ router.get('/box/:boxNumber', async (req, res) => {
 // }
 
 router.post('/', async (req, res) => {
-  const { reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes } = req.body;
+  const { reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, store_code } = req.body;
   if (!reel_number || !customer_name || !invoice_number) {
     return res.status(400).json({ error: 'reel_number, customer_name, and invoice_number are required' });
   }
@@ -92,7 +92,7 @@ router.post('/', async (req, res) => {
 
   if (APPROVER_ROLES.includes(userRole)) {
     try {
-      const result = await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes);
+      const result = await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, null, null, store_code);
       return res.json({
         success: true,
         approved: true,
@@ -114,7 +114,8 @@ router.post('/', async (req, res) => {
       reel_number, customer_name, invoice_number,
       outward_type: outward_type || 'Full',
       quantity_shipped: quantity_shipped || null,
-      notes: notes || null
+      notes: notes || null,
+      store_code: store_code || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
@@ -132,7 +133,7 @@ router.post('/', async (req, res) => {
 });
 
 router.post('/box', async (req, res) => {
-  const { box_number, customer_name, invoice_number, notes } = req.body;
+  const { box_number, customer_name, invoice_number, notes, store_code } = req.body;
   if (!box_number || !customer_name || !invoice_number) {
     return res.status(400).json({ error: 'box_number, customer_name, and invoice_number are required' });
   }
@@ -163,9 +164,9 @@ router.post('/box', async (req, res) => {
           continue;
         }
         await execute(
-          `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date)
-           VALUES (?, ?, ?, ?, 'Full', ?, ?)`,
-          [reel.reel_number, customer_name.trim(), invoice_number.trim(), reel.quantity, notes || null, nowIST()]
+          `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, store_code)
+           VALUES (?, ?, ?, ?, 'Full', ?, ?, ?)`,
+          [reel.reel_number, customer_name.trim(), invoice_number.trim(), reel.quantity, notes || null, nowIST(), store_code || reel.store_code]
         );
         await execute('UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel.reel_number]);
         results.success.push(reel.reel_number);
@@ -187,7 +188,8 @@ router.post('/box', async (req, res) => {
       customer_name,
       invoice_number,
       notes: notes || null,
-      reel_numbers: inStock.map(r => r.reel_number)
+      reel_numbers: inStock.map(r => r.reel_number),
+      store_code: store_code || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
@@ -206,17 +208,57 @@ router.post('/box', async (req, res) => {
 
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
-  const outwards = await queryAll(`
-    SELECT o.id, o.reel_number, o.customer_name, o.invoice_number, 
+  const offset = parseInt(req.query.offset) || 0;
+  const { store } = req.query;
+  const params = [];
+  let where = '';
+  if (store && store !== 'all') {
+    where = 'WHERE r.store_code = ?';
+    params.push(store);
+  }
+
+  const countRow = await queryOne(`
+    SELECT COUNT(*) as total
+    FROM outwards o
+    JOIN reels r ON o.reel_number = r.reel_number
+    ${where}
+  `, params);
+
+  params.push(limit, offset);
+  const rows = await queryAll(`
+    SELECT o.id, o.reel_number, o.customer_name, o.invoice_number,
            o.quantity_shipped, o.outward_type, o.outward_date, o.notes,
            r.item_code, r.box_number, i.description
     FROM outwards o
     JOIN reels r ON o.reel_number = r.reel_number
     JOIN items i ON r.item_code = i.item_code
+    ${where}
     ORDER BY o.outward_date DESC
-    LIMIT ?
-  `, [limit]);
-  res.json(outwards);
+    LIMIT ? OFFSET ?
+  `, params);
+  res.json({ rows, total: countRow.total });
+});
+
+router.get('/for-reprint', async (req, res) => {
+  const { customer_name, invoice_number } = req.query;
+  if (!customer_name && !invoice_number) {
+    return res.status(400).json({ error: 'customer_name or invoice_number is required' });
+  }
+  const conditions = [];
+  const params = [];
+  if (customer_name) { conditions.push('o.customer_name = ?'); params.push(customer_name); }
+  if (invoice_number) { conditions.push('o.invoice_number = ?'); params.push(invoice_number); }
+  const rows = await queryAll(`
+    SELECT o.id, o.reel_number, o.customer_name, o.invoice_number,
+           o.quantity_shipped, o.outward_type, o.outward_date, o.notes,
+           r.item_code, r.box_number, i.description
+    FROM outwards o
+    JOIN reels r ON o.reel_number = r.reel_number
+    JOIN items i ON r.item_code = i.item_code
+    WHERE ${conditions.join(' AND ')}
+    ORDER BY o.outward_date DESC
+  `, params);
+  res.json(rows);
 });
 
 router.post('/undo', async (req, res) => {
@@ -259,7 +301,7 @@ router.post('/undo', async (req, res) => {
 });
 
 router.post('/grouped', async (req, res) => {
-  const { item_code, reel_numbers, customer_name, invoice_number, outward_type, notes, company_id, po_id } = req.body;
+  const { item_code, reel_numbers, customer_name, invoice_number, outward_type, notes, company_id, po_id, store_code } = req.body;
 
   if (!item_code || !reel_numbers?.length || !customer_name || !invoice_number) {
     return res.status(400).json({ error: 'item_code, reel_numbers, customer_name, and invoice_number are required' });
@@ -283,7 +325,7 @@ router.post('/grouped', async (req, res) => {
     const errors = [];
     for (const reel_number of reel_numbers) {
       try {
-        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id);
+        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id, store_code);
       } catch (err) {
         errors.push(`${reel_number}: ${err.message}`);
       }
@@ -308,7 +350,8 @@ router.post('/grouped', async (req, res) => {
       outward_type: outward_type || 'Full',
       notes: notes || null,
       company_id: company_id || null,
-      po_id: po_id || null
+      po_id: po_id || null,
+      store_code: store_code || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',

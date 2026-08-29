@@ -54,7 +54,7 @@ const APPROVER_ROLES = ['admin', 'manager'];
 // }
 
 router.post('/', async (req, res) => {
-  const { item_code, num_reels, num_boxes, notes } = req.body;
+  const { item_code, num_reels, num_boxes, notes, store_code } = req.body;
   if (!item_code || !num_reels || num_reels < 1) {
     return res.status(400).json({ error: 'item_code and num_reels (>= 1) are required' });
   }
@@ -64,11 +64,12 @@ router.post('/', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
+  const storeCode = store_code || 'primary';
 
   // Managers and admins bypass approval
   if (APPROVER_ROLES.includes(userRole)) {
     try {
-      const result = await executeInward(item_code, num_reels, num_boxes, notes);
+      const result = await executeInward(item_code, num_reels, num_boxes, notes, storeCode);
       const totalBoxes = Number(num_boxes) > 0 ? Number(num_boxes) : 0;
       return res.json({
         success: true,
@@ -89,7 +90,7 @@ router.post('/', async (req, res) => {
 
   // Staff: save as pending request
   try {
-    const payload = JSON.stringify({ item_code, num_reels, num_boxes: num_boxes || 0, notes: notes || null });
+    const payload = JSON.stringify({ item_code, num_reels, num_boxes: num_boxes || 0, notes: notes || null, store_code: storeCode });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
       ['inward', 'pending', username, nowIST(), payload]
@@ -108,13 +109,22 @@ router.post('/', async (req, res) => {
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
+  const { store } = req.query;
+  const params = [];
+  let where = '';
+  if (store && store !== 'all') {
+    where = 'WHERE r.store_code = ?';
+    params.push(store);
+  }
+  params.push(limit, offset);
   const reels = await queryAll(`
-    SELECT r.*, i.description 
-    FROM reels r 
-    JOIN items i ON r.item_code = i.item_code 
-    ORDER BY r.inward_date DESC 
+    SELECT r.*, i.description
+    FROM reels r
+    JOIN items i ON r.item_code = i.item_code
+    ${where}
+    ORDER BY r.inward_date DESC
     LIMIT ? OFFSET ?
-  `, [limit, offset]);
+  `, params);
   res.json(reels);
 });
 

@@ -78,6 +78,59 @@ document.addEventListener('DOMContentLoaded', () => {
   injectNavExtras();
 });
 
+// ========== STORE SELECTOR (view filter: Primary/Secondary/All) ==========
+function getSelectedStore() {
+  return localStorage.getItem('selectedStore') || 'all';
+}
+
+function storeQueryParam() {
+  const s = getSelectedStore();
+  return s === 'all' ? '' : `store=${encodeURIComponent(s)}`;
+}
+
+function setSelectedStore(code) {
+  localStorage.setItem('selectedStore', code);
+  window.dispatchEvent(new CustomEvent('storechange', { detail: { store: code } }));
+}
+
+async function injectStoreSelector() {
+  if (document.getElementById('storeSelect')) return;
+  let stores;
+  try {
+    stores = await fetch('/api/stores').then(r => r.json());
+  } catch (e) { return; }
+  if (!stores || !stores.length) return;
+
+  const current = getSelectedStore();
+  const optionsHTML = `<option value="all">All Stores</option>` +
+    stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
+
+  const navLinks = document.querySelector('.nav-links');
+  if (navLinks) {
+    const select = document.createElement('select');
+    select.id = 'storeSelect';
+    select.className = 'store-select';
+    select.title = 'Viewing store';
+    select.innerHTML = optionsHTML;
+    select.value = current;
+    select.addEventListener('change', () => setSelectedStore(select.value));
+    navLinks.prepend(select);
+  }
+
+  const cogDropdown = document.getElementById('cogDropdown');
+  if (cogDropdown && !document.getElementById('storeSelectMobile')) {
+    const wrap = document.createElement('div');
+    wrap.style.padding = '.5rem .75rem';
+    wrap.innerHTML = `<select id="storeSelectMobile" class="store-select" style="width:100%">${optionsHTML}</select>`;
+    cogDropdown.insertAdjacentElement('afterbegin', wrap);
+    const mobileSelect = document.getElementById('storeSelectMobile');
+    mobileSelect.value = current;
+    mobileSelect.addEventListener('change', () => setSelectedStore(mobileSelect.value));
+  }
+}
+
+document.addEventListener('DOMContentLoaded', injectStoreSelector);
+
 // ========== NAV EXTRAS (bell + cog role-aware options) ==========
 async function injectNavExtras() {
   try {
@@ -239,13 +292,16 @@ document.addEventListener('click', (e) => {
 
 // ========== REUSABLE PAGINATED TABLE ==========
 class PaginatedTable {
-  constructor({ containerId, titleText, columns, pageSize = 10 }) {
+  constructor({ containerId, titleText, columns, pageSize = 10, serverMode = false, onPageChange = null }) {
     this.containerId = containerId;
     this.titleText = titleText;
     this.columns = columns;
     this.pageSize = pageSize;
     this.currentPage = 1;
     this.data = [];
+    this.serverMode = serverMode;
+    this.onPageChange = onPageChange;
+    this.totalCount = 0;
     this._inject();
   }
 
@@ -278,7 +334,8 @@ class PaginatedTable {
     document.getElementById(`${this.containerId}-size`).addEventListener('change', (e) => {
       this.pageSize = parseInt(e.target.value);
       this.currentPage = 1;
-      this._render();
+      if (this.serverMode) this.onPageChange(this.currentPage, this.pageSize);
+      else this._render();
     });
   }
 
@@ -288,12 +345,19 @@ class PaginatedTable {
     this._render();
   }
 
+  // Server mode: caller fetches one page and hands it in via this, instead of load()
+  loadServerPage(rows, totalCount) {
+    this.data = rows;
+    this.totalCount = totalCount;
+    this._render();
+  }
+
   _render() {
-    const total = this.data.length;
+    const total = this.serverMode ? this.totalCount : this.data.length;
     const totalPages = Math.max(1, Math.ceil(total / this.pageSize));
     this.currentPage = Math.min(this.currentPage, totalPages);
     const start = (this.currentPage - 1) * this.pageSize;
-    const slice = this.data.slice(start, start + this.pageSize);
+    const slice = this.serverMode ? this.data : this.data.slice(start, start + this.pageSize);
     const tbody = document.getElementById(`${this.containerId}-tbody`);
 
     if (!total) {
@@ -322,7 +386,8 @@ class PaginatedTable {
     btnsEl.querySelectorAll('button[data-page]').forEach(btn => {
       btn.addEventListener('click', () => {
         this.currentPage = parseInt(btn.dataset.page);
-        this._render();
+        if (this.serverMode) this.onPageChange(this.currentPage, this.pageSize);
+        else this._render();
       });
     });
 

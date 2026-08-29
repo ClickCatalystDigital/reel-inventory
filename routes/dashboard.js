@@ -5,33 +5,50 @@ const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 
 router.get('/search', async (req, res) => {
-  const { reel_number, item_code, customer, invoice, status, box_number, date_from, date_to } = req.query;
+  const { q, reel_number, item_code, customer, invoice, status, box_number, date_from, date_to, store } = req.query;
+  const limit = parseInt(req.query.limit) || 100;
+  const offset = parseInt(req.query.offset) || 0;
 
-  let query = `
+  let where = ' WHERE 1=1';
+  const params = [];
+
+  if (q) {
+    where += ` AND (
+      r.reel_number LIKE ? OR r.item_code LIKE ? OR r.box_number LIKE ?
+      OR r.reel_number IN (SELECT reel_number FROM outwards WHERE customer_name LIKE ? OR invoice_number LIKE ?)
+    )`;
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
+  if (reel_number) { where += ' AND r.reel_number LIKE ?'; params.push(`%${reel_number}%`); }
+  if (item_code) { where += ' AND r.item_code LIKE ?'; params.push(`%${item_code}%`); }
+  if (box_number) { where += ' AND r.box_number LIKE ?'; params.push(`%${box_number}%`); }
+  if (customer) { where += ' AND r.reel_number IN (SELECT reel_number FROM outwards WHERE customer_name LIKE ?)'; params.push(`%${customer}%`); }
+  if (invoice) { where += ' AND r.reel_number IN (SELECT reel_number FROM outwards WHERE invoice_number LIKE ?)'; params.push(`%${invoice}%`); }
+  if (status) { where += ' AND r.status = ?'; params.push(status); }
+  if (date_from) { where += ' AND r.inward_date >= ?'; params.push(date_from); }
+  if (date_to) { where += ' AND r.inward_date <= ?'; params.push(date_to + ' 23:59:59'); }
+  if (store && store !== 'all') { where += ' AND r.store_code = ?'; params.push(store); }
+
+  const countRow = await queryOne(`
+    SELECT COUNT(*) as total
+    FROM reels r
+    JOIN items i ON r.item_code = i.item_code
+    ${where}
+  `, params);
+
+  const rows = await queryAll(`
     SELECT r.*, i.description,
       (SELECT GROUP_CONCAT(
         o.customer_name || '|' || o.invoice_number || '|' || o.quantity_shipped || '|' || o.outward_type || '|' || o.outward_date, ';;'
       ) FROM outwards o WHERE o.reel_number = r.reel_number) as outward_history
     FROM reels r
     JOIN items i ON r.item_code = i.item_code
-    WHERE 1=1
-  `;
-  const params = [];
+    ${where}
+    ORDER BY r.inward_date DESC
+    LIMIT ? OFFSET ?
+  `, [...params, limit, offset]);
 
-  if (reel_number) { query += ' AND r.reel_number LIKE ?'; params.push(`%${reel_number}%`); }
-  if (item_code) { query += ' AND r.item_code LIKE ?'; params.push(`%${item_code}%`); }
-  if (box_number) { query += ' AND r.box_number LIKE ?'; params.push(`%${box_number}%`); }
-  if (customer) { query += ' AND r.reel_number IN (SELECT reel_number FROM outwards WHERE customer_name LIKE ?)'; params.push(`%${customer}%`); }
-  if (invoice) { query += ' AND r.reel_number IN (SELECT reel_number FROM outwards WHERE invoice_number LIKE ?)'; params.push(`%${invoice}%`); }
-  if (status) { query += ' AND r.status = ?'; params.push(status); }
-  if (date_from) { query += ' AND r.inward_date >= ?'; params.push(date_from); }
-  if (date_to) { query += ' AND r.inward_date <= ?'; params.push(date_to + ' 23:59:59'); }
-
-  query += ' ORDER BY r.inward_date DESC LIMIT 500';
-
-  const results = await queryAll(query, params);
-
-  const parsed = results.map(r => {
+  const parsed = rows.map(r => {
     const history = r.outward_history
       ? r.outward_history.split(';;').map(entry => {
           const [customer_name, invoice_number, quantity_shipped, outward_type, outward_date] = entry.split('|');
@@ -41,11 +58,13 @@ router.get('/search', async (req, res) => {
     return { ...r, outward_history: history };
   });
 
-  res.json(parsed);
+  res.json({ rows: parsed, total: countRow.total });
 });
 
 router.get('/stock-summary', async (req, res) => {
   const as_on_date = req.query.as_on_date;
+  const { store } = req.query;
+  const storeFilter = store && store !== 'all';
   let query;
   let params = [];
 
@@ -56,10 +75,11 @@ router.get('/stock-summary', async (req, res) => {
         SUM(CASE WHEN r.status = 'In Stock' THEN 1 ELSE 0 END) as in_stock_reels,
         SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
       FROM items i
-      LEFT JOIN reels r ON i.item_code = r.item_code AND r.inward_date <= ?
+      LEFT JOIN reels r ON i.item_code = r.item_code AND r.inward_date <= ?${storeFilter ? ' AND r.store_code = ?' : ''}
       GROUP BY i.item_code ORDER BY i.item_code
     `;
     params.push(as_on_date + ' 23:59:59');
+    if (storeFilter) params.push(store);
   } else {
     query = `
       SELECT i.item_code, i.description, i.default_spq,
@@ -67,18 +87,19 @@ router.get('/stock-summary', async (req, res) => {
         SUM(CASE WHEN r.status = 'In Stock' THEN 1 ELSE 0 END) as in_stock_reels,
         SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
       FROM items i
-      LEFT JOIN reels r ON i.item_code = r.item_code
+      LEFT JOIN reels r ON i.item_code = r.item_code${storeFilter ? ' AND r.store_code = ?' : ''}
       GROUP BY i.item_code ORDER BY i.item_code
     `;
+    if (storeFilter) params.push(store);
   }
 
   res.json(await queryAll(query, params));
 });
 
 router.get('/export', async (req, res) => {
-  const { status, as_on_date } = req.query;
+  const { status, as_on_date, store } = req.query;
   let query = `
-    SELECT r.reel_number, r.item_code, i.description, r.quantity, r.status, r.inward_date,
+    SELECT r.reel_number, r.item_code, i.description, r.quantity, r.status, r.inward_date, r.store_code,
       o.customer_name, o.invoice_number, o.quantity_shipped, o.outward_type, o.outward_date
     FROM reels r
     JOIN items i ON r.item_code = i.item_code
@@ -89,12 +110,13 @@ router.get('/export', async (req, res) => {
 
   if (status) { query += ' AND r.status = ?'; params.push(status); }
   if (as_on_date) { query += ' AND r.inward_date <= ?'; params.push(as_on_date + ' 23:59:59'); }
+  if (store && store !== 'all') { query += ' AND r.store_code = ?'; params.push(store); }
   query += ' ORDER BY r.reel_number';
 
   const rows = await queryAll(query, params);
-  const headers = 'Reel Number,Item Code,Description,Quantity,Status,Inward Date,Customer,Invoice,Qty Shipped,Outward Type,Outward Date';
+  const headers = 'Reel Number,Item Code,Description,Quantity,Status,Inward Date,Store,Customer,Invoice,Qty Shipped,Outward Type,Outward Date';
   const csvRows = rows.map(r =>
-    [r.reel_number, r.item_code, `"${r.description}"`, r.quantity, r.status, r.inward_date,
+    [r.reel_number, r.item_code, `"${r.description}"`, r.quantity, r.status, r.inward_date, r.store_code,
      r.customer_name || '', r.invoice_number || '', r.quantity_shipped || '', r.outward_type || '', r.outward_date || ''
     ].join(',')
   );
@@ -194,21 +216,26 @@ router.post('/delete-preview', async (req, res) => {
 
 // GET analytics data
 router.get('/analytics', async (req, res) => {
+  const { store } = req.query;
+  const storeFilter = store && store !== 'all';
+  const sp = storeFilter ? [store] : [];
+  const sp2 = storeFilter ? [store, store] : [];
+
   // 1. Monthly inward vs outward trends (last 12 months)
   const monthlyTrends = await queryAll(`
-    SELECT 
+    SELECT
       strftime('%Y-%m', date) as month,
       SUM(inward_count) as inwarded,
       SUM(outward_count) as outwarded
     FROM (
-      SELECT inward_date as date, 1 as inward_count, 0 as outward_count FROM reels WHERE status != 'Deleted'
+      SELECT inward_date as date, 1 as inward_count, 0 as outward_count FROM reels WHERE status != 'Deleted'${storeFilter ? ' AND store_code = ?' : ''}
       UNION ALL
-      SELECT outward_date as date, 0 as inward_count, 1 as outward_count FROM outwards
+      SELECT outward_date as date, 0 as inward_count, 1 as outward_count FROM outwards${storeFilter ? ' WHERE store_code = ?' : ''}
     )
     WHERE date >= date('now', '-12 months')
     GROUP BY month
     ORDER BY month
-  `);
+  `, sp2);
 
   // 2. Stock aging (average days in stock for outwarded reels + current age for in-stock)
   const agingOutwarded = await queryAll(`
@@ -216,19 +243,19 @@ router.get('/analytics', async (req, res) => {
       ROUND(AVG(julianday(o.outward_date) - julianday(r.inward_date)), 1) as avg_days_to_ship
     FROM reels r
     JOIN outwards o ON r.reel_number = o.reel_number
-    WHERE r.status = 'Outwarded'
+    WHERE r.status = 'Outwarded'${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY r.item_code
     ORDER BY avg_days_to_ship DESC
-  `);
+  `, sp);
 
   const agingInStock = await queryAll(`
     SELECT reel_number, item_code,
       CAST(julianday('now') - julianday(inward_date) AS INTEGER) as days_in_stock
     FROM reels
-    WHERE status = 'In Stock'
+    WHERE status = 'In Stock'${storeFilter ? ' AND store_code = ?' : ''}
     ORDER BY days_in_stock DESC
     LIMIT 20
-  `);
+  `, sp);
 
   // 3. Item velocity (outward count per item, last 90 days)
   const velocity = await queryAll(`
@@ -238,10 +265,10 @@ router.get('/analytics', async (req, res) => {
     FROM outwards o
     JOIN reels r ON o.reel_number = r.reel_number
     JOIN items i ON r.item_code = i.item_code
-    WHERE o.outward_date >= date('now', '-90 days')
+    WHERE o.outward_date >= date('now', '-90 days')${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY r.item_code
     ORDER BY outward_count DESC
-  `);
+  `, sp);
 
   // 4. Top customers (by reel count and quantity)
   const topCustomers = await queryAll(`
@@ -250,25 +277,26 @@ router.get('/analytics', async (req, res) => {
       SUM(quantity_shipped) as total_quantity,
       COUNT(DISTINCT invoice_number) as invoice_count
     FROM outwards
+    ${storeFilter ? 'WHERE store_code = ?' : ''}
     GROUP BY customer_name
     ORDER BY total_quantity DESC
     LIMIT 10
-  `);
+  `, sp);
 
   // 5. Inventory over time (monthly snapshot of in-stock quantity)
   const inventoryOverTime = await queryAll(`
-    SELECT 
+    SELECT
       strftime('%Y-%m', date) as month,
       SUM(change) as net_change
     FROM (
-      SELECT inward_date as date, quantity as change FROM reels WHERE status != 'Deleted'
+      SELECT inward_date as date, quantity as change FROM reels WHERE status != 'Deleted'${storeFilter ? ' AND store_code = ?' : ''}
       UNION ALL
-      SELECT outward_date as date, -quantity_shipped as change FROM outwards
+      SELECT outward_date as date, -quantity_shipped as change FROM outwards${storeFilter ? ' WHERE store_code = ?' : ''}
     )
     WHERE date >= date('now', '-12 months')
     GROUP BY month
     ORDER BY month
-  `);
+  `, sp2);
 
   // Calculate cumulative inventory
   let cumulative = 0;
@@ -285,12 +313,12 @@ router.get('/analytics', async (req, res) => {
       MAX(o.outward_date) as last_outward_date,
       CAST(julianday('now') - julianday(MAX(o.outward_date)) AS INTEGER) as days_since_last_outward
     FROM items i
-    JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'
+    JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
     LEFT JOIN outwards o ON r.reel_number = o.reel_number
     GROUP BY i.item_code
     HAVING MAX(o.outward_date) IS NULL OR julianday('now') - julianday(MAX(o.outward_date)) > 30
     ORDER BY days_since_last_outward DESC
-  `);
+  `, sp);
 
   // 7. Low stock (items with fewer than 5 reels in stock)
   const lowStock = await queryAll(`
@@ -298,11 +326,11 @@ router.get('/analytics', async (req, res) => {
       COUNT(r.id) as in_stock_reels,
       SUM(r.quantity) as total_quantity
     FROM items i
-    LEFT JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'
+    LEFT JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY i.item_code
     HAVING in_stock_reels < 5
     ORDER BY in_stock_reels ASC
-  `);
+  `, sp);
 
   res.json({
     monthlyTrends,
@@ -318,23 +346,29 @@ router.get('/analytics', async (req, res) => {
 
 // GET item-specific trend
 router.get('/item-trend', async (req, res) => {
-  const { item_code } = req.query;
+  const { item_code, store } = req.query;
   if (!item_code) return res.status(400).json({ error: 'item_code required' });
+  const storeFilter = store && store !== 'all';
+
+  const params = [item_code];
+  if (storeFilter) params.push(store);
+  params.push(item_code);
+  if (storeFilter) params.push(store);
 
   const trend = await queryAll(`
-    SELECT 
+    SELECT
       strftime('%Y-%m', date) as month,
       SUM(inward_count) as inwarded,
       SUM(outward_count) as outwarded
     FROM (
-      SELECT inward_date as date, 1 as inward_count, 0 as outward_count FROM reels WHERE item_code = ? AND status != 'Deleted'
+      SELECT inward_date as date, 1 as inward_count, 0 as outward_count FROM reels WHERE item_code = ? AND status != 'Deleted'${storeFilter ? ' AND store_code = ?' : ''}
       UNION ALL
-      SELECT o.outward_date as date, 0 as inward_count, 1 as outward_count FROM outwards o JOIN reels r ON o.reel_number = r.reel_number WHERE r.item_code = ?
+      SELECT o.outward_date as date, 0 as inward_count, 1 as outward_count FROM outwards o JOIN reels r ON o.reel_number = r.reel_number WHERE r.item_code = ?${storeFilter ? ' AND r.store_code = ?' : ''}
     )
     WHERE date >= date('now', '-12 months')
     GROUP BY month
     ORDER BY month
-  `, [item_code, item_code]);
+  `, params);
 
   res.json(trend);
 });
@@ -342,16 +376,19 @@ router.get('/item-trend', async (req, res) => {
 // GET export current stock as Excel-compatible CSV
 router.get('/export-stock', async (req, res) => {
   const as_on_date = req.query.as_on_date || new Date().toISOString().split('T')[0];
+  const { store } = req.query;
+  const storeFilter = store && store !== 'all';
+  const params = storeFilter ? [store] : [];
 
   const rows = await queryAll(`
     SELECT i.item_code, i.description, i.default_spq,
       COUNT(CASE WHEN r.status = 'In Stock' THEN r.id END) as in_stock_reels,
       SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
     FROM items i
-    LEFT JOIN reels r ON i.item_code = r.item_code
+    LEFT JOIN reels r ON i.item_code = r.item_code${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY i.item_code
     ORDER BY i.item_code
-  `);
+  `, params);
 
   const headers = 'Item Code,Description,SPQ,In Stock Reels,Total Quantity';
   const csvRows = rows.map(r =>

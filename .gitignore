@@ -2,3 +2,4 @@ node_modules/
 inventory.db
 *.pem
 .env
+backups/

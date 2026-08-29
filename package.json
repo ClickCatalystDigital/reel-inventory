@@ -1,11 +1,12 @@
 {
-  "name": "reel-inventory",
+  "name": "ls-inventory",
   "version": "1.0.0",
   "description": "Local intranet inventory management for electronic components",
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "dev": "node --watch server.js"
+    "dev": "node --watch server.js",
+    "backup": "node scripts/backup-db.js"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",

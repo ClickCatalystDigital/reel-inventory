@@ -3,7 +3,7 @@ const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 // const { executeInward } = require('./inward');
 // const { executeOutwardReel } = require('./outward');
-const { executeInward, executeOutwardReel } = require('../utils/inventory');
+const { executeInward, executeOutwardReel, executeStockTransfer } = require('../utils/inventory');
 
 const APPROVER_ROLES = ['admin', 'manager'];
 
@@ -63,7 +63,8 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
         payload.item_code,
         payload.num_reels,
         payload.num_boxes,
-        payload.notes
+        payload.notes,
+        payload.store_code || 'primary'
       );
     } else if (request.type === 'outward') {
       // Payload can be single reel or box (array of reel_numbers)
@@ -80,7 +81,8 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
             payload.quantity_shipped || null,
             payload.notes,
             payload.company_id || null,
-            payload.po_id || null
+            payload.po_id || null,
+            payload.store_code || null
           );
         } catch (err) {
           errors.push(`${reel_number}: ${err.message}`);
@@ -90,6 +92,14 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
       if (errors.length > 0 && errors.length === reelNumbers.length) {
         return res.status(400).json({ error: 'All reels failed', details: errors });
       }
+    } else if (request.type === 'transfer') {
+      await executeStockTransfer(
+        payload.kind,
+        payload.number,
+        payload.to_store,
+        payload.notes,
+        request.created_by
+      );
     }
 
     await execute(
@@ -143,7 +153,8 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
         newPayload.item_code,
         newPayload.num_reels,
         newPayload.num_boxes,
-        newPayload.notes
+        newPayload.notes,
+        newPayload.store_code || 'primary'
       );
     } else if (request.type === 'outward') {
       const reelNumbers = newPayload.reel_numbers || [newPayload.reel_number];
@@ -159,7 +170,8 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
             newPayload.quantity_shipped || null,
             newPayload.notes,
             newPayload.company_id || null,
-            newPayload.po_id || null
+            newPayload.po_id || null,
+            newPayload.store_code || null
           );
         } catch (err) {
           errors.push(`${reel_number}: ${err.message}`);
@@ -169,6 +181,14 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
       if (errors.length > 0 && errors.length === reelNumbers.length) {
         return res.status(400).json({ error: 'All reels failed', details: errors });
       }
+    } else if (request.type === 'transfer') {
+      await executeStockTransfer(
+        newPayload.kind,
+        newPayload.number,
+        newPayload.to_store,
+        newPayload.notes,
+        request.created_by
+      );
     }
 
     await execute(

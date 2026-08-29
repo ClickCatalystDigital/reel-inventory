@@ -87,6 +87,59 @@ async function initDB() {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS stores (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    code TEXT UNIQUE NOT NULL,
+    name TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS stock_transfers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    reel_number TEXT,
+    box_number TEXT,
+    from_store TEXT NOT NULL,
+    to_store TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    transferred_by TEXT NOT NULL,
+    transferred_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    notes TEXT,
+    status TEXT NOT NULL DEFAULT 'completed'
+  )`);
+
+  // Migration: add store_code to existing tables — same best-effort ALTER pattern as items.status
+  try {
+    await db.execute(`ALTER TABLE reels ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+  try {
+    await db.execute(`ALTER TABLE boxes ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+  try {
+    await db.execute(`ALTER TABLE outwards ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_outwards_date ON outwards(outward_date)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
+  await db.execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
+
+  // Seed stores
+  const primaryStore = await db.execute("SELECT code FROM stores WHERE code = 'primary'");
+  if (!primaryStore.rows.length) {
+    await db.execute("INSERT INTO stores (code, name) VALUES ('primary', 'LS Tech Stores')");
+  }
+  const secondaryStore = await db.execute("SELECT code FROM stores WHERE code = 'secondary'");
+  if (!secondaryStore.rows.length) {
+    await db.execute("INSERT INTO stores (code, name) VALUES ('secondary', 'Gelco Stores')");
+  }
+
   // Seed counters
   const reelCounter = await db.execute("SELECT value FROM counters WHERE name = 'reel'");
   if (!reelCounter.rows.length) {

@@ -6,7 +6,7 @@ const bcrypt = require('bcrypt');
 const path = require('path');
 const os = require('os');
 const morgan = require('morgan'); // for logs
-const { initDB, queryOne } = require('./db/schema');
+const { initDB, queryOne, queryAll } = require('./db/schema');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -81,6 +81,7 @@ function requireLogin(req, res, next) {
   app.get('/stock', (req, res) => res.sendFile(path.join(__dirname, 'views', 'stock.html')));
 
   app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'views', 'settings.html')));
+  app.get('/transfer', (req, res) => res.sendFile(path.join(__dirname, 'views', 'transfer.html')));
 
   app.use('/api/items', require('./routes/items'));
   app.use('/api/inward', require('./routes/inward'));
@@ -90,10 +91,15 @@ function requireLogin(req, res, next) {
   app.use('/api/dashboard', require('./routes/dashboard'));
   app.use('/api/po', require('./routes/po'));
   app.use('/api/labels', require('./utils/pdf'));
+  app.use('/api/transfer', require('./routes/transfer'));
 
   // Lightweight auth info endpoint for frontend role-aware UI
   app.get('/api/auth/me', (req, res) => {
     res.json({ username: req.user.username, role: req.user.role });
+  });
+
+  app.get('/api/stores', async (req, res) => {
+    res.json(await queryAll("SELECT code, name FROM stores WHERE active = 1 ORDER BY id"));
   });
 
   const ips = [];
