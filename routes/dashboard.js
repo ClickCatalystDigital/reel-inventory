@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
+const { getDailyReportData } = require('../utils/dailyReport');
 
 // Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block outright.
 router.use((req, res, next) => {
@@ -419,6 +420,11 @@ router.get('/export-stock', ah(async (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=current_stock_${as_on_date}.csv`);
   res.send([headers, ...csvRows].join('\n'));
+}));
+
+// GET today's (IST) inward/outward summary + dead/low stock + pending approvals — Reports > Daily Report
+router.get('/daily-report', ah(async (req, res) => {
+  res.json(await getDailyReportData(req.query.store));
 }));
 
 module.exports = router;

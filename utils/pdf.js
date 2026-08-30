@@ -5,6 +5,7 @@ const PDFDocument = require('pdfkit');
 const { generateQRBuffer } = require('./qr');
 const { queryAll } = require('../db/schema');
 const ah = require('./asyncHandler');
+const { getDailyReportData } = require('./dailyReport');
 
 const mm = (v) => v * 2.83465;
 
@@ -386,6 +387,123 @@ router.post('/packing-list', ah(async (req, res) => {
   y += 24;
   doc.text('Checked by: ________________________', MARGIN, y);
   doc.text('Remarks: ________________________', MARGIN + 320, y);
+
+  doc.end();
+}));
+
+// GET Daily Report PDF — today's (IST) inward/outward-by-item, dead/low stock, pending approvals.
+// /api/labels has no mount-wide role guard (label/packing-list generation must stay open
+// to Gelco roles for Outward) — this handler must block them itself, since Daily Report
+// carries the same cross-store business data routes/dashboard.js's block exists to protect.
+router.get('/daily-report', ah(async (req, res) => {
+  if (['gelco_manager', 'gelco_worker'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
+  const data = await getDailyReportData(req.query.store);
+
+  const PAGE_W = 841.89;
+  const PAGE_H = 595.28;
+  const MARGIN = 35;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    layout: 'landscape',
+    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN }
+  });
+
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=daily_report_${data.date}.pdf`);
+  doc.pipe(res);
+
+  const COL_WIDTHS = {
+    item: 150,
+    inReels: 150,
+    inQty: 150,
+    outReels: 150,
+    outQty: CONTENT_W - 150 * 4,
+  };
+  const col = {
+    item: MARGIN,
+    inReels: MARGIN + COL_WIDTHS.item,
+    inQty: MARGIN + COL_WIDTHS.item + COL_WIDTHS.inReels,
+    outReels: MARGIN + COL_WIDTHS.item + COL_WIDTHS.inReels + COL_WIDTHS.inQty,
+    outQty: MARGIN + COL_WIDTHS.item + COL_WIDTHS.inReels + COL_WIDTHS.inQty + COL_WIDTHS.outReels,
+  };
+
+  function drawTableHeader(doc, y) {
+    doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
+    doc.text('ITEM CODE', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.text('REELS IN', col.inReels, y + 6, { width: COL_WIDTHS.inReels, lineBreak: false });
+    doc.text('QTY IN', col.inQty, y + 6, { width: COL_WIDTHS.inQty, lineBreak: false });
+    doc.text('REELS OUT', col.outReels, y + 6, { width: COL_WIDTHS.outReels, lineBreak: false });
+    doc.text('QTY OUT', col.outQty, y + 6, { width: COL_WIDTHS.outQty, lineBreak: false });
+    return y + 22;
+  }
+
+  doc.fontSize(20).font('Helvetica-Bold').fillColor('#000000');
+  doc.text('DAILY REPORT', MARGIN, MARGIN, { width: CONTENT_W, align: 'center' });
+  doc.moveTo(MARGIN, MARGIN + 26).lineTo(MARGIN + CONTENT_W, MARGIN + 26).lineWidth(2).stroke('#000000');
+
+  const metaY = MARGIN + 34;
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
+  doc.text('Date:', MARGIN, metaY);
+  doc.font('Helvetica').text(data.date, MARGIN + 40, metaY);
+  doc.font('Helvetica-Bold').text('Pending Approvals:', MARGIN + 500, metaY);
+  doc.font('Helvetica').text(String(data.pendingApprovals), MARGIN + 620, metaY);
+
+  // Merge inward/outward by item_code into one row set
+  const byItem = {};
+  for (const r of data.inward) byItem[r.item_code] = { item_code: r.item_code, inReels: r.reel_count, inQty: r.total_qty, outReels: 0, outQty: 0 };
+  for (const r of data.outward) {
+    if (!byItem[r.item_code]) byItem[r.item_code] = { item_code: r.item_code, inReels: 0, inQty: 0, outReels: 0, outQty: 0 };
+    byItem[r.item_code].outReels = r.reel_count;
+    byItem[r.item_code].outQty = r.total_qty;
+  }
+  const rows = Object.values(byItem);
+
+  let y = metaY + 22;
+  y = drawTableHeader(doc, y);
+
+  if (!rows.length) {
+    doc.fontSize(9).font('Helvetica').fillColor('#666666');
+    doc.text('No inward or outward activity today.', MARGIN, y + 6);
+    y += 22;
+  }
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i];
+    const rowH = 20;
+    if (y + rowH > PAGE_H - MARGIN - 40) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = MARGIN;
+      y = drawTableHeader(doc, y);
+    }
+    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
+
+    doc.fontSize(8).fillColor('#333333');
+    doc.font('Helvetica-Bold').text(row.item_code, col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.font('Helvetica').text(String(row.inReels || 0), col.inReels, y + 6, { width: COL_WIDTHS.inReels, lineBreak: false });
+    doc.text((row.inQty || 0).toLocaleString(), col.inQty, y + 6, { width: COL_WIDTHS.inQty, lineBreak: false });
+    doc.text(String(row.outReels || 0), col.outReels, y + 6, { width: COL_WIDTHS.outReels, lineBreak: false });
+    doc.text((row.outQty || 0).toLocaleString(), col.outQty, y + 6, { width: COL_WIDTHS.outQty, lineBreak: false });
+
+    doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + CONTENT_W, y + rowH).lineWidth(0.5).stroke('#dddddd');
+    y += rowH;
+  }
+
+  // --- Alerts summary ---
+  y += 14;
+  if (y + 60 > PAGE_H - MARGIN) {
+    doc.addPage({ size: 'A4', layout: 'landscape' });
+    y = MARGIN;
+  }
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
+  doc.text(`Dead Stock (30+ days no movement): ${data.deadStock.length} item(s)`, MARGIN, y);
+  y += 16;
+  doc.text(`Low Stock (below 5 reels): ${data.lowStock.length} item(s)`, MARGIN, y);
 
   doc.end();
 }));

@@ -1,4 +1,4 @@
-import { LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, BarChart3, FileText } from "lucide-react";
+import { LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText } from "lucide-react";
 import { isNavLinkVisible, GELCO_DOCS_ROLES } from "./role-allowlist";
 
 // The 5 primary links shown in both the desktop nav-links bar and the mobile
@@ -8,7 +8,7 @@ export const PRIMARY_NAV_LINKS = [
   { href: "/inward", label: "Inward", icon: PackagePlus },
   { href: "/outward", label: "Outward", icon: PackageMinus },
   { href: "/transfer", label: "Transfer", icon: ArrowLeftRight },
-  { href: "/dashboard", label: "Dashboard", icon: BarChart3 },
+  { href: "/reports", label: "Reports", icon: ClipboardList },
 ] as const;
 
 // Docs (/gelco-docs) isn't in PRIMARY_NAV_LINKS/ROLE_PAGE_ALLOWLIST's usual
