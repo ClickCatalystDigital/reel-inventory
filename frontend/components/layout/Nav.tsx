@@ -4,8 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { isNavLinkVisible } from "@/lib/role-allowlist";
-import { PRIMARY_NAV_LINKS } from "@/lib/nav-links";
+import { getVisibleNavLinks } from "@/lib/nav-links";
 import { StoreSelector } from "./StoreSelector";
 import { ApprovalsBell, NotificationsBell } from "./NavBells";
 import { CogMenu } from "./CogMenu";
@@ -27,7 +26,7 @@ export function Nav() {
       <div className="hidden h-5 w-px shrink-0 bg-white/15 md:block" />
 
       <div className="hidden flex-1 items-center gap-1 md:flex">
-        {PRIMARY_NAV_LINKS.filter((l) => isNavLinkVisible(user?.role, l.href)).map((l) => (
+        {getVisibleNavLinks(user?.role).map((l) => (
           <Link
             key={l.href}
             href={l.href}

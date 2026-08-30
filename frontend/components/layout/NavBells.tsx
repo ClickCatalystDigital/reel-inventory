@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Bell, MessageSquare } from "lucide-react";
 import { useAuth } from "@/lib/auth";
-import { APPROVER_ROLES, NOTIFICATION_ROLES } from "@/lib/role-allowlist";
+import { APPROVER_ROLES, NOTIFICATION_ROLES, isNavLinkVisible } from "@/lib/role-allowlist";
 import { todayISTDateString } from "@/lib/format";
 
 function BellButton({ href, count, title, icon: Icon }: { href: string; count: number; title: string; icon: typeof Bell }) {
@@ -24,7 +24,9 @@ function BellButton({ href, count, title, icon: Icon }: { href: string; count: n
 export function ApprovalsBell() {
   const { user } = useAuth();
   const [count, setCount] = useState(0);
-  const isApprover = !!user && APPROVER_ROLES.includes(user.role);
+  // Same reasoning as CogMenu's "Pending Requests" item — gelco_manager is still an
+  // approver, but /requests is deliberately no longer in their page allowlist.
+  const isApprover = !!user && APPROVER_ROLES.includes(user.role) && isNavLinkVisible(user.role, "/requests");
 
   useEffect(() => {
     if (!isApprover) return;

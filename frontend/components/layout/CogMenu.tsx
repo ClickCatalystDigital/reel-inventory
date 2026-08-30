@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useAuth } from "@/lib/auth";
-import { APPROVER_ROLES } from "@/lib/role-allowlist";
+import { APPROVER_ROLES, isNavLinkVisible } from "@/lib/role-allowlist";
 
 // Legacy quirk preserved on purpose: the cog handles the theme toggle on BOTH
 // desktop and mobile, since the old standalone desktop .theme-toggle button
@@ -19,7 +19,11 @@ export function CogMenu() {
   const { user } = useAuth();
   const { resolvedTheme, setTheme } = useTheme();
   const isDark = resolvedTheme === "dark";
-  const isApprover = !!user && APPROVER_ROLES.includes(user.role);
+  // isApprover alone isn't enough — gelco_manager is still an approver (their own
+  // Outward executes immediately), but /requests is deliberately no longer in their
+  // page allowlist (daily-gate overlay replaced per-request review for that role),
+  // so also check the page is actually reachable before linking to it.
+  const isApprover = !!user && APPROVER_ROLES.includes(user.role) && isNavLinkVisible(user.role, "/requests");
   const isAdminOrManager = user?.role === "admin" || user?.role === "manager";
 
   return (

@@ -6,7 +6,12 @@ const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 const { executeOutwardReel } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
 
-const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
+// gelco_worker included deliberately (unlike inward.js/transfer.js/requests.js's own
+// separate APPROVER_ROLES, which stay admin/manager/gelco_manager only) — their Outward
+// submissions execute immediately rather than queuing as a pending request, per the
+// daily-gate ritual (isGateApprovedToday, checked independently below) being the
+// intended after-the-fact review mechanism for this role, not per-request approval.
+const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager', 'gelco_worker'];
 const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 router.get('/reel/:reelNumber', async (req, res) => {

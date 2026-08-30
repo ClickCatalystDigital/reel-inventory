@@ -137,16 +137,10 @@ export default function DashboardPage() {
   }
 
   useEffect(() => {
-    // Data fetch on mount — a legitimate effect use, not state derived from a prop.
+    // Data fetch reacting to the store selector (and on mount) — a legitimate effect use.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadSummary();
     loadAnalytics();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  useEffect(() => {
-    // Data fetch reacting to the store selector — a legitimate effect use.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (searchActive) doSearch(1, 10);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [selectedStore]);

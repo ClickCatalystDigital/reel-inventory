@@ -4,8 +4,8 @@
 // (there's no shared source between the two processes/languages).
 export const ROLE_PAGE_ALLOWLIST: Record<string, string[]> = {
   client: ["/stock"],
-  gelco_worker: ["/inward", "/outward"],
-  gelco_manager: ["/", "/inward", "/outward", "/transfer", "/requests", "/gelco-docs"],
+  gelco_worker: ["/outward"],
+  gelco_manager: ["/", "/outward", "/gelco-docs"],
 };
 
 export const APPROVER_ROLES = ["admin", "manager", "gelco_manager"];

@@ -130,8 +130,8 @@ function requireLogin(req, res, next) {
   // Restrict certain roles to an allowlist of pages — anything else redirects.
   const ROLE_PAGE_ALLOWLIST = {
     client: { pages: ['/stock'], redirectTo: '/stock' },
-    gelco_worker: { pages: ['/inward', '/outward'], redirectTo: '/inward' },
-    gelco_manager: { pages: ['/', '/inward', '/outward', '/transfer', '/requests', '/gelco-docs'], redirectTo: '/inward' },
+    gelco_worker: { pages: ['/outward'], redirectTo: '/outward' },
+    gelco_manager: { pages: ['/', '/outward', '/gelco-docs'], redirectTo: '/outward' },
   };
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) return next();
