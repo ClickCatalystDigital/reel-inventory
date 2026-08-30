@@ -7,8 +7,9 @@ import { formatDate, formatQty } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ChartCanvas } from "@/components/charts/ChartCanvas";
@@ -232,10 +233,13 @@ export default function DashboardPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-4 grid grid-cols-2 gap-4 text-center sm:grid-cols-4">
+        <div className="mb-4 flex items-center gap-4 text-center">
           <Stat label="Items" value={summary.length} />
+          <Separator orientation="vertical" className="h-10" />
           <Stat label="Total Reels" value={totalReels} />
+          <Separator orientation="vertical" className="h-10" />
           <Stat label="In Stock" value={inStockReels} />
+          <Separator orientation="vertical" className="h-10" />
           <Stat label="Outwarded" value={totalReels - inStockReels} />
         </div>
         <DataTable
@@ -287,56 +291,54 @@ export default function DashboardPage() {
       )}
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Search</div>
-        <Input
-          className="mb-4"
-          autoComplete="off"
-          placeholder="Search reel, item, customer, invoice, or box…"
-          value={q}
-          onChange={(e) => onSearchInput(e.target.value)}
-        />
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Status</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                doSearch(1, 10, q, e.target.value);
-              }}
-            >
-              <option value="">All</option>
-              <option value="In Stock">In Stock</option>
-              <option value="Outwarded">Outwarded</option>
-              <option value="Deleted">Deleted</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>Date Range</Label>
-            <div className="flex gap-2">
-              <Input
-                type="date"
-                value={dateFrom}
-                onChange={(e) => {
-                  setDateFrom(e.target.value);
-                  doSearch(1, 10, q, status, e.target.value);
-                }}
-              />
-              <Input
-                type="date"
-                value={dateTo}
-                onChange={(e) => {
-                  setDateTo(e.target.value);
-                  doSearch(1, 10, q, status, dateFrom, e.target.value);
-                }}
-              />
-            </div>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            className="min-w-48 flex-1"
+            autoComplete="off"
+            placeholder="Search reel, item, customer, invoice, or box…"
+            value={q}
+            onChange={(e) => onSearchInput(e.target.value)}
+          />
+          <Select
+            value={status || "all"}
+            onValueChange={(v) => {
+              const s = v === "all" ? "" : v;
+              setStatus(s);
+              doSearch(1, 10, q, s);
+            }}
+          >
+            <SelectTrigger size="sm" className="w-36">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="In Stock">In Stock</SelectItem>
+              <SelectItem value="Outwarded">Outwarded</SelectItem>
+              <SelectItem value="Deleted">Deleted</SelectItem>
+            </SelectContent>
+          </Select>
+          <Input
+            type="date"
+            className="w-auto"
+            value={dateFrom}
+            onChange={(e) => {
+              setDateFrom(e.target.value);
+              doSearch(1, 10, q, status, e.target.value);
+            }}
+          />
+          <Input
+            type="date"
+            className="w-auto"
+            value={dateTo}
+            onChange={(e) => {
+              setDateTo(e.target.value);
+              doSearch(1, 10, q, status, dateFrom, e.target.value);
+            }}
+          />
+          <Button variant="ghost" size="sm" onClick={clearSearch}>
+            Clear
+          </Button>
         </div>
-        <Button variant="ghost" size="sm" className="mt-4" onClick={clearSearch}>
-          Clear
-        </Button>
       </Card>
 
       {searchActive && (
@@ -386,26 +388,23 @@ export default function DashboardPage() {
       )}
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Export Data</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Stock As On Date</Label>
-            <Input type="date" value={exportDate} onChange={(e) => setExportDate(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Filter Status</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              value={exportStatus}
-              onChange={(e) => setExportStatus(e.target.value)}
-            >
-              <option value="">All</option>
-              <option value="In Stock">In Stock Only</option>
-              <option value="Outwarded">Outwarded Only</option>
-            </select>
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            type="date"
+            className="w-auto"
+            value={exportDate}
+            onChange={(e) => setExportDate(e.target.value)}
+          />
+          <Select value={exportStatus || "all"} onValueChange={(v) => setExportStatus(v === "all" ? "" : v)}>
+            <SelectTrigger size="sm" className="w-40">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Statuses</SelectItem>
+              <SelectItem value="In Stock">In Stock Only</SelectItem>
+              <SelectItem value="Outwarded">Outwarded Only</SelectItem>
+            </SelectContent>
+          </Select>
           <Button variant="secondary" onClick={exportCSV}>
             Download Full CSV
           </Button>
@@ -636,7 +635,7 @@ export default function DashboardPage() {
 
 function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <div>
+    <div className="flex-1">
       <div className="text-2xl font-bold">{value.toLocaleString("en-IN")}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
