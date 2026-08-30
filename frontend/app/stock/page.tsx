@@ -126,7 +126,15 @@ export default function StockPage() {
 
 function StockNav() {
   const { resolvedTheme, setTheme } = useTheme();
-  const isDark = resolvedTheme === "dark";
+  // next-themes can only know the real theme after the client mounts (it reads
+  // localStorage); rendering resolvedTheme unconditionally makes the server's
+  // guess (defaultTheme="light") mismatch the client's real value, which
+  // React reports as a hydration error. Rendering the same default on both
+  // the server and the client's first paint, then switching post-mount,
+  // avoids the mismatch entirely.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+  const isDark = mounted && resolvedTheme === "dark";
 
   return (
     <nav className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 bg-[var(--nav-bg)] px-4 text-white">
