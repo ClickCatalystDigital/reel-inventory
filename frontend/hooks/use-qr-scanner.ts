@@ -21,6 +21,11 @@ export function useQrScanner(elementId: string, onScan: (text: string) => void, 
     if (!active) return;
     let cancelled = false;
     let scannerInstance: Html5QrcodeType | null = null;
+    // html5-qrcode's stop() throws SYNCHRONOUSLY (not a rejected promise) when
+    // called on an instance whose start() never actually succeeded — e.g. camera
+    // access denied/unavailable. Only stop() a scanner that genuinely started,
+    // or cleanup crashes the whole page instead of just failing to scan.
+    let started = false;
 
     // html5-qrcode touches `document` at import time, so it must be a
     // dynamic import inside the effect rather than a top-level one (App
@@ -36,6 +41,16 @@ export function useQrScanner(elementId: string, onScan: (text: string) => void, 
           (decodedText) => onScanRef.current(decodedText),
           () => {}
         )
+        .then(() => {
+          started = true;
+          // Cleanup may have already run (fast toggle-off, or unmount) while start()
+          // was still in flight — at that point `started` was still false, so cleanup
+          // skipped stop() and left the camera stream running. Catch that here: if
+          // we're cancelled by the time start() actually resolves, stop it ourselves.
+          if (cancelled) {
+            scanner.stop().then(() => scanner.clear()).catch(() => {});
+          }
+        })
         .catch(() => {
           if (!cancelled) {
             onErrorRef.current("Camera access denied or unavailable");
@@ -46,8 +61,9 @@ export function useQrScanner(elementId: string, onScan: (text: string) => void, 
 
     return () => {
       cancelled = true;
+      if (!started || !scannerInstance) return;
       scannerInstance
-        ?.stop()
+        .stop()
         .then(() => scannerInstance?.clear())
         .catch(() => {});
     };

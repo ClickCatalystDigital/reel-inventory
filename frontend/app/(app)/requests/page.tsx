@@ -68,11 +68,14 @@ export default function RequestsPage() {
     }
   }
 
-  const matchesStore = (r: RequestItem) =>
-    selectedStore === "all" ||
-    r.payload.store_code === selectedStore ||
-    r.payload.from_store === selectedStore ||
-    r.payload.to_store === selectedStore;
+  const matchesStore = (r: RequestItem) => {
+    const { store_code, from_store, to_store } = r.payload;
+    // A request whose payload never recorded a store (older submissions, before
+    // routes/transfer.js started writing from_store) can't be known to NOT match
+    // the selected store — hide it only for a store it's actually tagged with.
+    if (!store_code && !from_store && !to_store) return true;
+    return selectedStore === "all" || store_code === selectedStore || from_store === selectedStore || to_store === selectedStore;
+  };
 
   const visibleRequests = requests?.filter(matchesStore) ?? null;
 

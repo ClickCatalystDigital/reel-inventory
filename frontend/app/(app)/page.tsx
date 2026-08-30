@@ -115,10 +115,18 @@ export default function CatalogPage() {
 
       <Card className="p-5" onKeyDown={onFormKeyDown}>
         <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add New Item</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_2fr_1fr]">
           <div className="space-y-1.5">
             <Label>Item Code</Label>
             <Input placeholder="e.g. MLCC-100NF-0402" value={itemCode} onChange={(e) => setItemCode(e.target.value)} />
+          </div>
+          <div className="space-y-1.5">
+            <Label>Description</Label>
+            <Input
+              placeholder="e.g. MLCC 100nF 0402 X7R 50V"
+              value={description}
+              onChange={(e) => setDescription(e.target.value)}
+            />
           </div>
           <div className="space-y-1.5">
             <Label>Default SPQ</Label>
@@ -131,15 +139,7 @@ export default function CatalogPage() {
             />
           </div>
         </div>
-        <div className="mt-4 space-y-1.5">
-          <Label>Description</Label>
-          <Input
-            placeholder="e.g. MLCC 100nF 0402 X7R 50V"
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-          />
-        </div>
-        <Button className="mt-4" onClick={addItem}>
+        <Button className="mt-4 self-start" onClick={addItem}>
           + Add Item
         </Button>
       </Card>

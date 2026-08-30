@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Download, FileDown, X } from "lucide-react";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ChartCanvas } from "@/components/charts/ChartCanvas";
 import { cn } from "@/lib/utils";
@@ -90,9 +91,6 @@ export default function DashboardPage() {
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const searchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const [exportDate, setExportDate] = useState("");
-  const [exportStatus, setExportStatus] = useState("");
-
   const [analytics, setAnalytics] = useState<Analytics | null>(null);
   const [helpOpen, setHelpOpen] = useState(false);
 
@@ -169,9 +167,12 @@ export default function DashboardPage() {
   }
 
   function exportCSV() {
+    // Exports exactly what the Search row currently shows — same filters as doSearch().
     const params = new URLSearchParams();
-    if (exportDate) params.set("as_on_date", exportDate);
-    if (exportStatus) params.set("status", exportStatus);
+    if (q) params.set("q", q);
+    if (status) params.set("status", status);
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
     const sp = storeQueryParam(selectedStore);
     if (sp) params.set("store", selectedStore);
     // Triggers a file download from the Express API, not a page navigation —
@@ -335,8 +336,14 @@ export default function DashboardPage() {
               doSearch(1, 10, q, status, dateFrom, e.target.value);
             }}
           />
-          <Button variant="ghost" size="sm" onClick={clearSearch}>
-            Clear
+          <Button variant="ghost" size="icon" title="Export filtered results as CSV" onClick={exportCSV}>
+            <Download />
+          </Button>
+          <Button variant="ghost" size="icon" title="Export current stock summary as CSV" onClick={exportStockCSV}>
+            <FileDown />
+          </Button>
+          <Button variant="ghost" size="icon" title="Clear filters" onClick={clearSearch}>
+            <X />
           </Button>
         </div>
       </Card>
@@ -386,33 +393,6 @@ export default function DashboardPage() {
           </Button>
         </Card>
       )}
-
-      <Card className="p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            type="date"
-            className="w-auto"
-            value={exportDate}
-            onChange={(e) => setExportDate(e.target.value)}
-          />
-          <Select value={exportStatus || "all"} onValueChange={(v) => setExportStatus(v === "all" ? "" : v)}>
-            <SelectTrigger size="sm" className="w-40">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Statuses</SelectItem>
-              <SelectItem value="In Stock">In Stock Only</SelectItem>
-              <SelectItem value="Outwarded">Outwarded Only</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button variant="secondary" onClick={exportCSV}>
-            Download Full CSV
-          </Button>
-          <Button variant="ghost" onClick={exportStockCSV}>
-            Download Current Stock
-          </Button>
-        </div>
-      </Card>
 
       {analytics && (analytics.deadStock.length > 0 || analytics.lowStock.length > 0) && (
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">

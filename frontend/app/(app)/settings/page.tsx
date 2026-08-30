@@ -1,13 +1,15 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { UserPlus } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
+import { useSelectedStore } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 // Mirrors routes/settings.js's validRoles allowlist.
@@ -28,11 +30,18 @@ interface AppUser {
 }
 
 export default function SettingsPage() {
+  const { selectedStore } = useSelectedStore();
   const [users, setUsers] = useState<AppUser[] | null>(null);
   const [newUsername, setNewUsername] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [adding, setAdding] = useState(false);
+
+  const lsUsers = users?.filter((u) => ["user", "manager", "admin"].includes(u.role)) ?? [];
+  const clientUsers = users?.filter((u) => u.role === "client") ?? [];
+  const gelcoUsers = users?.filter((u) => ["gelco_manager", "gelco_worker"].includes(u.role)) ?? [];
+  const showLS = selectedStore === "all" || selectedStore === "primary";
+  const showGelco = selectedStore === "all" || selectedStore === "secondary";
 
   async function loadUsers() {
     try {
@@ -74,76 +83,90 @@ export default function SettingsPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add User</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-          <div className="space-y-1.5">
-            <Label>Username</Label>
-            <Input placeholder="e.g. ravi" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Password</Label>
-            <Input
-              type="password"
-              placeholder="Set a password"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Role</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              value={newRole}
-              onChange={(e) => setNewRole(e.target.value)}
-            >
-              <option value="user">User (staff)</option>
-              <option value="client">Client (read-only)</option>
-              <option value="manager">Manager</option>
-              <option value="admin">Admin</option>
-              <option value="gelco_manager">Gelco Manager</option>
-              <option value="gelco_worker">Gelco Worker</option>
-            </select>
-          </div>
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            className="min-w-40 flex-1"
+            placeholder="Username"
+            value={newUsername}
+            onChange={(e) => setNewUsername(e.target.value)}
+          />
+          <Input
+            type="password"
+            className="min-w-40 flex-1"
+            placeholder="Password"
+            value={newPassword}
+            onChange={(e) => setNewPassword(e.target.value)}
+          />
+          <Select value={newRole} onValueChange={setNewRole}>
+            <SelectTrigger size="sm" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {ROLE_OPTIONS.map((r) => (
+                <SelectItem key={r.value} value={r.value}>
+                  {r.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+          <Button onClick={addUser} disabled={adding}>
+            <UserPlus /> Add User
+          </Button>
         </div>
-        <Button className="mt-4" onClick={addUser} disabled={adding}>
-          Add User
-        </Button>
       </Card>
 
-      <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">All Users</div>
-        <div className="overflow-x-auto rounded-md border border-border">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Username</TableHead>
-                <TableHead>Role</TableHead>
-                <TableHead>Created</TableHead>
-                <TableHead>New Password</TableHead>
-                <TableHead></TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {users === null ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    Loading...
-                  </TableCell>
-                </TableRow>
-              ) : users.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
-                    No users found
-                  </TableCell>
-                </TableRow>
-              ) : (
-                users.map((u) => <UserRow key={u.id} user={u} onSaved={loadUsers} onDeleted={loadUsers} />)
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      </Card>
+      {users === null ? (
+        <Card className="p-5 text-center text-muted-foreground">Loading users...</Card>
+      ) : (
+        <>
+          {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+          {showLS && <UsersCard title="Clients" users={clientUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+          {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+        </>
+      )}
     </div>
+  );
+}
+
+function UsersCard({
+  title,
+  users,
+  onSaved,
+  onDeleted,
+}: {
+  title: string;
+  users: AppUser[];
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
+  return (
+    <Card className="p-5">
+      <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</div>
+      <div className="overflow-x-auto rounded-md border border-border">
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Username</TableHead>
+              <TableHead>Role</TableHead>
+              <TableHead>Created</TableHead>
+              <TableHead>New Password</TableHead>
+              <TableHead></TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {users.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  No users in this section
+                </TableCell>
+              </TableRow>
+            ) : (
+              users.map((u) => <UserRow key={u.id} user={u} onSaved={onSaved} onDeleted={onDeleted} />)
+            )}
+          </TableBody>
+        </Table>
+      </div>
+    </Card>
   );
 }
 
@@ -185,17 +208,18 @@ function UserRow({ user, onSaved, onDeleted }: { user: AppUser; onSaved: () => v
         <strong>{user.username}</strong>
       </TableCell>
       <TableCell>
-        <select
-          className="h-8 rounded-md border border-input bg-transparent px-2 text-xs"
-          value={role}
-          onChange={(e) => setRole(e.target.value)}
-        >
-          {ROLE_OPTIONS.map((r) => (
-            <option key={r.value} value={r.value}>
-              {r.label}
-            </option>
-          ))}
-        </select>
+        <Select value={role} onValueChange={setRole}>
+          <SelectTrigger size="sm" className="w-36">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            {ROLE_OPTIONS.map((r) => (
+              <SelectItem key={r.value} value={r.value}>
+                {r.label}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
       </TableCell>
       <TableCell>{formatDate(user.created_at)}</TableCell>
       <TableCell>

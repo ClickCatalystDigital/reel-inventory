@@ -106,7 +106,10 @@ router.get('/stock-summary', ah(async (req, res) => {
 }));
 
 router.get('/export', ah(async (req, res) => {
-  const { status, as_on_date, store } = req.query;
+  // Mirrors GET /search's filter shape (q/status/date_from/date_to/store) so the
+  // dashboard's export icon can download exactly what's currently on screen —
+  // as_on_date stays supported too for any other caller relying on the old shape.
+  const { q, status, date_from, date_to, as_on_date, store } = req.query;
   let query = `
     SELECT r.reel_number, r.item_code, i.description, r.quantity, r.status, r.inward_date, r.store_code,
       o.customer_name, o.invoice_number, o.quantity_shipped, o.outward_type, o.outward_date
@@ -117,7 +120,16 @@ router.get('/export', ah(async (req, res) => {
   `;
   const params = [];
 
+  if (q) {
+    query += ` AND (
+      r.reel_number LIKE ? OR r.item_code LIKE ? OR r.box_number LIKE ?
+      OR r.reel_number IN (SELECT reel_number FROM outwards WHERE customer_name LIKE ? OR invoice_number LIKE ?)
+    )`;
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
+  }
   if (status) { query += ' AND r.status = ?'; params.push(status); }
+  if (date_from) { query += ' AND r.inward_date >= ?'; params.push(date_from); }
+  if (date_to) { query += ' AND r.inward_date <= ?'; params.push(date_to + ' 23:59:59'); }
   if (as_on_date) { query += ' AND r.inward_date <= ?'; params.push(as_on_date + ' 23:59:59'); }
   if (store && store !== 'all') { query += ' AND r.store_code = ?'; params.push(store); }
   query += ' ORDER BY r.reel_number';

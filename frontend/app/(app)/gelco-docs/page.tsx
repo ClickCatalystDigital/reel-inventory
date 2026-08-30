@@ -6,8 +6,8 @@ import { showToast } from "@/lib/toast";
 import { formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
 interface GelcoDoc {
@@ -86,34 +86,26 @@ export default function GelcoDocsPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-          Upload Document
+        <div className="flex flex-wrap items-center gap-2">
+          <Select value={docType} onValueChange={(v) => setDocType(v as "po" | "invoice")}>
+            <SelectTrigger size="sm" className="w-44">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="po">Purchase Order</SelectItem>
+              <SelectItem value="invoice">Invoice</SelectItem>
+            </SelectContent>
+          </Select>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="application/pdf"
+            className="flex h-9 min-w-48 flex-1 rounded-md border border-input bg-transparent px-3 py-1.5 text-sm file:mr-2 file:rounded file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs"
+          />
+          <Button onClick={uploadDoc} disabled={uploading}>
+            {uploading ? "Uploading..." : "Upload"}
+          </Button>
         </div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>Document Type</Label>
-            <select
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-              value={docType}
-              onChange={(e) => setDocType(e.target.value as "po" | "invoice")}
-            >
-              <option value="po">Purchase Order</option>
-              <option value="invoice">Invoice</option>
-            </select>
-          </div>
-          <div className="space-y-1.5">
-            <Label>PDF File</Label>
-            <input
-              ref={fileRef}
-              type="file"
-              accept="application/pdf"
-              className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1.5 text-sm file:mr-2 file:rounded file:border-0 file:bg-secondary file:px-2 file:py-1 file:text-xs"
-            />
-          </div>
-        </div>
-        <Button className="mt-4" onClick={uploadDoc} disabled={uploading}>
-          {uploading ? "Uploading..." : "Upload"}
-        </Button>
       </Card>
 
       <Card className="p-5">

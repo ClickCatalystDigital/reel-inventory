@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table/DataTable";
 
 interface Store {
@@ -183,34 +184,35 @@ export default function TransferPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label>From Store</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                value={fromStore}
-                onChange={(e) => onFromStoreChange(e.target.value)}
-              >
-                {stores.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
+              <Select value={fromStore} onValueChange={onFromStoreChange}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s.code} value={s.code}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>To Store</Label>
-              <select
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                value={toStore}
-                onChange={(e) => setToStore(e.target.value)}
-              >
-                <option value="">Select...</option>
-                {stores
-                  .filter((s) => s.code !== fromStore)
-                  .map((s) => (
-                    <option key={s.code} value={s.code}>
-                      {s.name}
-                    </option>
-                  ))}
-              </select>
+              <Select value={toStore} onValueChange={setToStore}>
+                <SelectTrigger className="w-full">
+                  <SelectValue placeholder="Select..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores
+                    .filter((s) => s.code !== fromStore)
+                    .map((s) => (
+                      <SelectItem key={s.code} value={s.code}>
+                        {s.name}
+                      </SelectItem>
+                    ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -252,14 +254,15 @@ export default function TransferPage() {
             )}
           </div>
 
-          <div className="space-y-1.5">
-            <Label>Notes (optional)</Label>
-            <Input placeholder="e.g. Rebalancing stock" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="space-y-1.5 sm:flex-1">
+              <Label>Notes (optional)</Label>
+              <Input placeholder="e.g. Rebalancing stock" value={notes} onChange={(e) => setNotes(e.target.value)} />
+            </div>
+            <Button type="submit" className="sm:shrink-0" disabled={!canSubmit || submitting}>
+              Transfer
+            </Button>
           </div>
-
-          <Button type="submit" className="w-full" disabled={!canSubmit || submitting}>
-            Transfer
-          </Button>
         </form>
       </Card>
 

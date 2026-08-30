@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, PenLine } from "lucide-react";
+import { Camera, CameraOff, PenLine } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
@@ -455,22 +455,19 @@ export default function OutwardPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Scan / Add Reels</div>
-        <div className="mb-3.5">
-          <Button variant="ghost" size="sm" onClick={() => scanner.setActive((v) => !v)}>
-            {scanner.active ? "Close Camera" : "Open Camera Scanner"}
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={scanner.active ? "default" : "secondary"}
+            size="icon"
+            title={scanner.active ? "Close Camera" : "Open Camera Scanner"}
+            onClick={() => scanner.setActive((v) => !v)}
+          >
+            {scanner.active ? <CameraOff /> : <Camera />}
           </Button>
-        </div>
-        {scanner.active && (
-          <div className="mb-3.5 overflow-hidden rounded-md border border-border">
-            <div id="reader" />
-          </div>
-        )}
-        <div className="space-y-1.5">
-          <Label>Reel / Box Number</Label>
           <Input
             ref={scanInputRef}
             autoFocus
+            className="min-w-48 flex-1"
             placeholder="Scan QR or type number — keeps adding to cart"
             value={scanInput}
             onChange={(e) => setScanInput(e.target.value)}
@@ -481,13 +478,16 @@ export default function OutwardPage() {
               }
             }}
           />
-          <div className="text-[11px] text-muted-foreground">
-            Scan a reel to add it. Scan a box to add all its in-stock reels. Keep scanning to build your shipment.
-          </div>
+          <Button onClick={() => addToCart(scanInput)}>Add to Cart</Button>
         </div>
-        <Button className="mt-3.5" onClick={() => addToCart(scanInput)}>
-          Add to Cart
-        </Button>
+        {scanner.active && (
+          <div className="mt-3.5 overflow-hidden rounded-md border border-border">
+            <div id="reader" />
+          </div>
+        )}
+        <div className="mt-2 text-[11px] text-muted-foreground">
+          Scan a reel to add it. Scan a box to add all its in-stock reels. Keep scanning to build your shipment.
+        </div>
       </Card>
 
       {(cart.length > 0 || skipped.length > 0) && (

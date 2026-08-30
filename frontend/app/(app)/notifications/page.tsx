@@ -6,7 +6,6 @@ import { formatQty, formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { DataTable } from "@/components/data-table/DataTable";
@@ -25,16 +24,18 @@ interface OutwardEvent {
 
 export default function NotificationsPage() {
   const { selectedStore } = useSelectedStore();
+  const [q, setQ] = useState("");
   const [dateFrom, setDateFrom] = useState("");
   const [dateTo, setDateTo] = useState("");
   const [rows, setRows] = useState<OutwardEvent[]>([]);
   const [total, setTotal] = useState(0);
   const [pageSize, setPageSize] = useState(20);
 
-  async function loadNotifications(page = 1, size = pageSize, from = dateFrom, to = dateTo) {
+  async function loadNotifications(page = 1, size = pageSize, search = q, from = dateFrom, to = dateTo) {
     const params = new URLSearchParams();
     params.set("limit", String(size));
     params.set("offset", String((page - 1) * size));
+    if (search) params.set("q", search);
     if (from) params.set("date_from", from);
     if (to) params.set("date_to", to);
     const sp = storeQueryParam(selectedStore);
@@ -64,25 +65,24 @@ export default function NotificationsPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Filter</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-1.5">
-            <Label>From Date</Label>
-            <Input type="date" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>To Date</Label>
-            <Input type="date" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
-          </div>
-        </div>
-        <div className="mt-4 flex gap-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <Input
+            className="min-w-48 flex-1"
+            placeholder="Search reel, item, customer, invoice, or box…"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && loadNotifications(1, pageSize)}
+          />
+          <Input type="date" className="w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" className="w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
           <Button onClick={() => loadNotifications(1, pageSize)}>Apply</Button>
           <Button
             variant="ghost"
             onClick={() => {
+              setQ("");
               setDateFrom("");
               setDateTo("");
-              loadNotifications(1, pageSize, "", "");
+              loadNotifications(1, pageSize, "", "", "");
             }}
           >
             Clear

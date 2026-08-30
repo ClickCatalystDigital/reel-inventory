@@ -232,12 +232,19 @@ router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
   const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
-  const { date_from, date_to } = req.query;
+  const { q, date_from, date_to } = req.query;
   const params = [];
   const conditions = [];
   if (store && store !== 'all') {
     conditions.push('r.store_code = ?');
     params.push(store);
+  }
+  if (q) {
+    conditions.push(`(
+      o.reel_number LIKE ? OR r.item_code LIKE ? OR r.box_number LIKE ?
+      OR o.customer_name LIKE ? OR o.invoice_number LIKE ?
+    )`);
+    params.push(`%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`, `%${q}%`);
   }
   if (date_from) { conditions.push('o.outward_date >= ?'); params.push(date_from + ' 00:00:00'); }
   if (date_to) { conditions.push('o.outward_date <= ?'); params.push(date_to + ' 23:59:59'); }

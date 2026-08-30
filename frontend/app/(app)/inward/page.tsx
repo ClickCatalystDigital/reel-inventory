@@ -12,11 +12,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { StatusBadge } from "@/components/ui/status-badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
 import { PdfOverlay } from "@/components/layout/PdfOverlay";
-import { cn } from "@/lib/utils";
 
 interface Item {
   item_code: string;
@@ -65,7 +66,7 @@ export default function InwardPage() {
   const [overlay, setOverlay] = useState<{ active: boolean; message: string }>({ active: false, message: "" });
 
   const formRef = useRef<HTMLDivElement>(null);
-  const itemSelectRef = useRef<HTMLSelectElement>(null);
+  const itemSelectRef = useRef<HTMLButtonElement>(null);
 
   async function loadItems() {
     try {
@@ -137,6 +138,7 @@ export default function InwardPage() {
 
   async function submitInward(e: React.FormEvent) {
     e.preventDefault();
+    if (!itemCode) return showToast("Select an item", "error");
     if (!numReels || numReels < 1) return showToast("Enter a valid number of reels or quantity", "error");
     if (warning && !window.confirm(`${warning}\n\nProceed with ${numReels} reel(s)?`)) return;
     if (perBox > 0 && numReels % perBox !== 0) {
@@ -249,43 +251,27 @@ export default function InwardPage() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div className="space-y-1.5">
               <Label>Item Code</Label>
-              <select
-                ref={itemSelectRef}
-                required
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm"
-                value={itemCode}
-                onChange={(e) => setItemCode(e.target.value)}
-              >
-                <option value="">— Select Item —</option>
-                {items.map((i) => (
-                  <option key={i.item_code} value={i.item_code}>
-                    {i.item_code} — {i.description}
-                  </option>
-                ))}
-              </select>
+              <Select value={itemCode} onValueChange={setItemCode}>
+                <SelectTrigger ref={itemSelectRef} className="w-full">
+                  <SelectValue placeholder="— Select Item —" />
+                </SelectTrigger>
+                <SelectContent>
+                  {items.map((i) => (
+                    <SelectItem key={i.item_code} value={i.item_code}>
+                      {i.item_code} — {i.description}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-1.5">
               <Label>{inputMode === "qty" ? "Total Stock Quantity" : "Number of Reels"}</Label>
-              <div className="mb-2 flex gap-2">
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium",
-                    inputMode === "reels" ? "border-primary bg-primary/10" : "border-border bg-card"
-                  )}
-                >
-                  <input type="radio" checked={inputMode === "reels"} onChange={() => switchMode("reels")} />
-                  By Reels
-                </label>
-                <label
-                  className={cn(
-                    "flex cursor-pointer items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium",
-                    inputMode === "qty" ? "border-primary bg-primary/10" : "border-border bg-card"
-                  )}
-                >
-                  <input type="radio" checked={inputMode === "qty"} onChange={() => switchMode("qty")} />
-                  By Total Qty
-                </label>
-              </div>
+              <Tabs value={inputMode} onValueChange={(v) => switchMode(v as "reels" | "qty")} className="mb-2">
+                <TabsList>
+                  <TabsTrigger value="reels">By Reels</TabsTrigger>
+                  <TabsTrigger value="qty">By Total Qty</TabsTrigger>
+                </TabsList>
+              </Tabs>
               <Input
                 type="number"
                 min={1}
@@ -306,32 +292,6 @@ export default function InwardPage() {
                 placeholder="0 = no box"
                 value={reelsPerBox}
                 onChange={(e) => setReelsPerBox(e.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="space-y-1.5">
-              <Label>Receiving Store</Label>
-              <select
-                disabled={isGelco}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-60"
-                value={storeCode}
-                onChange={(e) => setStoreCode(e.target.value)}
-              >
-                {stores.map((s) => (
-                  <option key={s.code} value={s.code}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="space-y-1.5">
-              <Label>Notes (optional)</Label>
-              <Input
-                placeholder="e.g. Supplier batch #, PO number"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
               />
             </div>
           </div>
@@ -365,9 +325,34 @@ export default function InwardPage() {
             </div>
           )}
 
-          <Button type="submit" className="w-full">
-            Inward Reels
-          </Button>
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
+            <div className="space-y-1.5 sm:flex-1">
+              <Label>Receiving Store</Label>
+              <Select value={storeCode} onValueChange={setStoreCode} disabled={isGelco}>
+                <SelectTrigger className="w-full">
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  {stores.map((s) => (
+                    <SelectItem key={s.code} value={s.code}>
+                      {s.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+            <div className="space-y-1.5 sm:flex-1">
+              <Label>Notes (optional)</Label>
+              <Input
+                placeholder="e.g. Supplier batch #, PO number"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+            </div>
+            <Button type="submit" className="sm:shrink-0">
+              Inward Reels
+            </Button>
+          </div>
         </form>
       </Card>
 
