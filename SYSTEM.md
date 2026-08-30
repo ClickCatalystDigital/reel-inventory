@@ -41,7 +41,7 @@ Created idempotently by `initDB()` in [db/schema.js](db/schema.js) on every star
 
 `reels`, `boxes`, and `outwards` all gained a `store_code TEXT NOT NULL DEFAULT 'primary'` column via the same best-effort `ALTER TABLE ... ADD COLUMN` + try/catch pattern already used for `items.status` — every pre-existing row silently became `'primary'` stock with zero backfill. New indexes: `idx_outwards_date`, `idx_reels_inward_date`, `idx_reels_store`, `idx_boxes_store`. `items` (the catalog) deliberately stays store-agnostic — it's a shared SKU list, not physical stock.
 
-⚠️ **This schema migration is already live on the production Turso DB** (applied 2026-08-29, verified via a full table dump — see `scripts/backup-db.js` below — zero data loss: all 5,256 pre-existing reels confirmed `store_code='primary'`). The application code changes that use these columns (routes, UI) are what still needs deploying.
+⚠️ **This schema migration is live on the production Turso DB** (applied 2026-08-29, verified via a full table dump — see `scripts/backup-db.js` below — zero data loss: all 5,256 pre-existing reels confirmed `store_code='primary'`). The application code that uses these columns (routes, UI) is deployed too now — multi-store filtering across Dashboard/Inward/Outward/Transfer/Notifications/Settings/Gelco Docs, previously the pending half of this migration, shipped this session.
 
 ### Gelco roles, daily gate, and Gelco Docs (added)
 
@@ -252,6 +252,7 @@ Replaces the legacy `public/js/app.js`'s imperative DOM injection with declarati
 1. **Requests page's own card layout was never redesigned.** Unlike Dashboard/Inward/Outward/Transfer/Notifications/Catalog/Settings/Gelco Docs, which all got a compact/premium pass, `frontend/app/(app)/requests/page.tsx`'s approve/reject/edit-approve cards are still the original denser layout. Only a data bug on this page was fixed (see Recently resolved) — the visuals themselves are still open.
 2. **`192.168.1.50+2.pem` / `192.168.1.50+2-key.pem`** at the repo root are dead (mkcert TLS files, never referenced by `server.js`, which is HTTP-only) but deliberately not deleted — one is a private key, and removing the file doesn't scrub it from git history, so this needs a real security decision (rotation, history-scrubbing) before touching it, not just a code-cleanup pass.
 3. **`LEGACY_CLEANUP_PLAN.md`** (repo root) documents the legacy-frontend removal below and is safe to delete once that's proven stable in production for a while — not urgent, just noting it's still sitting there.
+4. **Geist Mono is wired (`--font-mono` in `globals.css`) but not applied anywhere selectively** — nothing in the app currently opts into it via a `font-mono` class; everything just uses the `--font-sans`/Geist Sans default. Pick tabular/numeric contexts (quantities, reel numbers, dates) where a monospace face would actually help, or drop the unused wiring if there's no real case for it.
 
 ### Recently resolved (context only, no action needed)
 
@@ -274,7 +275,11 @@ Optional, not in `.env`: `PORT` (default 3000), `RENDER_SERVICE_URL` (enables th
 
 ## 9. Known issues (not yet fixed)
 
-- **`routes/po.js` has no error handling.** Its async handlers (e.g. `GET /companies`, called by `outward.html` on every page load) have no try/catch, and `server.js` has no Express error-handling middleware or `process.on('unhandledRejection', ...)` backstop. If a query in `po.js` throws — confirmed reproducible by running locally without `TURSO_URL` set, since the local SQLite fallback lacks the `crm_*` tables — the unhandled rejection **crashes the entire Node process**, taking down the app for every connected user, not just failing that one request. Does not happen against the production Turso DB today (the `crm_*` tables exist there), but it's a live risk if any `po.js` query ever throws in production (bad input, a locked row, a transient Turso error, etc.). Fix: wrap `po.js`'s handlers in try/catch and/or add a global Express error handler.
+- **`items.js`/`settings.js`/`gelco-docs.js`/`inward.js`/`transfer.js` have partial, not full, try/catch coverage** on their async handlers. Unlike `po.js`/`dashboard.js`/`daily-gate.js`/`utils/pdf.js` (see below, now fully wrapped), a handler here that throws won't crash the process — `server.js`'s `process.on('unhandledRejection', ...)` backstop prevents that — but the request will just hang instead of returning a clean error response. Lower priority than the crash risk was, but still worth a pass using the same `utils/asyncHandler.js` wrapper.
+
+### Recently fixed (context only)
+
+**`routes/po.js` had no error handling**, and neither did `routes/dashboard.js`, `routes/daily-gate.js`, or `utils/pdf.js` — an audit found the crash risk was broader than originally documented here. Any thrown error in an unwrapped async handler (e.g. a query against a `crm_*` table missing from the local SQLite fallback) was an unhandled rejection that **crashed the entire Node process**, taking down the app for every connected user, not just failing that one request. Fixed: `utils/asyncHandler.js` wraps every handler in those four files to forward errors to `next(err)`, and `server.js` gained a global Express error-handling middleware plus the `process.on('unhandledRejection', ...)` backstop mentioned above (which also covers the partial-coverage files noted above, just without the clean-response benefit).
 
 ## Before designing new architecture
 
