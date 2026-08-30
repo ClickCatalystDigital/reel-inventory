@@ -4,8 +4,10 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 const { executeStockTransfer } = require('../utils/inventory');
+const { isGateApprovedToday } = require('../utils/dailyGate');
 
-const APPROVER_ROLES = ['admin', 'manager'];
+const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
+const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 router.get('/reel/:reelNumber', async (req, res) => {
   const reel = await queryOne(`
@@ -52,6 +54,21 @@ router.post('/', async (req, res) => {
   const userRole = req.user?.role;
   const username = req.user?.username;
 
+  const current = kind === 'box'
+    ? await queryOne('SELECT store_code FROM boxes WHERE box_number = ?', [number])
+    : await queryOne('SELECT store_code FROM reels WHERE reel_number = ?', [number]);
+  if (!current) return res.status(404).json({ error: `${kind === 'box' ? 'Box' : 'Reel'} ${number} not found` });
+  const fromStore = current.store_code;
+
+  if (GELCO_ROLES.includes(userRole)) {
+    if (to_store !== 'secondary' && fromStore !== 'secondary') {
+      return res.status(403).json({ error: 'Transfer must involve Gelco Stores' });
+    }
+    if (!(await isGateApprovedToday('secondary'))) {
+      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    }
+  }
+
   if (APPROVER_ROLES.includes(userRole)) {
     try {
       const result = await executeStockTransfer(kind, number, to_store, notes, username);
@@ -67,7 +84,7 @@ router.post('/', async (req, res) => {
 
   // Staff: save as pending request
   try {
-    const payload = JSON.stringify({ kind, number, to_store, notes: notes || null });
+    const payload = JSON.stringify({ kind, number, to_store, notes: notes || null, from_store: fromStore });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
       ['transfer', 'pending', username, nowIST(), payload]
@@ -86,7 +103,7 @@ router.post('/', async (req, res) => {
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
-  const { store } = req.query;
+  const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
   const params = [];
   let where = '';
   if (store && store !== 'all') {

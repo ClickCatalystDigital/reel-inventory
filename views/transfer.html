@@ -9,19 +9,15 @@
 </head>
 <body>
   <nav class="nav">
-    <a href="/" class="nav-brand">LS TECHNOLOGY INVENTORY MGT</a>
+    <a href="/" class="nav-brand">LS INV MGT</a>
     <div class="nav-links">
-      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle dark mode">
-        <svg id="themeIcon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M12 3v2.25m6.364.386-1.591 1.591M21 12h-2.25m-.386 6.364-1.591-1.591M12 18.75V21m-4.773-4.227-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0Z"/>
-        </svg>
-      </button>
       <a href="/">Catalog</a>
       <a href="/inward">Inward</a>
       <a href="/outward">Outward</a>
       <a href="/transfer">Transfer</a>
       <a href="/dashboard">Dashboard</a>
     </div>
+    <div class="nav-actions" id="navActions"></div>
     <!-- Mobile cog menu -->
     <div class="cog-menu" id="cogMenu">
       <button class="cog-btn" onclick="toggleCogMenu()" title="Settings">
@@ -58,7 +54,7 @@
         <div class="form-row">
           <div class="form-group">
             <label>From Store</label>
-            <select id="fromStoreSelect" class="form-control" disabled></select>
+            <select id="fromStoreSelect" class="form-control"></select>
           </div>
           <div class="form-group">
             <label>To Store</label>
@@ -100,6 +96,8 @@
         const optionsHTML = stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
         fromSel.innerHTML = optionsHTML;
         toSel.innerHTML = optionsHTML;
+        const preferred = getSelectedStore();
+        fromSel.value = preferred !== 'all' ? preferred : 'primary';
         updateToStoreOptions();
       } catch (e) {}
     }
@@ -115,15 +113,17 @@
     }
 
     document.getElementById('toStoreSelect').addEventListener('change', validateForm);
+    document.getElementById('fromStoreSelect').addEventListener('change', () => {
+      updateToStoreOptions();
+      renderLookupPreview();
+      validateForm();
+    });
 
     async function lookupNumber() {
       const raw = document.getElementById('transferNumber').value.trim().toUpperCase();
-      const preview = document.getElementById('transferPreview');
-      const fromSel = document.getElementById('fromStoreSelect');
       currentLookup = null;
-      preview.style.display = 'none';
 
-      if (!raw) { validateForm(); return; }
+      if (!raw) { renderLookupPreview(); validateForm(); return; }
 
       try {
         let kind, data;
@@ -136,23 +136,34 @@
           data = await api(`/api/transfer/reel/${reelNumber}`);
         }
 
-        const storeCode = kind === 'box' ? data.box.store_code : data.store_code;
+        const actualStore = kind === 'box' ? data.box.store_code : data.store_code;
         const number = kind === 'box' ? data.box.box_number : data.reel_number;
-        currentLookup = { kind, number, from_store: storeCode };
-
-        fromSel.value = storeCode;
-        updateToStoreOptions();
-
-        preview.style.display = 'block';
-        if (kind === 'reel') {
-          preview.innerHTML = `<div class="reel-info"><strong>${esc(data.reel_number)}</strong> — ${esc(data.item_code)} · ${formatQty(data.quantity)} pcs · currently at <strong>${esc(storeLabel(storeCode))}</strong></div>`;
-        } else {
-          preview.innerHTML = `<div class="reel-info"><strong>${esc(data.box.box_number)}</strong> — ${data.reels.length} reel(s) · currently at <strong>${esc(storeLabel(storeCode))}</strong></div>`;
-        }
+        currentLookup = { kind, number, actual_store: actualStore, data };
       } catch (e) {
         currentLookup = null;
       }
+      renderLookupPreview();
       validateForm();
+    }
+
+    function renderLookupPreview() {
+      const preview = document.getElementById('transferPreview');
+      if (!currentLookup) { preview.style.display = 'none'; return; }
+
+      const { kind, actual_store, data } = currentLookup;
+      const fromSel = document.getElementById('fromStoreSelect');
+      preview.style.display = 'block';
+
+      if (actual_store !== fromSel.value) {
+        preview.innerHTML = `<div class="reel-info" style="color:var(--danger);">This ${kind} is currently at <strong>${esc(storeLabel(actual_store))}</strong>, not ${esc(storeLabel(fromSel.value))}. Select the correct From Store, or re-check the number.</div>`;
+        return;
+      }
+
+      if (kind === 'reel') {
+        preview.innerHTML = `<div class="reel-info"><strong>${esc(data.reel_number)}</strong> — ${esc(data.item_code)} · ${formatQty(data.quantity)} pcs · currently at <strong>${esc(storeLabel(actual_store))}</strong></div>`;
+      } else {
+        preview.innerHTML = `<div class="reel-info"><strong>${esc(data.box.box_number)}</strong> — ${data.reels.length} reel(s) · currently at <strong>${esc(storeLabel(actual_store))}</strong></div>`;
+      }
     }
 
     function storeLabel(code) {
@@ -162,8 +173,10 @@
 
     function validateForm() {
       const toStore = document.getElementById('toStoreSelect').value;
+      const fromStore = document.getElementById('fromStoreSelect').value;
       const btn = document.getElementById('transferSubmitBtn');
-      btn.disabled = !currentLookup || !toStore || toStore === currentLookup.from_store;
+      const mismatched = currentLookup && currentLookup.actual_store !== fromStore;
+      btn.disabled = !currentLookup || !toStore || toStore === fromStore || mismatched;
     }
 
     document.getElementById('transferNumber').addEventListener('input', debounce(lookupNumber, 400));
@@ -178,9 +191,11 @@
 
     document.getElementById('transferForm').addEventListener('submit', async (e) => {
       e.preventDefault();
-      if (!currentLookup) return showToast('Look up a valid reel or box first', 'error');
+      const fromStore = document.getElementById('fromStoreSelect').value;
       const to_store = document.getElementById('toStoreSelect').value;
-      if (to_store === currentLookup.from_store) return showToast('Source and destination store cannot be the same', 'error');
+      if (!currentLookup) return showToast('Look up a valid reel or box first', 'error');
+      if (currentLookup.actual_store !== fromStore) return showToast("Selected From Store does not match the item's actual store", 'error');
+      if (to_store === fromStore) return showToast('Source and destination store cannot be the same', 'error');
 
       try {
         const result = await api('/api/transfer', {

@@ -65,10 +65,17 @@ function requireLogin(req, res, next) {
   // All routes below require login
   app.use(requireLogin);
 
-  // Redirect client role away from internal pages
+  // Restrict certain roles to an allowlist of pages — anything else redirects.
+  const ROLE_PAGE_ALLOWLIST = {
+    client: { pages: ['/stock'], redirectTo: '/stock' },
+    gelco_worker: { pages: ['/inward', '/outward'], redirectTo: '/inward' },
+    gelco_manager: { pages: ['/', '/inward', '/outward', '/transfer', '/requests', '/gelco-docs'], redirectTo: '/inward' },
+  };
   app.use((req, res, next) => {
-    if (req.user?.role === 'client' && req.path !== '/stock' && !req.path.startsWith('/api/') && !req.path.startsWith('/public/')) {
-      return res.redirect('/stock');
+    if (req.path.startsWith('/api/') || req.path.startsWith('/public/')) return next();
+    const rule = ROLE_PAGE_ALLOWLIST[req.user?.role];
+    if (rule && !rule.pages.includes(req.path)) {
+      return res.redirect(rule.redirectTo);
     }
     next();
   });
@@ -82,6 +89,8 @@ function requireLogin(req, res, next) {
 
   app.get('/settings', (req, res) => res.sendFile(path.join(__dirname, 'views', 'settings.html')));
   app.get('/transfer', (req, res) => res.sendFile(path.join(__dirname, 'views', 'transfer.html')));
+  app.get('/notifications', (req, res) => res.sendFile(path.join(__dirname, 'views', 'notifications.html')));
+  app.get('/gelco-docs', (req, res) => res.sendFile(path.join(__dirname, 'views', 'gelco-docs.html')));
 
   app.use('/api/items', require('./routes/items'));
   app.use('/api/inward', require('./routes/inward'));
@@ -92,6 +101,8 @@ function requireLogin(req, res, next) {
   app.use('/api/po', require('./routes/po'));
   app.use('/api/labels', require('./utils/pdf'));
   app.use('/api/transfer', require('./routes/transfer'));
+  app.use('/api/daily-gate', require('./routes/daily-gate'));
+  app.use('/api/gelco-docs', require('./routes/gelco-docs'));
 
   // Lightweight auth info endpoint for frontend role-aware UI
   app.get('/api/auth/me', (req, res) => {

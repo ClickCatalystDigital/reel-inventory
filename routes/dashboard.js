@@ -4,6 +4,14 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 
+// Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block outright.
+router.use((req, res, next) => {
+  if (['gelco_manager', 'gelco_worker'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  next();
+});
+
 router.get('/search', async (req, res) => {
   const { q, reel_number, item_code, customer, invoice, status, box_number, date_from, date_to, store } = req.query;
   const limit = parseInt(req.query.limit) || 100;

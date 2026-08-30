@@ -4,8 +4,10 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 const { executeOutwardReel } = require('../utils/inventory');
+const { isGateApprovedToday } = require('../utils/dailyGate');
 
-const APPROVER_ROLES = ['admin', 'manager'];
+const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
+const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 router.get('/reel/:reelNumber', async (req, res) => {
   const reel = await queryOne(`
@@ -89,10 +91,21 @@ router.post('/', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
+  let storeCode = store_code;
+
+  if (GELCO_ROLES.includes(userRole)) {
+    const reel = await queryOne('SELECT store_code FROM reels WHERE reel_number = ?', [reel_number]);
+    if (!reel) return res.status(404).json({ error: 'Reel not found' });
+    if (reel.store_code !== 'secondary') return res.status(403).json({ error: 'This reel belongs to a different store' });
+    storeCode = 'secondary';
+    if (!(await isGateApprovedToday('secondary'))) {
+      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    }
+  }
 
   if (APPROVER_ROLES.includes(userRole)) {
     try {
-      const result = await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, null, null, store_code);
+      const result = await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, null, null, storeCode);
       return res.json({
         success: true,
         approved: true,
@@ -115,7 +128,7 @@ router.post('/', async (req, res) => {
       outward_type: outward_type || 'Full',
       quantity_shipped: quantity_shipped || null,
       notes: notes || null,
-      store_code: store_code || null
+      store_code: storeCode || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
@@ -154,6 +167,15 @@ router.post('/box', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
+  let storeCode = store_code;
+
+  if (GELCO_ROLES.includes(userRole)) {
+    if (box.store_code !== 'secondary') return res.status(403).json({ error: 'This box belongs to a different store' });
+    storeCode = 'secondary';
+    if (!(await isGateApprovedToday('secondary'))) {
+      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    }
+  }
 
   if (APPROVER_ROLES.includes(userRole)) {
     const results = { success: [], skipped: [] };
@@ -166,7 +188,7 @@ router.post('/box', async (req, res) => {
         await execute(
           `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, store_code)
            VALUES (?, ?, ?, ?, 'Full', ?, ?, ?)`,
-          [reel.reel_number, customer_name.trim(), invoice_number.trim(), reel.quantity, notes || null, nowIST(), store_code || reel.store_code]
+          [reel.reel_number, customer_name.trim(), invoice_number.trim(), reel.quantity, notes || null, nowIST(), storeCode || reel.store_code]
         );
         await execute('UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel.reel_number]);
         results.success.push(reel.reel_number);
@@ -189,7 +211,7 @@ router.post('/box', async (req, res) => {
       invoice_number,
       notes: notes || null,
       reel_numbers: inStock.map(r => r.reel_number),
-      store_code: store_code || null
+      store_code: storeCode || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
@@ -209,13 +231,17 @@ router.post('/box', async (req, res) => {
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
-  const { store } = req.query;
+  const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
+  const { date_from, date_to } = req.query;
   const params = [];
-  let where = '';
+  const conditions = [];
   if (store && store !== 'all') {
-    where = 'WHERE r.store_code = ?';
+    conditions.push('r.store_code = ?');
     params.push(store);
   }
+  if (date_from) { conditions.push('o.outward_date >= ?'); params.push(date_from + ' 00:00:00'); }
+  if (date_to) { conditions.push('o.outward_date <= ?'); params.push(date_to + ' 23:59:59'); }
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
   const countRow = await queryOne(`
     SELECT COUNT(*) as total
@@ -313,19 +339,29 @@ router.post('/grouped', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
+  let storeCode = store_code;
+  const isGelco = GELCO_ROLES.includes(userRole);
+  if (isGelco) storeCode = 'secondary';
+
+  if (isGelco && !(await isGateApprovedToday('secondary'))) {
+    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+  }
 
   // Validate all reels exist and are in stock
   for (const reel_number of reel_numbers) {
     const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
     if (!reel) return res.status(404).json({ error: `Reel ${reel_number} not found` });
     if (reel.status === 'Outwarded') return res.status(400).json({ error: `Reel ${reel_number} already outwarded` });
+    if (isGelco && reel.store_code !== 'secondary') {
+      return res.status(403).json({ error: `Reel ${reel_number} belongs to a different store` });
+    }
   }
 
   if (APPROVER_ROLES.includes(userRole)) {
     const errors = [];
     for (const reel_number of reel_numbers) {
       try {
-        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id, store_code);
+        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id, storeCode);
       } catch (err) {
         errors.push(`${reel_number}: ${err.message}`);
       }
@@ -351,7 +387,7 @@ router.post('/grouped', async (req, res) => {
       notes: notes || null,
       company_id: company_id || null,
       po_id: po_id || null,
-      store_code: store_code || null
+      store_code: storeCode || null
     });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',

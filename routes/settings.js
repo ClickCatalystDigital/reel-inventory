@@ -30,7 +30,7 @@ router.post('/users', async (req, res) => {
   if (!username || !password || !role) {
     return res.status(400).json({ error: 'username, password, and role are required' });
   }
-  const validRoles = ['user', 'client', 'manager', 'admin'];
+  const validRoles = ['user', 'client', 'manager', 'admin', 'gelco_manager', 'gelco_worker'];
   if (!validRoles.includes(role)) {
     return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
   }
@@ -53,6 +53,10 @@ router.post('/users', async (req, res) => {
 router.put('/users/:id', async (req, res) => {
   const { role, password } = req.body;
   const { id } = req.params;
+  const validRoles = ['user', 'client', 'manager', 'admin', 'gelco_manager', 'gelco_worker'];
+  if (role && !validRoles.includes(role)) {
+    return res.status(400).json({ error: `Invalid role. Must be one of: ${validRoles.join(', ')}` });
+  }
 
   const user = await queryOne('SELECT * FROM users WHERE id = ?', [id]);
   if (!user) return res.status(404).json({ error: 'User not found' });

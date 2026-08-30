@@ -94,7 +94,31 @@ function setSelectedStore(code) {
 }
 
 async function injectStoreSelector() {
-  if (document.getElementById('storeSelect')) return;
+  if (document.getElementById('storeSelect') || document.getElementById('storeLocked')) return;
+
+  let user;
+  try { user = await fetch('/api/auth/me').then(r => r.json()); } catch (e) { user = null; }
+
+  if (user && ['gelco_manager', 'gelco_worker'].includes(user.role)) {
+    setSelectedStore('secondary');
+    const navActions = document.querySelector('.nav-actions') || document.querySelector('.nav-links');
+    if (navActions) {
+      const locked = document.createElement('span');
+      locked.id = 'storeLocked';
+      locked.className = 'store-select';
+      locked.textContent = '🔒 Gelco Stores';
+      navActions.prepend(locked);
+    }
+    const cogDropdown = document.getElementById('cogDropdown');
+    if (cogDropdown && !document.getElementById('storeLockedMobile')) {
+      const wrap = document.createElement('div');
+      wrap.id = 'storeLockedMobile';
+      wrap.textContent = '🔒 Gelco Stores';
+      cogDropdown.insertAdjacentElement('afterbegin', wrap);
+    }
+    return;
+  }
+
   let stores;
   try {
     stores = await fetch('/api/stores').then(r => r.json());
@@ -105,8 +129,8 @@ async function injectStoreSelector() {
   const optionsHTML = `<option value="all">All Stores</option>` +
     stores.map(s => `<option value="${s.code}">${esc(s.name)}</option>`).join('');
 
-  const navLinks = document.querySelector('.nav-links');
-  if (navLinks) {
+  const navActions = document.querySelector('.nav-actions') || document.querySelector('.nav-links');
+  if (navActions) {
     const select = document.createElement('select');
     select.id = 'storeSelect';
     select.className = 'store-select';
@@ -114,7 +138,7 @@ async function injectStoreSelector() {
     select.innerHTML = optionsHTML;
     select.value = current;
     select.addEventListener('change', () => setSelectedStore(select.value));
-    navLinks.prepend(select);
+    navActions.prepend(select);
   }
 
   const cogDropdown = document.getElementById('cogDropdown');
@@ -130,6 +154,101 @@ async function injectStoreSelector() {
 }
 
 document.addEventListener('DOMContentLoaded', injectStoreSelector);
+
+// ========== DAILY GATE (Gelco roles must clear this before using the app) ==========
+let _gatePollTimer = null;
+
+async function injectDailyGateOverlay() {
+  let user;
+  try { user = await fetch('/api/auth/me').then(r => r.json()); } catch (e) { return; }
+  if (!user || !['gelco_manager', 'gelco_worker'].includes(user.role)) return;
+
+  let status;
+  try { status = await fetch('/api/daily-gate/status?store=secondary').then(r => r.json()); } catch (e) { return; }
+  if (status.approved) return;
+
+  renderGateOverlay(user.role, status);
+}
+
+function renderGateOverlay(role, status) {
+  if (document.getElementById('dailyGateOverlay')) return;
+
+  const overlay = document.createElement('div');
+  overlay.id = 'dailyGateOverlay';
+  overlay.style.cssText = 'position:fixed; inset:0; z-index:9999; background:rgba(0,0,0,0.6); display:flex; align-items:center; justify-content:center; padding:16px;';
+
+  const rows = status.summary && status.summary.length
+    ? status.summary.map(s => `<tr><td>${esc(s.item_code)}</td><td>${s.reel_count}</td><td>${formatQty(s.total_qty)}</td></tr>`).join('')
+    : `<tr><td colspan="3" style="text-align:center;color:var(--text-muted)">No outward activity yesterday</td></tr>`;
+
+  const body = role === 'gelco_manager'
+    ? `
+      <div class="card-title">Approve Yesterday's Gelco Outward Summary (${esc(status.date || '')})</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Item</th><th>Reels</th><th>Qty</th></tr></thead>
+          <tbody>${rows}</tbody>
+        </table>
+      </div>
+      <button class="btn btn-primary btn-block" style="margin-top:14px;" id="gateApproveBtn">Approve &amp; Continue</button>
+    `
+    : `
+      <div class="card-title">Waiting for Manager Approval</div>
+      <p style="color:var(--text-muted); font-size:13px;">Gelco Manager needs to approve yesterday's outward summary before you can continue. This page will update automatically.</p>
+    `;
+
+  overlay.innerHTML = `<div class="card" style="max-width:480px; width:100%; margin:0;">${body}</div>`;
+  document.body.appendChild(overlay);
+
+  if (role === 'gelco_manager') {
+    document.getElementById('gateApproveBtn').addEventListener('click', async () => {
+      try {
+        await api('/api/daily-gate/approve', { method: 'POST', body: { store: 'secondary' } });
+        overlay.remove();
+      } catch (e) {}
+    });
+  } else {
+    _gatePollTimer = setInterval(async () => {
+      try {
+        const s = await fetch('/api/daily-gate/status?store=secondary').then(r => r.json());
+        if (s.approved) {
+          clearInterval(_gatePollTimer);
+          overlay.remove();
+        }
+      } catch (e) {}
+    }, 15000);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', injectDailyGateOverlay);
+
+// ========== GELCO DOCS NAV LINK (admin/manager/gelco_manager) ==========
+async function injectGelcoDocsNavLink() {
+  let user;
+  try { user = await fetch('/api/auth/me').then(r => r.json()); } catch (e) { return; }
+  if (!user || !['admin', 'manager', 'gelco_manager'].includes(user.role)) return;
+  if (document.querySelector('.nav-links a[href="/gelco-docs"]')) return;
+
+  const navLinks = document.querySelector('.nav-links');
+  if (navLinks) {
+    const a = document.createElement('a');
+    a.href = '/gelco-docs';
+    a.textContent = 'Docs';
+    if (window.location.pathname === '/gelco-docs') a.classList.add('active');
+    navLinks.appendChild(a);
+  }
+
+  const bottomNav = document.querySelector('.bottom-nav');
+  if (bottomNav && !document.querySelector('.bottom-nav a[href="/gelco-docs"]')) {
+    const a = document.createElement('a');
+    a.href = '/gelco-docs';
+    a.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 0 0-3.375-3.375h-1.5A1.125 1.125 0 0 1 13.5 7.125v-1.5a3.375 3.375 0 0 0-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 0 0-9-9Z"/></svg>Docs`;
+    if (window.location.pathname === '/gelco-docs') a.classList.add('active');
+    bottomNav.appendChild(a);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', injectGelcoDocsNavLink);
 
 // ========== NAV EXTRAS (bell + cog role-aware options) ==========
 async function injectNavExtras() {
@@ -151,15 +270,30 @@ async function injectNavExtras() {
     }
     // --------------------------------------------------
 
-    const isApprover = ['admin', 'manager'].includes(user.role);
+    const isApprover = ['admin', 'manager', 'gelco_manager'].includes(user.role);
     const navLinks = document.querySelector('.nav-links');
     const cogDropdown = document.getElementById('cogDropdown');
 
+    // --- Hide nav links this role isn't allowed to visit (server enforces the actual boundary) ---
+    const ROLE_PAGE_ALLOWLIST = {
+      gelco_worker: ['/inward', '/outward'],
+      gelco_manager: ['/', '/inward', '/outward', '/transfer', '/requests', '/gelco-docs'],
+    };
+    const allowed = ROLE_PAGE_ALLOWLIST[user.role];
+    if (allowed) {
+      document.querySelectorAll('.nav-links a[href], .bottom-nav a[href]').forEach(a => {
+        const href = a.getAttribute('href');
+        if (!allowed.includes(href)) a.style.display = 'none';
+      });
+    }
+
+    const navActions = document.querySelector('.nav-actions') || navLinks;
+
     // --- Bell icon (approvers only) ---
-    if (isApprover && navLinks && !document.getElementById('bellBtn')) {
+    if (isApprover && navActions && !document.getElementById('bellBtn')) {
       const bell = document.createElement('button');
       bell.id = 'bellBtn';
-      bell.className = 'theme-toggle';
+      bell.className = 'icon-btn';
       bell.title = 'Pending Approvals';
       bell.style.position = 'relative';
       bell.onclick = () => window.location.href = '/requests';
@@ -175,10 +309,32 @@ async function injectNavExtras() {
           align-items:center; justify-content:center; padding:0 3px;
         ">0</span>
       `;
-      // Insert before theme toggle
-      const themeBtn = navLinks.querySelector('.theme-toggle');
-      if (themeBtn) navLinks.insertBefore(bell, themeBtn);
-      else navLinks.prepend(bell);
+      navActions.appendChild(bell);
+    }
+
+    // --- Notifications bell (admin/manager only — every outward event, date-filterable) ---
+    if (['admin', 'manager'].includes(user.role) && navActions && !document.getElementById('notifBellBtn')) {
+      const notifBell = document.createElement('button');
+      notifBell.id = 'notifBellBtn';
+      notifBell.className = 'icon-btn';
+      notifBell.title = 'Notifications';
+      notifBell.style.position = 'relative';
+      notifBell.onclick = () => window.location.href = '/notifications';
+      notifBell.innerHTML = `
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.5">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 3.75H6.912a2.25 2.25 0 0 0-2.15 1.588L2.35 13.177a2.25 2.25 0 0 0-.1.661V18a2.25 2.25 0 0 0 2.25 2.25h15A2.25 2.25 0 0 0 21.75 18v-4.162c0-.224-.034-.447-.1-.661L19.24 5.338a2.25 2.25 0 0 0-2.15-1.588H15M2.25 13.5h3.86a2.25 2.25 0 0 1 2.012 1.244l.256.512a2.25 2.25 0 0 0 2.013 1.244h3.218a2.25 2.25 0 0 0 2.013-1.244l.256-.512a2.25 2.25 0 0 1 2.013-1.244h3.859M12 21v-8.25m0 0 3 3m-3-3-3 3"/>
+        </svg>
+        <span id="notifBellCount" style="
+          display:none; position:absolute; top:-4px; right:-4px;
+          background:var(--primary); color:#fff; font-size:9px; font-weight:700;
+          min-width:16px; height:16px; border-radius:8px;
+          align-items:center; justify-content:center; padding:0 3px;
+        ">0</span>
+      `;
+      navActions.appendChild(notifBell);
+
+      refreshNotifBellCount();
+      setInterval(refreshNotifBellCount, 30000);
     }
 
     // --- Cog dropdown: move dark mode + logout into cog on desktop ---
@@ -232,6 +388,24 @@ async function refreshBellCount() {
     const bell = document.getElementById('bellCount');
     if (bell) {
       const count = data.count || 0;
+      bell.textContent = count;
+      bell.style.display = count > 0 ? 'flex' : 'none';
+    }
+  } catch (e) {}
+}
+
+function todayISTDateString() {
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  return new Date(Date.now() + istOffset).toISOString().substring(0, 10);
+}
+
+async function refreshNotifBellCount() {
+  try {
+    const today = todayISTDateString();
+    const data = await fetch(`/api/outward/recent?limit=1&date_from=${today}&date_to=${today}`).then(r => r.json());
+    const bell = document.getElementById('notifBellCount');
+    if (bell) {
+      const count = data.total || 0;
       bell.textContent = count;
       bell.style.display = count > 0 ? 'flex' : 'none';
     }
@@ -409,3 +583,18 @@ class PaginatedTable {
     return [1, '…', current - 1, current, current + 1, '…', total];
   }
 }
+
+// ========== BFCACHE RE-INJECTION ==========
+// Back/forward navigation can restore a frozen DOM snapshot via `pageshow`
+// (event.persisted === true) without re-firing DOMContentLoaded. If the
+// snapshot was taken mid-injection (these functions all await a fetch
+// first), the restored page would permanently show the pre-injection state.
+// All four functions already guard against duplicate insertion, so
+// re-invoking them here is a safe, idempotent no-op in the common case.
+window.addEventListener('pageshow', (e) => {
+  if (!e.persisted) return;
+  injectStoreSelector();
+  injectDailyGateOverlay();
+  injectGelcoDocsNavLink();
+  injectNavExtras();
+});

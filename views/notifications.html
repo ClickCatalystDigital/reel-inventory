@@ -1,9 +1,10 @@
+<!-- views/notifications.html -->
 <!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Settings | Reel Inventory</title>
+  <title>Notifications | Reel Inventory</title>
   <link rel="stylesheet" href="/public/css/style.css">
 </head>
 <body>
@@ -15,11 +16,11 @@
       <a href="/outward">Outward</a>
       <a href="/transfer">Transfer</a>
       <a href="/dashboard">Dashboard</a>
-      <!-- <a href="/api/logout" style="color:#dc2626;">Logout</a> -->
     </div>
     <div class="nav-actions" id="navActions"></div>
+    <!-- Mobile cog menu -->
     <div class="cog-menu" id="cogMenu">
-      <button class="cog-btn" onclick="toggleCogMenu()" title="Menu">
+      <button class="cog-btn" onclick="toggleCogMenu()" title="Settings">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
           <path stroke-linecap="round" stroke-linejoin="round" d="M9.594 3.94c.09-.542.56-.94 1.11-.94h2.593c.55 0 1.02.398 1.11.94l.213 1.281c.063.374.313.686.645.87.074.04.147.083.22.127.325.196.72.257 1.075.124l1.217-.456a1.125 1.125 0 0 1 1.37.49l1.296 2.247a1.125 1.125 0 0 1-.26 1.431l-1.003.827c-.293.241-.438.613-.43.992a7.723 7.723 0 0 1 0 .255c-.008.378.137.75.43.991l1.004.827c.424.35.534.955.26 1.43l-1.298 2.247a1.125 1.125 0 0 1-1.369.491l-1.217-.456c-.355-.133-.75-.072-1.076.124a6.47 6.47 0 0 1-.22.128c-.331.183-.581.495-.644.869l-.213 1.281c-.09.543-.56.94-1.11.94h-2.594c-.55 0-1.019-.398-1.11-.94l-.213-1.281c-.062-.374-.312-.686-.644-.87a6.52 6.52 0 0 1-.22-.127c-.325-.196-.72-.257-1.076-.124l-1.217.456a1.125 1.125 0 0 1-1.369-.49l-1.297-2.247a1.125 1.125 0 0 1 .26-1.431l1.004-.827c.292-.24.437-.613.43-.991a6.932 6.932 0 0 1 0-.255c.007-.38-.138-.751-.43-.992l-1.004-.827a1.125 1.125 0 0 1-.26-1.43l1.297-2.247a1.125 1.125 0 0 1 1.37-.491l1.216.456c.356.133.751.072 1.076-.124.072-.044.146-.086.22-.128.332-.183.582-.495.644-.869l.214-1.28Z"/><path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 1 1-6 0 3 3 0 0 1 6 0Z"/>
         </svg>
@@ -43,142 +44,75 @@
 
   <div class="container">
     <div class="page-header">
-      <h1>Settings</h1>
-      <p>Manage users and access levels</p>
+      <h1>Notifications</h1>
+      <p>Every outward event, with timestamp and date filtering</p>
     </div>
 
-    <!-- Add User -->
     <div class="card">
-      <div class="card-title">Add User</div>
-      <div class="form-row-3">
+      <div class="card-title">Filter</div>
+      <div class="form-row">
         <div class="form-group">
-          <label>Username</label>
-          <input type="text" id="newUsername" class="form-control" placeholder="e.g. ravi">
+          <label>From Date</label>
+          <input type="date" id="notifDateFrom" class="form-control">
         </div>
         <div class="form-group">
-          <label>Password</label>
-          <input type="password" id="newPassword" class="form-control" placeholder="Set a password">
-        </div>
-        <div class="form-group">
-          <label>Role</label>
-          <select id="newRole" class="form-control">
-            <option value="user">User (staff)</option>
-            <option value="client">Client (read-only)</option>
-            <option value="manager">Manager</option>
-            <option value="admin">Admin</option>
-            <option value="gelco_manager">Gelco Manager</option>
-            <option value="gelco_worker">Gelco Worker</option>
-          </select>
+          <label>To Date</label>
+          <input type="date" id="notifDateTo" class="form-control">
         </div>
       </div>
-      <button class="btn btn-primary" onclick="addUser()">Add User</button>
+      <div class="btn-row">
+        <button class="btn btn-primary" onclick="applyFilter()">Apply</button>
+        <button class="btn btn-ghost" onclick="clearFilter()">Clear</button>
+      </div>
     </div>
 
-    <!-- User List -->
     <div class="card">
-      <div class="card-title">All Users</div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>Username</th>
-              <th>Role</th>
-              <th>Created</th>
-              <th>New Password</th>
-              <th></th>
-            </tr>
-          </thead>
-          <tbody id="usersTable">
-            <tr><td colspan="5" style="text-align:center; color:var(--text-muted);">Loading...</td></tr>
-          </tbody>
-        </table>
-      </div>
+      <div id="notifTable-container"></div>
     </div>
   </div>
 
   <script src="/public/js/app.js"></script>
   <script>
-    async function loadUsers() {
+    const notifTablePT = new PaginatedTable({
+      containerId: 'notifTable-container',
+      pageSize: 20,
+      serverMode: true,
+      onPageChange: (page, pageSize) => loadNotifications(page, pageSize),
+      titleText: 'Outward Events',
+      columns: [
+        { label: 'Reel', render: o => `<strong>${esc(o.reel_number)}</strong>` },
+        { label: 'Box', render: o => o.box_number || '—' },
+        { label: 'Item', render: o => esc(o.item_code) },
+        { label: 'Customer', render: o => esc(o.customer_name) },
+        { label: 'Invoice', render: o => esc(o.invoice_number) },
+        { label: 'Qty', render: o => formatQty(o.quantity_shipped) },
+        { label: 'Type', render: o => `<span class="badge ${o.outward_type === 'Full' ? 'badge-danger' : 'badge-warning'}">${o.outward_type}</span>` },
+        { label: 'Date & Time', render: o => formatDateTime(o.outward_date) },
+      ]
+    });
+
+    async function loadNotifications(page = 1, pageSize = 20) {
+      const dateFrom = document.getElementById('notifDateFrom').value;
+      const dateTo = document.getElementById('notifDateTo').value;
+      const params = new URLSearchParams();
+      params.set('limit', pageSize);
+      params.set('offset', (page - 1) * pageSize);
+      if (dateFrom) params.set('date_from', dateFrom);
+      if (dateTo) params.set('date_to', dateTo);
       try {
-        const users = await api('/api/settings/users');
-        const tbody = document.getElementById('usersTable');
-        if (!users.length) {
-          tbody.innerHTML = '<tr><td colspan="5" style="text-align:center; color:var(--text-muted);">No users found</td></tr>';
-          return;
-        }
-        tbody.innerHTML = users.map(u => `
-          <tr>
-            <td><strong>${u.username}</strong></td>
-            <td>
-              <select class="form-control" id="role-${u.id}" style="padding:4px 8px; font-size:12px;">
-                <option value="user"     ${u.role === 'user'     ? 'selected' : ''}>User</option>
-                <option value="client"   ${u.role === 'client'   ? 'selected' : ''}>Client</option>
-                <option value="manager"  ${u.role === 'manager'  ? 'selected' : ''}>Manager</option>
-                <option value="admin"    ${u.role === 'admin'    ? 'selected' : ''}>Admin</option>
-                <option value="gelco_manager" ${u.role === 'gelco_manager' ? 'selected' : ''}>Gelco Manager</option>
-                <option value="gelco_worker"  ${u.role === 'gelco_worker'  ? 'selected' : ''}>Gelco Worker</option>
-              </select>
-            </td>
-            <td>${formatDate(u.created_at)}</td>
-            <td>
-              <input type="password" class="form-control" id="pw-${u.id}"
-                placeholder="Leave blank to keep"
-                style="padding:4px 8px; font-size:12px; width:160px;">
-            </td>
-            <td>
-              <div style="display:flex; gap:6px;">
-                <button class="btn btn-ghost btn-sm" onclick="updateUser(${u.id}, '${u.username}')">Save</button>
-                <button class="btn btn-danger btn-sm" onclick="deleteUser(${u.id}, '${u.username}')">Delete</button>
-              </div>
-            </td>
-          </tr>
-        `).join('');
+        const { rows, total } = await api(`/api/outward/recent?${params}`);
+        notifTablePT.loadServerPage(rows, total);
       } catch (e) {}
     }
 
-    async function addUser() {
-      const username = document.getElementById('newUsername').value.trim();
-      const password = document.getElementById('newPassword').value;
-      const role = document.getElementById('newRole').value;
-
-      if (!username || !password) return showToast('Username and password required', 'error');
-
-      try {
-        await api('/api/settings/users', {
-          method: 'POST',
-          body: { username, password, role }
-        });
-        showToast(`User "${username}" added`);
-        document.getElementById('newUsername').value = '';
-        document.getElementById('newPassword').value = '';
-        loadUsers();
-      } catch (e) {}
+    function applyFilter() { loadNotifications(1, notifTablePT.pageSize); }
+    function clearFilter() {
+      document.getElementById('notifDateFrom').value = '';
+      document.getElementById('notifDateTo').value = '';
+      loadNotifications(1, notifTablePT.pageSize);
     }
 
-    async function updateUser(id, username) {
-      const role = document.getElementById(`role-${id}`).value;
-      const password = document.getElementById(`pw-${id}`).value;
-
-      try {
-        await api(`/api/settings/users/${id}`, {
-          method: 'PUT',
-          body: { role, password: password || undefined }
-        });
-        showToast(`User "${username}" updated`);
-        loadUsers();
-      } catch (e) {}
-    }
-
-    async function deleteUser(id, username) {
-      if (!confirm(`Delete user "${username}"? This cannot be undone.`)) return;
-      try {
-        await api(`/api/settings/users/${id}`, { method: 'DELETE' });
-        showToast(`User "${username}" deleted`);
-        loadUsers();
-      } catch (e) {}
-    }
-
-    loadUsers();
+    loadNotifications();
   </script>
 
   <nav class="bottom-nav">

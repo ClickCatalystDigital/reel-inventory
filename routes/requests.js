@@ -5,7 +5,7 @@ const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 // const { executeOutwardReel } = require('./outward');
 const { executeInward, executeOutwardReel, executeStockTransfer } = require('../utils/inventory');
 
-const APPROVER_ROLES = ['admin', 'manager'];
+const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
 
 function requireApprover(req, res, next) {
   if (!APPROVER_ROLES.includes(req.user?.role)) {
@@ -14,8 +14,19 @@ function requireApprover(req, res, next) {
   next();
 }
 
+// gelco_manager only sees/acts on requests that involve Gelco Stores
+function isGelcoRelevant(type, payload) {
+  if (type === 'transfer') {
+    return payload.from_store === 'secondary' || payload.to_store === 'secondary';
+  }
+  return payload.store_code === 'secondary';
+}
+
 // GET all pending requests — for bell count and requests page
 router.get('/', async (req, res) => {
+  if (req.user?.role === 'gelco_worker') {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
   const { status } = req.query;
   const filter = status || 'pending';
   const requests = await queryAll(
@@ -23,15 +34,26 @@ router.get('/', async (req, res) => {
     [filter]
   );
   // Parse payload JSON for each
-  const parsed = requests.map(r => ({
+  let parsed = requests.map(r => ({
     ...r,
     payload: JSON.parse(r.payload)
   }));
+  if (req.user?.role === 'gelco_manager') {
+    parsed = parsed.filter(r => isGelcoRelevant(r.type, r.payload));
+  }
   res.json(parsed);
 });
 
 // GET pending count only — used by bell icon polling
 router.get('/count', async (req, res) => {
+  if (req.user?.role === 'gelco_worker') {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  if (req.user?.role === 'gelco_manager') {
+    const rows = await queryAll(`SELECT type, payload FROM requests WHERE status = 'pending'`, []);
+    const count = rows.filter(r => isGelcoRelevant(r.type, JSON.parse(r.payload))).length;
+    return res.json({ count });
+  }
   const row = await queryOne(
     `SELECT COUNT(*) as count FROM requests WHERE status = 'pending'`,
     []
@@ -55,6 +77,10 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
     payload = JSON.parse(request.payload);
   } catch (e) {
     return res.status(500).json({ error: 'Corrupt request payload' });
+  }
+
+  if (req.user.role === 'gelco_manager' && !isGelcoRelevant(request.type, payload)) {
+    return res.status(403).json({ error: 'Not authorized' });
   }
 
   try {
@@ -125,6 +151,10 @@ router.post('/:id/reject', requireApprover, async (req, res) => {
     return res.status(400).json({ error: `Request is already ${request.status}` });
   }
 
+  if (req.user.role === 'gelco_manager' && !isGelcoRelevant(request.type, JSON.parse(request.payload))) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+
   await execute(
     `UPDATE requests SET status = 'rejected', reviewed_by = ?, reviewed_at = ?, reject_reason = ? WHERE id = ?`,
     [reviewer, nowIST(), reject_reason || null, id]
@@ -145,6 +175,10 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
   if (!request) return res.status(404).json({ error: 'Request not found' });
   if (request.status !== 'pending') {
     return res.status(400).json({ error: `Request is already ${request.status}` });
+  }
+
+  if (req.user.role === 'gelco_manager' && !isGelcoRelevant(request.type, JSON.parse(request.payload))) {
+    return res.status(403).json({ error: 'Not authorized' });
   }
 
   try {

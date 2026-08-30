@@ -4,9 +4,11 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
 const { executeInward } = require('../utils/inventory');
+const { isGateApprovedToday } = require('../utils/dailyGate');
 
 // Roles that bypass approval
-const APPROVER_ROLES = ['admin', 'manager'];
+const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
+const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 // Extracted so both direct-approve and request-approve paths use same logic - handled by inventory.js
 // async function executeInward(item_code, num_reels, num_boxes, notes) {
@@ -64,7 +66,11 @@ router.post('/', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
-  const storeCode = store_code || 'primary';
+  const storeCode = GELCO_ROLES.includes(userRole) ? 'secondary' : (store_code || 'primary');
+
+  if (GELCO_ROLES.includes(userRole) && !(await isGateApprovedToday('secondary'))) {
+    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+  }
 
   // Managers and admins bypass approval
   if (APPROVER_ROLES.includes(userRole)) {
@@ -109,7 +115,7 @@ router.post('/', async (req, res) => {
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
-  const { store } = req.query;
+  const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
   const params = [];
   let where = '';
   if (store && store !== 'all') {

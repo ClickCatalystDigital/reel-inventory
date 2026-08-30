@@ -108,6 +108,24 @@ async function initDB() {
     status TEXT NOT NULL DEFAULT 'completed'
   )`);
 
+  await db.execute(`CREATE TABLE IF NOT EXISTS daily_gate_approvals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    store_code TEXT NOT NULL,
+    gate_date TEXT NOT NULL,
+    approved_by TEXT NOT NULL,
+    approved_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(store_code, gate_date)
+  )`);
+
+  await db.execute(`CREATE TABLE IF NOT EXISTS gelco_docs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    doc_type TEXT NOT NULL,
+    original_filename TEXT NOT NULL,
+    file_url TEXT NOT NULL,
+    uploaded_by TEXT NOT NULL,
+    uploaded_at DATETIME DEFAULT CURRENT_TIMESTAMP
+  )`);
+
   // Migration: add store_code to existing tables — same best-effort ALTER pattern as items.status
   try {
     await db.execute(`ALTER TABLE reels ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
@@ -121,6 +139,11 @@ async function initDB() {
   }
   try {
     await db.execute(`ALTER TABLE outwards ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+  try {
+    await db.execute(`ALTER TABLE gelco_docs ADD COLUMN store_code TEXT NOT NULL DEFAULT 'secondary'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
@@ -220,4 +243,15 @@ function nowIST() {
   return ist.toISOString().replace('T', ' ').substring(0, 19);
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, createUser, nowIST };
+// Returns 'YYYY-MM-DD' for the given moment in IST — never use SQLite's date('now', ...)
+// for day-boundary logic, it's UTC-based while every stored timestamp here is naive IST.
+function istDateString(d = new Date()) {
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  return new Date(d.getTime() + istOffset).toISOString().substring(0, 10);
+}
+
+function istDayBounds(dateStr) {
+  return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
+}
+
+module.exports = { initDB, queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, createUser, nowIST, istDateString, istDayBounds };
