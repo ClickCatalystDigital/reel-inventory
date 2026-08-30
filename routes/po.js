@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
+const ah = require('../utils/asyncHandler');
 
 async function nextSysPONumber() {
   await execute("UPDATE counters SET value = value + 1 WHERE name = 'po_sys'");
@@ -11,7 +12,7 @@ async function nextSysPONumber() {
 }
 
 // LIST — filterable by status, company_id
-router.get('/', async (req, res) => {
+router.get('/', ah(async (req, res) => {
   const { status, company_id } = req.query;
   let sql = `
     SELECT p.*, co.name AS company_name, c.poc_name
@@ -25,15 +26,15 @@ router.get('/', async (req, res) => {
   if (company_id) { sql += ' AND p.company_id = ?'; params.push(company_id); }
   sql += ' ORDER BY p.created_at DESC LIMIT 500';
   res.json(await queryAll(sql, params));
-});
+}));
 
 // Companies for outward selector (called by inventory UI)
-router.get('/companies', async (req, res) => {
+router.get('/companies', ah(async (req, res) => {
   res.json(await queryAll('SELECT id, name FROM crm_companies ORDER BY name'));
-});
+}));
 
 // Confirmed POs for a company (called by inventory UI when selecting customer)
-router.get('/companies/:companyId/open', async (req, res) => {
+router.get('/companies/:companyId/open', ah(async (req, res) => {
   res.json(await queryAll(
     `SELECT id, po_number, expected_dispatch_date, notes
      FROM crm_purchase_orders
@@ -41,17 +42,17 @@ router.get('/companies/:companyId/open', async (req, res) => {
      ORDER BY expected_dispatch_date`,
     [req.params.companyId]
   ));
-});
+}));
 
 // Inventory items for line item selector
-router.get('/items', async (req, res) => {
+router.get('/items', ah(async (req, res) => {
   res.json(await queryAll(
     "SELECT item_code, description FROM items WHERE status = 'active' ORDER BY item_code"
   ));
-});
+}));
 
 // CREATE
-router.post('/', async (req, res) => {
+router.post('/', ah(async (req, res) => {
   const {
     company_id, contact_id, order_date,
     expected_dispatch_date, notes, items, generate_number
@@ -100,10 +101,10 @@ router.post('/', async (req, res) => {
       return res.status(409).json({ error: `PO number "${po_number}" already exists` });
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // SINGLE — with items + outward count
-router.get('/:id', async (req, res) => {
+router.get('/:id', ah(async (req, res) => {
   const po = await queryOne(`
     SELECT p.*,
            co.name AS company_name, co.website,
@@ -128,10 +129,10 @@ router.get('/:id', async (req, res) => {
   );
 
   res.json({ ...po, items, outward_count: outwardRow?.n || 0 });
-});
+}));
 
 // UPDATE — only allowed on draft or confirmed
-router.patch('/:id', async (req, res) => {
+router.patch('/:id', ah(async (req, res) => {
   const po = await queryOne(
     'SELECT status FROM crm_purchase_orders WHERE id = ?',
     [req.params.id]
@@ -150,10 +151,10 @@ router.patch('/:id', async (req, res) => {
      expected_dispatch_date || null, notes || null, nowIST(), req.params.id]
   );
   res.json({ success: true });
-});
+}));
 
 // ADD LINE ITEM
-router.post('/:id/items', async (req, res) => {
+router.post('/:id/items', ah(async (req, res) => {
   const { item_code, quantity_ordered, unit_price, notes } = req.body;
   if (!item_code || !quantity_ordered)
     return res.status(400).json({ error: 'item_code and quantity_ordered required' });
@@ -173,10 +174,10 @@ router.post('/:id/items', async (req, res) => {
     [req.params.id, item_code, quantity_ordered, unit_price || null, notes || null]
   );
   res.json({ success: true, id: Number(r.lastId) });
-});
+}));
 
 // REMOVE LINE ITEM
-router.delete('/:id/items/:itemId', async (req, res) => {
+router.delete('/:id/items/:itemId', ah(async (req, res) => {
   const po = await queryOne(
     'SELECT status FROM crm_purchase_orders WHERE id = ?',
     [req.params.id]
@@ -191,10 +192,10 @@ router.delete('/:id/items/:itemId', async (req, res) => {
   );
   if (!r.changes) return res.status(404).json({ error: 'Item not found' });
   res.json({ success: true });
-});
+}));
 
 // CONFIRM: draft → confirmed + dispatch reminder task
-router.post('/:id/confirm', async (req, res) => {
+router.post('/:id/confirm', ah(async (req, res) => {
   const po = await queryOne(`
     SELECT p.*, co.name AS company_name
     FROM crm_purchase_orders p
@@ -230,10 +231,10 @@ router.post('/:id/confirm', async (req, res) => {
   }
 
   res.json({ success: true, message: 'PO confirmed' });
-});
+}));
 
 // DISPATCH: confirmed → dispatched + follow-up task
-router.post('/:id/dispatch', async (req, res) => {
+router.post('/:id/dispatch', ah(async (req, res) => {
   const { dispatch_date } = req.body;
   if (!dispatch_date)
     return res.status(400).json({ error: 'dispatch_date required' });
@@ -271,10 +272,10 @@ router.post('/:id/dispatch', async (req, res) => {
   }
 
   res.json({ success: true, message: `PO ${po.po_number} dispatched` });
-});
+}));
 
 // CANCEL — admins/managers only, not if already dispatched
-router.post('/:id/cancel', async (req, res) => {
+router.post('/:id/cancel', ah(async (req, res) => {
   if (!['admin', 'manager'].includes(req.user?.role))
     return res.status(403).json({ error: 'Not authorized' });
 
@@ -291,6 +292,6 @@ router.post('/:id/cancel', async (req, res) => {
     [nowIST(), req.params.id]
   );
   res.json({ success: true, message: 'PO cancelled' });
-});
+}));
 
 module.exports = router;

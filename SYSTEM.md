@@ -6,13 +6,13 @@ Local-intranet inventory management system for electronic component reels ("LS T
 
 - **Runtime**: Node.js >= 18, plain CommonJS, no bundler/build step.
 - **Web framework**: Express 4.
-- **Templating**: none. Each server route does `res.sendFile()` of a static HTML file in `views/`; all dynamic behavior is client-side `fetch` calls to `/api/*` (API + static HTML pattern, no SSR).
+- **Templating**: none server-side. `server.js` used to `res.sendFile()` static HTML from `views/`; as of the Next.js migration (§6a) it instead reverse-proxies every page to a separate Next.js process. Either way, all dynamic behavior is client-side `fetch` against `/api/*` (no SSR data-fetching anywhere).
 - **Database**: SQLite via `@libsql/client` — local file `./inventory.db` by default, or Turso (managed libSQL cloud) when `TURSO_URL` is set.
 - **Auth**: `jsonwebtoken` (JWT, 30-day expiry, stored as a `token` cookie or `Authorization: Bearer` header) + `bcrypt` password hashing + `cookie-parser`.
 - **PDF**: `pdfkit`. **QR codes**: `qrcode`. **Logging**: `morgan('dev')`. **Env**: `dotenv`. **File upload**: `multer` (memory storage) + `@aws-sdk/client-s3` (Cloudflare R2, Gelco Docs tab only — same versions/pattern as the sibling `ls_crm` app).
-- **Frontend**: vanilla JS (`public/js/app.js`) + vanilla CSS (`public/css/style.css`). CDN libs loaded only where needed: Chart.js 4.4.0 (`dashboard.html`), html5-qrcode 2.3.8 (`outward.html`, camera scanning).
-- No TypeScript, no ORM, no test framework — raw SQL strings throughout.
-- `package.json` scripts: `start` → `node server.js`, `dev` → `node --watch server.js`.
+- **Frontend**: **migrated to Next.js 16 (App Router) + Tailwind v4 + shadcn/ui, in a separate `frontend/` app — see §6a, the current source of truth for the frontend.** `public/js/app.js` + `public/css/style.css` + every `views/*.html` file are legacy, fully unreferenced by any live route, kept on disk only for rollback (§6a). CDN libs from the legacy frontend (Chart.js 4.4.0, html5-qrcode 2.3.8) are now regular npm dependencies of `frontend/`, not CDN `<script>` tags.
+- No TypeScript, no ORM, no test framework on the backend — raw SQL strings throughout. `frontend/` does use TypeScript (shadcn CLI convention).
+- Root `package.json` scripts: `start` → runs `node server.js` and the built Next.js app together via `concurrently -k` (§6a); `build` → builds `frontend/`; `dev` → `node --watch server.js` (Express only — run `npm run dev:next` in another terminal for the Next.js dev server); `dev:next` → `next dev` in `frontend/`.
 
 ## 2. Database schema
 
@@ -180,7 +180,9 @@ Created idempotently by `initDB()` in [db/schema.js](db/schema.js) on every star
 - **`utils/dailyGate.js`** (new) — `isGateApprovedToday(storeCode)`: one `queryOne` against `daily_gate_approvals` for `(storeCode, istDateString())`. Shared by `routes/daily-gate.js`'s `GET /status` and the write-endpoint gate checks in `inward.js`/`outward.js`/`transfer.js` (§3).
 - **`scripts/backup-db.js`** (new, `npm run backup`) — dumps every table in the configured DB (Turso if `TURSO_URL` set, else local `inventory.db`) to a timestamped, restorable `.sql` file in `backups/` (gitignored) using `@libsql/client` directly — no new dependency, no Turso CLI login required. Run this before any future schema migration.
 
-## 6. Frontend
+## 6. Frontend (legacy — superseded by §6a, kept for rollback only)
+
+⚠️ **This entire section describes the legacy vanilla-JS/HTML frontend, which is now dead code.** Every page it describes has a live equivalent in `frontend/` (§6a) reachable via the reverse proxy in `server.js`; nothing in `views/`, `public/js/app.js`, or `public/css/style.css` is served to any user of a current-role account anymore. This section is kept as-is (not rewritten) because it's still useful as a reference for "what did the old version do" when porting/comparing behavior, and because these files are the rollback path if a migrated page ever needs to be reverted. Skip straight to §6a for the current frontend.
 
 No templating engine — every view is a static HTML file with an inline `<script>` calling the JSON API directly.
 
@@ -208,6 +210,55 @@ No templating engine — every view is a static HTML file with an inline `<scrip
   - `notifications.html` (new, admin/manager only) — every outward event with timestamp, two native `<input type="date">` filters, server-paginated `PaginatedTable` against the extended `GET /api/outward/recent`.
   - `gelco-docs.html` (nav label "Docs"; admin/manager/gelco_manager) — a file picker + doc-type radio (PO/Invoice) posting `multipart/form-data` to `POST /api/gelco-docs/upload`, and a plain (non-paginated — kept deliberately simple) table of uploaded docs with download links and delete buttons. The list re-fetches on the `storechange` event and passes `storeQueryParam()` through, so its content follows the top-right store dropdown — empty with "No documents for the selected store" when viewing a store with none (e.g. Primary, today, since all docs are Gelco's).
   - All pages except `stock.html` gained a `<a href="/transfer">Transfer</a>` link in both the desktop nav and mobile bottom-nav (it's a primary everyday action like Inward/Outward, not tucked into the cog dropdown).
+
+## 6a. Frontend — current (Next.js + Tailwind + shadcn/ui)
+
+All 11 pages from §6 are migrated and live. This is a **reskin, not a redesign** — same information architecture, same API calls, same design tokens (colors/radius ported 1:1 from `public/css/style.css`) — rebuilt in React/Tailwind/shadcn instead of hand-rolled DOM. The one deliberate deviation from "reskin" is typography (see Design tokens below).
+
+### Architecture
+
+`frontend/` is a **separate, self-contained Next.js 16 (App Router) app** — its own `package.json`, its own `node_modules`, no monorepo tooling. It runs as its **own Node process** (`next dev -p 3001` in dev, `next start -p 3001` in prod) and is never reached directly by users — `server.js` stays the single public entry point (same LAN-IP printing, same `RENDER_SERVICE_URL` keep-alive ping as always) and reverse-proxies specific page paths to it.
+
+- **The proxy**: `server.js` builds one `http-proxy-middleware` instance (`nextProxy`) with a `pathFilter` that matches `/_next` + `/_next/*` (Next's own static assets/RSC payloads) or anything in the `MIGRATED_PAGE_PATHS` array (now all 11 page paths + `/favicon.ico`). It's mounted **globally** via `app.use(nextProxy)` — twice, once before `requireLogin` (so `/login` itself is reachable pre-auth) and once after the `ROLE_PAGE_ALLOWLIST` middleware (so auth/role gating still runs before any authenticated page reaches Next). It is deliberately **not** mounted per-path (`app.use('/transfer', nextProxy)`) — Express strips the mount prefix from `req.url` for `app.use(path, mw)`, which silently forwarded every migrated page to Next's `/` instead of the real path during the pilot. Exact-match `pathFilter`, mounted globally, avoids that class of bug entirely — including for the root path (`/`), which a naive prefix-based proxy would have to special-case to avoid swallowing every other route.
+- **WebSocket upgrades**: `http-proxy-middleware`'s automatic upgrade detection only fires after an initial plain HTTP request on the same path — a fresh WS handshake (e.g. Next's HMR client hitting `/_next/hmr` cold) never gets one. `server.js` explicitly does `httpServer.on('upgrade', nextProxy.upgrade)` after `app.listen()` to cover this; without it, HMR silently never connects and (confirmed during the migration) can leave a page stuck mid-hydration, not just "no live-reload."
+- **Dev-mode API calls**: `frontend/next.config.ts` proxies `/api/:path*` to `EXPRESS_ORIGIN` (default `localhost:3000`) via `rewrites()`, but only when `NODE_ENV !== 'production'` — in prod, the browser only ever talks to Express directly (same-origin, no rewrite needed).
+- **Production process**: root `package.json`'s `"build"` script runs `npm --prefix frontend install && npm --prefix frontend run build`; `"start"` runs `concurrently -k "node server.js" "npm --prefix frontend run start"` — the `-k` (kill-others) means if either process dies, both exit, letting the platform's own restart policy (Render, in this app's case) recover both together rather than needing a second process manager like pm2.
+- **Legacy files are fully dead but intentionally still on disk**: `views/*.html`, `public/js/app.js`, `public/css/style.css` have zero remaining references from any live route. They're kept only so a single migrated page can be instantly rolled back (revert one entry in `MIGRATED_PAGE_PATHS`, the old `res.sendFile()` line for that path would need re-adding too since those were removed page-by-page as each migrated). Safe to delete in one cleanup commit once this has been stable in production for a while — see task list below.
+
+### Design tokens & typography
+
+`frontend/app/globals.css` ports the legacy `:root` custom properties 1:1 (`--background`, `--foreground`, `--primary`, `--success`/`--warning`/`--destructive`, `--radius`, dark-mode overrides under `[data-theme="dark"]` — note: **not** a `.dark` class, `next-themes` is configured with `attribute="data-theme"` specifically to match the legacy `toggleTheme()` contract). One dedicated `--nav-bg` token exists because the legacy nav bar stays dark in *both* themes (not derived from `--foreground`, which correctly inverts for normal surfaces).
+
+**Typography is the one deliberate non-reskin change**: the legacy app used one monospace stack (`'SF Mono','Fira Code','Consolas',monospace`) for literally everything. At the user's request for a more premium/professional daily-use feel, `--font-sans` now points to **Geist Sans** (`geist` npm package, self-hosted, zero network dependency at build or runtime — deliberately not `next/font/google`, since this is a local-intranet app that shouldn't assume internet access). Geist Mono is wired as `--font-mono` but not yet applied anywhere selectively (see task list).
+
+### Shared infrastructure (built once, reused by every page)
+
+Replaces the legacy `public/js/app.js`'s imperative DOM injection with declarative React equivalents:
+
+- `lib/api.ts` — `api()` fetch wrapper, same contract as legacy (JSON body, toast-on-error).
+- `lib/auth.tsx` — `AuthProvider`/`useAuth()`, one `GET /api/auth/me` call via context (legacy called this redundantly from 4 separate injector functions per page).
+- `lib/store-context.tsx` — `useSelectedStore()`, backed by the same `localStorage['selectedStore']` key as legacy.
+- `lib/format.ts` — `formatDate`/`formatDateTime`/`formatQty`/`statusVariant`, preserving the exact IST-naive-string parsing (`new Date(dateStr.replace(' ','T')+'+05:30')`) legacy relied on.
+- `lib/role-allowlist.ts` — mirrors `server.js`'s `ROLE_PAGE_ALLOWLIST` client-side (UI-only convenience; `server.js` remains the real boundary, unchanged).
+- `components/layout/{Nav,BottomNav,CogMenu,StoreSelector,DailyGateOverlay,Fab,NavBells}.tsx` — the nav chrome.
+- `components/data-table/DataTable.tsx` — client/server dual-mode port of the legacy `PaginatedTable` class (`mode="client"` mirrors `.load()`, `mode="server"` + `onPageChange` mirrors `.loadServerPage()`).
+- `components/charts/ChartCanvas.tsx` — thin Chart.js wrapper (kept as Chart.js, not rewritten to Recharts — lower risk, smaller diff); always `destroy()`s before creating a new instance, matching legacy's manual `Chart.getChart(id)?.destroy()` guard against the "canvas already in use" error.
+- `components/ui/status-badge.tsx` — port of legacy `statusBadge()`.
+- `hooks/use-qr-scanner.ts` — wraps `html5-qrcode`'s imperative start/stop lifecycle; dynamically imports the library inside the effect (it touches `document` at import time, incompatible with Next's server-side prerender) and is StrictMode-safe (always `stop()`+`clear()`s on cleanup, swallowing the case where `stop()` rejects because `start()` never resolved).
+- `hooks/use-daily-gate.ts` — port of the daily-gate polling logic.
+
+### Known gaps / task backlog (nothing below is implemented — pick up here)
+
+1. **Verification gap, not a known bug**: the Gelco daily-gate overlay, the locked "🔒 Gelco Stores" store-selector, the `gelco_worker`/`gelco_manager` nav-allowlist redirects, and the `client`-role `/stock` restriction were all ported faithfully from working legacy logic and code-reviewed, but **never once live-rendered** during the migration — zero `gelco_manager`/`gelco_worker` accounts exist in the DB (as of this writing only `admin`/`pranav`/`zakir` [admin/manager] and `gelco`/`micro`/`nhp` [client] exist), and credentials for the existing `client`/`manager` accounts weren't available either. Needs a real pass once either a test Gelco account is created (admin/manager can already do this from Settings — `gelco_manager`/`gelco_worker` are valid roles in `routes/settings.js`'s `validRoles`) or existing non-admin credentials are provided.
+2. **Notifications and Requests pages don't react to the top-nav store dropdown.** Unlike Inward/Outward/Transfer/Docs, which all listen for store changes and re-fetch, `frontend/app/(app)/notifications/page.tsx` and `frontend/app/(app)/requests/page.tsx` currently ignore `useSelectedStore()` entirely (flagged by the user; not yet investigated whether this is intentional — e.g. Requests may be meant to always show all pending requests regardless of store filter — or a genuine oversight to wire up like the other pages).
+3. **Filter/search cards read as oversized, not "premium."** The dashboard's Search card and Export card (`frontend/app/(app)/dashboard/page.tsx`), and similar filter cards elsewhere (e.g. Notifications' date-range filter), currently use the full multi-row form layout ported directly from the legacy `.form-row`/`.form-group` structure. Redesign these into compact single-line filter bars using shadcn components.
+4. **Dashboard KPI/stat cards should use a shadcn `Separator`** between them instead of the current plain grid layout (`frontend/app/(app)/dashboard/page.tsx`'s `Stat` component).
+5. **Dashboard's Search card specifically should also become a one-line, still-premium layout** (overlaps with #3 but called out separately by the user — the search input + status/date filters currently stack across several rows).
+6. **Legacy cleanup, carefully**: `views/*.html`, `public/css/style.css`, `public/js/app.js` are fully dead code (§6a's Architecture note above) and can be deleted in one commit. Separately, audit `frontend/` itself for any leftover styling inconsistencies from the initial page-by-page reskin pass that contribute to the "not premium" feel called out in #3/#5 (e.g. `Card` padding/sizing choices) and clean those up — without regressing functionality or visually diverging from confirmed-working pages.
+
+### Recently resolved (context only, no action needed)
+
+Favicon route added to `MIGRATED_PAGE_PATHS` (was 404ing for unrestricted roles). Checkbox `aria-label`s added to the two previously-unlabeled select-column checkboxes (inward, dashboard search results). `next-themes` is a dependency (a deliberate deviation from an earlier draft of the migration plan, which suggested hand-rolling the theme toggle instead) — functionally correct, `storageKey`/`attribute` match the legacy contract exactly, not something to undo.
 
 ## 7. Config / environment
 

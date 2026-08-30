@@ -1,0 +1,140 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* ls-inventory dark mode uses [data-theme="dark"] on <html>, not a .dark class,
+   to stay compatible with the legacy toggleTheme() until every page migrates. */
+@custom-variant dark (&:is([data-theme="dark"] *));
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans), 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: var(--font-geist-mono), var(--font);
+  --font-heading: var(--font-sans);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+}
+
+/* Tokens ported 1:1 from public/css/style.css :root — this is a reskin, not a
+   redesign, so these values must match the legacy app exactly. The one
+   deliberate exception is typography: --font (the legacy monospace-for-
+   everything stack) is kept here only as the fallback tail of --font-mono
+   (see @theme inline above) — general UI text now uses Geist Sans instead,
+   at the user's explicit request for a more premium daily-use feel. */
+:root {
+  --font: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  --background: #f5f5f0;      /* --bg */
+  --foreground: #1a1a18;      /* --text */
+  --card: #ffffff;            /* --surface */
+  --card-foreground: #1a1a18;
+  --popover: #ffffff;
+  --popover-foreground: #1a1a18;
+  --primary: #2563eb;
+  --primary-foreground: #ffffff;
+  --primary-hover: #1d4ed8;
+  --secondary: #f0f0ea;
+  --secondary-foreground: #1a1a18;
+  --muted: #f0f0ea;
+  --muted-foreground: #6b6b63; /* --text-muted */
+  --accent: #f0f0ea;
+  --accent-foreground: #1a1a18;
+  --destructive: #dc2626;     /* --danger */
+  --destructive-foreground: #ffffff;
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --success-bg: #f0fdf4;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --warning-bg: #fffbeb;
+  --danger-bg: #fef2f2;
+  --border: #e0e0d8;
+  --input: #e0e0d8;
+  --ring: #2563eb;
+  --radius: 6px;
+  /* Nav chrome bar stays dark in BOTH themes (legacy .nav / .bottom-nav are
+     not token-driven — they're overridden separately in [data-theme=dark]) —
+     so this gets its own variable rather than reusing --foreground, which
+     correctly inverts with the theme for regular text/surfaces. */
+  --nav-bg: #1a1a18;
+  --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
+  --sidebar: #ffffff;
+  --sidebar-foreground: #1a1a18;
+  --sidebar-primary: #2563eb;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #f0f0ea;
+  --sidebar-accent-foreground: #1a1a18;
+  --sidebar-border: #e0e0d8;
+  --sidebar-ring: #2563eb;
+}
+
+[data-theme="dark"] {
+  --background: #0f0f0e;
+  --foreground: #f0f0ec;
+  --card: #1a1a18;
+  --card-foreground: #f0f0ec;
+  --popover: #1a1a18;
+  --popover-foreground: #f0f0ec;
+  --secondary: #232320;
+  --secondary-foreground: #f0f0ec;
+  --muted: #232320;
+  --muted-foreground: #8a8a82;
+  --accent: #232320;
+  --accent-foreground: #f0f0ec;
+  --success-bg: #052e16;
+  --warning-bg: #1c1400;
+  --danger-bg: #1f0707;
+  --border: #2a2a27;
+  --input: #2a2a27;
+  --nav-bg: #0a0a09; /* legacy [data-theme=dark] .nav / .bottom-nav */
+  --sidebar: #0a0a09;
+  --sidebar-foreground: #f0f0ec;
+  --sidebar-accent: #232320;
+  --sidebar-accent-foreground: #f0f0ec;
+  --sidebar-border: #2a2a27;
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-size: 14px;
+    line-height: 1.5;
+  }
+  html {
+    @apply font-sans;
+  }
+}

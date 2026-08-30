@@ -4,6 +4,7 @@ const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { generateQRBuffer } = require('./qr');
 const { queryAll } = require('../db/schema');
+const ah = require('./asyncHandler');
 
 const mm = (v) => v * 2.83465;
 
@@ -23,7 +24,7 @@ function fitFontSize(doc, text, font, maxWidth, startSize, minSize = 6) {
   return size;
 }
 
-router.post('/generate', async (req, res) => {
+router.post('/generate', ah(async (req, res) => {
   const { reel_numbers } = req.body;
 
   if (!reel_numbers || !reel_numbers.length) {
@@ -125,10 +126,10 @@ router.post('/generate', async (req, res) => {
   }
 
   doc.end();
-});
+}));
 
 // POST generate box labels (1 box per label page)
-router.post('/generate-box', async (req, res) => {
+router.post('/generate-box', ah(async (req, res) => {
   const { box_numbers } = req.body;
 
   if (!box_numbers || !box_numbers.length) {
@@ -189,11 +190,11 @@ router.post('/generate-box', async (req, res) => {
   }
 
   doc.end();
-});
+}));
 
 
 // POST generate A4 landscape packing list PDF — grouped by item
-router.post('/packing-list', async (req, res) => {
+router.post('/packing-list', ah(async (req, res) => {
   const { customer_name, invoice_number, reels } = req.body;
 
   if (!customer_name || !invoice_number || !reels || !reels.length) {
@@ -387,6 +388,6 @@ router.post('/packing-list', async (req, res) => {
   doc.text('Remarks: ________________________', MARGIN + 320, y);
 
   doc.end();
-});
+}));
 
 module.exports = router;

@@ -4,17 +4,21 @@
   "description": "Local intranet inventory management for electronic components",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js",
+    "start": "concurrently -k \"node server.js\" \"npm --prefix frontend run start\"",
+    "build": "npm --prefix frontend install && npm --prefix frontend run build",
     "dev": "node --watch server.js",
+    "dev:next": "npm --prefix frontend run dev",
     "backup": "node scripts/backup-db.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1121.0",
     "@libsql/client": "^0.17.2",
     "bcrypt": "^6.0.0",
+    "concurrently": "^10.0.5",
     "cookie-parser": "^1.4.7",
     "dotenv": "^16.4.0",
     "express": "^4.18.2",
+    "http-proxy-middleware": "^3.0.7",
     "jsonwebtoken": "^9.0.3",
     "morgan": "^1.10.1",
     "multer": "^2.3.0",

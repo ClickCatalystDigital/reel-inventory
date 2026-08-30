@@ -3,6 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
+const ah = require('../utils/asyncHandler');
 
 // Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block outright.
 router.use((req, res, next) => {
@@ -12,7 +13,7 @@ router.use((req, res, next) => {
   next();
 });
 
-router.get('/search', async (req, res) => {
+router.get('/search', ah(async (req, res) => {
   const { q, reel_number, item_code, customer, invoice, status, box_number, date_from, date_to, store } = req.query;
   const limit = parseInt(req.query.limit) || 100;
   const offset = parseInt(req.query.offset) || 0;
@@ -67,9 +68,9 @@ router.get('/search', async (req, res) => {
   });
 
   res.json({ rows: parsed, total: countRow.total });
-});
+}));
 
-router.get('/stock-summary', async (req, res) => {
+router.get('/stock-summary', ah(async (req, res) => {
   const as_on_date = req.query.as_on_date;
   const { store } = req.query;
   const storeFilter = store && store !== 'all';
@@ -102,9 +103,9 @@ router.get('/stock-summary', async (req, res) => {
   }
 
   res.json(await queryAll(query, params));
-});
+}));
 
-router.get('/export', async (req, res) => {
+router.get('/export', ah(async (req, res) => {
   const { status, as_on_date, store } = req.query;
   let query = `
     SELECT r.reel_number, r.item_code, i.description, r.quantity, r.status, r.inward_date, r.store_code,
@@ -132,10 +133,10 @@ router.get('/export', async (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=inventory_${new Date().toISOString().split('T')[0]}.csv`);
   res.send([headers, ...csvRows].join('\n'));
-});
+}));
 
 // POST soft delete reels
-router.post('/delete', async (req, res) => {
+router.post('/delete', ah(async (req, res) => {
   const { reel_numbers, box_numbers, password } = req.body;
 
   if (password !== 'admin123') {
@@ -186,10 +187,10 @@ router.post('/delete', async (req, res) => {
     message: `${deleted} reel(s) marked as deleted`,
     stats
   });
-});
+}));
 
 // POST get delete preview (stats before confirming)
-router.post('/delete-preview', async (req, res) => {
+router.post('/delete-preview', ah(async (req, res) => {
   const { reel_numbers, box_numbers } = req.body;
 
   let reelsToCheck = [];
@@ -220,10 +221,10 @@ router.post('/delete-preview', async (req, res) => {
   };
 
   res.json(stats);
-});
+}));
 
 // GET analytics data
-router.get('/analytics', async (req, res) => {
+router.get('/analytics', ah(async (req, res) => {
   const { store } = req.query;
   const storeFilter = store && store !== 'all';
   const sp = storeFilter ? [store] : [];
@@ -350,10 +351,10 @@ router.get('/analytics', async (req, res) => {
     deadStock,
     lowStock
   });
-});
+}));
 
 // GET item-specific trend
-router.get('/item-trend', async (req, res) => {
+router.get('/item-trend', ah(async (req, res) => {
   const { item_code, store } = req.query;
   if (!item_code) return res.status(400).json({ error: 'item_code required' });
   const storeFilter = store && store !== 'all';
@@ -379,10 +380,10 @@ router.get('/item-trend', async (req, res) => {
   `, params);
 
   res.json(trend);
-});
+}));
 
 // GET export current stock as Excel-compatible CSV
-router.get('/export-stock', async (req, res) => {
+router.get('/export-stock', ah(async (req, res) => {
   const as_on_date = req.query.as_on_date || new Date().toISOString().split('T')[0];
   const { store } = req.query;
   const storeFilter = store && store !== 'all';
@@ -406,6 +407,6 @@ router.get('/export-stock', async (req, res) => {
   res.setHeader('Content-Type', 'text/csv');
   res.setHeader('Content-Disposition', `attachment; filename=current_stock_${as_on_date}.csv`);
   res.send([headers, ...csvRows].join('\n'));
-});
+}));
 
 module.exports = router;

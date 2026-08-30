@@ -4,8 +4,9 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, istDateString, istDayBounds } = require('../db/schema');
 const { isGateApprovedToday } = require('../utils/dailyGate');
+const ah = require('../utils/asyncHandler');
 
-router.get('/status', async (req, res) => {
+router.get('/status', ah(async (req, res) => {
   const store = req.query.store || 'secondary';
 
   if (['admin', 'manager'].includes(req.user?.role)) {
@@ -28,9 +29,9 @@ router.get('/status', async (req, res) => {
 
   const approved = await isGateApprovedToday(store);
   res.json({ date: yesterday, approved, summary });
-});
+}));
 
-router.post('/approve', async (req, res) => {
+router.post('/approve', ah(async (req, res) => {
   const { store } = req.body;
   const storeCode = store || 'secondary';
 
@@ -53,6 +54,6 @@ router.post('/approve', async (req, res) => {
     );
   }
   res.json({ success: true, message: `Gate approved for ${today}` });
-});
+}));
 
 module.exports = router;
