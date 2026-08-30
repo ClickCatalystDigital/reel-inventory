@@ -7,8 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
 // Deliberately outside the (app) route group and doesn't use the shared api()
-// wrapper — this is the entry point before any auth exists, ported near
-// verbatim from views/login.html including the exact cookie-setting logic.
+// wrapper — this is the entry point before any auth exists.
 export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");

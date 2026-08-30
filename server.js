@@ -3,7 +3,6 @@ const express = require('express');
 const jwt = require('jsonwebtoken');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcrypt');
-const path = require('path');
 const os = require('os');
 const morgan = require('morgan'); // for logs
 const { createProxyMiddleware } = require('http-proxy-middleware');
@@ -80,7 +79,6 @@ app.use(morgan('dev'));
 app.use(cookieParser());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use('/public', express.static(path.join(__dirname, 'public')));
 
 function requireLogin(req, res, next) {
   const token = req.headers['authorization']?.replace('Bearer ', '')
@@ -136,7 +134,7 @@ function requireLogin(req, res, next) {
     gelco_manager: { pages: ['/', '/inward', '/outward', '/transfer', '/requests', '/gelco-docs'], redirectTo: '/inward' },
   };
   app.use((req, res, next) => {
-    if (req.path.startsWith('/api/') || req.path.startsWith('/public/')) return next();
+    if (req.path.startsWith('/api/')) return next();
     const rule = ROLE_PAGE_ALLOWLIST[req.user?.role];
     if (rule && !rule.pages.includes(req.path)) {
       return res.redirect(rule.redirectTo);
@@ -151,10 +149,9 @@ function requireLogin(req, res, next) {
   app.use(nextProxy);
 
   // Every page is now served via the nextProxy mounted above
-  // (MIGRATED_PAGE_PATHS) — no res.sendFile() routes needed here, the old
-  // views/*.html files stay on disk for rollback (delete them in a single
-  // cleanup commit once the migration has been stable in production for a
-  // while, per the plan — not yet).
+  // (MIGRATED_PAGE_PATHS) — no res.sendFile() routes needed here. The old
+  // views/*.html files and public/js+css were removed once the migration
+  // had been stable in production for a while (see git history / SYSTEM.md).
 
   app.use('/api/items', require('./routes/items'));
   app.use('/api/inward', require('./routes/inward'));

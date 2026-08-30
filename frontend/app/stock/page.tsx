@@ -17,8 +17,8 @@ interface StockSummaryRow {
 
 // Deliberately standalone, outside the (app) route group: this is the
 // read-only client-role view and keeps its own minimal nav (brand + theme
-// toggle only — no cog, no bottom-nav, no store selector), matching
-// views/stock.html rather than the shared full-chrome Nav.
+// toggle only — no cog, no bottom-nav, no store selector), not the shared
+// full-chrome Nav.
 export default function StockPage() {
   const [rows, setRows] = useState<StockSummaryRow[] | null>(null);
   const [lastUpdated, setLastUpdated] = useState("Loading...");
