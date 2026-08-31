@@ -68,6 +68,15 @@ export default function TransferPage() {
   const [transfers, setTransfers] = useState<Transfer[]>([]);
 
   const scanInputRef = useRef<HTMLInputElement>(null);
+  // Mirrors which reel_numbers are in the cart, but synchronous (unlike `cart`
+  // state, which only updates on the next render). addReelToCart/addBoxToCart
+  // each have an `await` between their "already in cart?" check and the
+  // setCart that actually adds — two overlapping calls for the same reel
+  // (a hardware scanner double-firing, camera re-decoding, fast re-scan)
+  // both read the same stale `cart` before either's setCart lands, so both
+  // pass the check and both get added. Reserving in this ref immediately,
+  // before the await, closes that race regardless of what triggered it.
+  const cartReelsRef = useRef<Set<string>>(new Set());
 
   const scanner = useQrScanner("reader", (text) => {
     setScanInput(text);
@@ -110,6 +119,7 @@ export default function TransferPage() {
     if (cart.length > 0 || skipped.length > 0) {
       showToast("From Store changed — cart cleared");
     }
+    cartReelsRef.current.clear();
     setCart([]);
     setSkipped([]);
     setBoxTotals({});
@@ -162,24 +172,31 @@ export default function TransferPage() {
   }
 
   async function addReelToCart(reelNumber: string) {
-    if (cart.find((r) => r.reel_number === reelNumber)) {
+    if (cartReelsRef.current.has(reelNumber)) {
       playErrorSound();
       showToast(`${reelNumber} already in cart`, "error");
       return;
     }
-    const reel = await api<ReelLookup>(`/api/transfer/reel/${reelNumber}`);
-    if (reel.store_code !== fromStore) {
-      playErrorSound();
-      showToast(`${reelNumber} is at ${storeLabel(reel.store_code)}, not ${storeLabel(fromStore)}`, "error");
-      return;
+    cartReelsRef.current.add(reelNumber);
+    let added = false;
+    try {
+      const reel = await api<ReelLookup>(`/api/transfer/reel/${reelNumber}`);
+      if (reel.store_code !== fromStore) {
+        playErrorSound();
+        showToast(`${reelNumber} is at ${storeLabel(reel.store_code)}, not ${storeLabel(fromStore)}`, "error");
+        return;
+      }
+      setCart((prev) => [
+        { reel_number: reel.reel_number, item_code: reel.item_code, quantity: reel.quantity, box_number: reel.box_number || null },
+        ...prev,
+      ]);
+      added = true;
+      if (reel.box_number) void ensureBoxTotal(reel.box_number);
+      playSuccessSound();
+      showToast(`Added ${reel.reel_number}`);
+    } finally {
+      if (!added) cartReelsRef.current.delete(reelNumber);
     }
-    setCart((prev) => [
-      { reel_number: reel.reel_number, item_code: reel.item_code, quantity: reel.quantity, box_number: reel.box_number || null },
-      ...prev,
-    ]);
-    if (reel.box_number) void ensureBoxTotal(reel.box_number);
-    playSuccessSound();
-    showToast(`Added ${reel.reel_number}`);
   }
 
   async function addBoxToCart(boxNumber: string) {
@@ -199,7 +216,8 @@ export default function TransferPage() {
         newSkipped.push({ reel_number: reel.reel_number, reason: `At ${storeLabel(reel.store_code)}` });
         continue;
       }
-      if (cart.find((r) => r.reel_number === reel.reel_number) || newItems.find((r) => r.reel_number === reel.reel_number)) continue;
+      if (cartReelsRef.current.has(reel.reel_number)) continue;
+      cartReelsRef.current.add(reel.reel_number);
       newItems.push({ reel_number: reel.reel_number, item_code: reel.item_code, quantity: reel.quantity, box_number: data.box.box_number });
       added++;
     }
@@ -215,11 +233,13 @@ export default function TransferPage() {
   }
 
   function removeFromCart(reelNumber: string) {
+    cartReelsRef.current.delete(reelNumber);
     setCart((prev) => prev.filter((r) => r.reel_number !== reelNumber));
     showToast(`Removed ${reelNumber}`);
   }
 
   function clearCart() {
+    cartReelsRef.current.clear();
     setCart([]);
     setSkipped([]);
     setBoxTotals({});
@@ -297,6 +317,7 @@ export default function TransferPage() {
       }
     }
 
+    handled.forEach((rn) => cartReelsRef.current.delete(rn));
     setCart((prev) => prev.filter((item) => !handled.has(item.reel_number)));
 
     if (successReels > 0) {

@@ -100,6 +100,15 @@ export default function OutwardPage() {
 
   const scanInputRef = useRef<HTMLInputElement>(null);
   const customerBoxRef = useRef<HTMLDivElement>(null);
+  // Mirrors which reel_numbers are in the cart, but synchronous (unlike `cart`
+  // state, which only updates on the next render). addReelToCart/addBoxToCart
+  // each have an `await` between their "already in cart?" check and the
+  // setCart that actually adds — two overlapping calls for the same reel
+  // (a hardware scanner double-firing, camera re-decoding, fast re-scan)
+  // both read the same stale `cart` before either's setCart lands, so both
+  // pass the check and both get added. Reserving in this ref immediately,
+  // before the await, closes that race regardless of what triggered it.
+  const cartReelsRef = useRef<Set<string>>(new Set());
 
   // loadStores() below is only ever invoked once, from the mount effect — its
   // closure captures whatever `isGelco` was on that very first render (almost
@@ -310,20 +319,27 @@ export default function OutwardPage() {
   }
 
   async function addReelToCart(reelNumber: string) {
-    if (cart.find((r) => r.reel_number === reelNumber)) {
+    if (cartReelsRef.current.has(reelNumber)) {
       playErrorSound();
       showToast(`${reelNumber} already in cart`, "error");
       return;
     }
-    const reel = await api<{ reel_number: string; item_code: string; description: string; quantity: number; box_number: string | null }>(
-      `/api/outward/reel/${reelNumber}`
-    );
-    setCart((prev) => [
-      { reel_number: reel.reel_number, item_code: reel.item_code, description: reel.description, quantity: reel.quantity, box_number: reel.box_number || "—" },
-      ...prev,
-    ]);
-    playSuccessSound();
-    showToast(`Added ${reel.reel_number}`);
+    cartReelsRef.current.add(reelNumber);
+    let added = false;
+    try {
+      const reel = await api<{ reel_number: string; item_code: string; description: string; quantity: number; box_number: string | null }>(
+        `/api/outward/reel/${reelNumber}`
+      );
+      setCart((prev) => [
+        { reel_number: reel.reel_number, item_code: reel.item_code, description: reel.description, quantity: reel.quantity, box_number: reel.box_number || "—" },
+        ...prev,
+      ]);
+      added = true;
+      playSuccessSound();
+      showToast(`Added ${reel.reel_number}`);
+    } finally {
+      if (!added) cartReelsRef.current.delete(reelNumber);
+    }
   }
 
   async function addBoxToCart(boxNumber: string) {
@@ -342,7 +358,8 @@ export default function OutwardPage() {
         newSkipped.push({ reel_number: reel.reel_number, reason: "Not at Gelco Stores" });
         continue;
       }
-      if (cart.find((r) => r.reel_number === reel.reel_number) || newItems.find((r) => r.reel_number === reel.reel_number)) continue;
+      if (cartReelsRef.current.has(reel.reel_number)) continue;
+      cartReelsRef.current.add(reel.reel_number);
       newItems.push({ reel_number: reel.reel_number, item_code: reel.item_code, description: reel.description, quantity: reel.quantity, box_number: data.box.box_number });
       added++;
     }
@@ -358,11 +375,13 @@ export default function OutwardPage() {
   }
 
   function removeFromCart(reelNumber: string) {
+    cartReelsRef.current.delete(reelNumber);
     setCart((prev) => prev.filter((r) => r.reel_number !== reelNumber));
     showToast(`Removed ${reelNumber}`);
   }
 
   function clearCart() {
+    cartReelsRef.current.clear();
     setCart([]);
     setSkipped([]);
     setCustomerName("");

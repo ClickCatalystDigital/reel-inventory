@@ -12,6 +12,11 @@ export function useQrScanner(elementId: string, onScan: (text: string) => void, 
   const [active, setActive] = useState(false);
   const onScanRef = useRef(onScan);
   const onErrorRef = useRef(onError);
+  // html5-qrcode decodes at `fps` while the code sits in frame and re-fires
+  // onScan every time — without a cooldown the same code gets reported many
+  // times before a caller's own state (e.g. a cart) catches up, adding it
+  // more than once. Half the legacy app's 500ms post-scan cooldown, by request.
+  const lastScanRef = useRef<{ text: string; time: number } | null>(null);
   useEffect(() => {
     onScanRef.current = onScan;
     onErrorRef.current = onError;
@@ -38,7 +43,13 @@ export function useQrScanner(elementId: string, onScan: (text: string) => void, 
         .start(
           { facingMode: "environment" },
           { fps: 10, qrbox: { width: 250, height: 250 } },
-          (decodedText) => onScanRef.current(decodedText),
+          (decodedText) => {
+            const now = Date.now();
+            const last = lastScanRef.current;
+            if (last && last.text === decodedText && now - last.time < 250) return;
+            lastScanRef.current = { text: decodedText, time: now };
+            onScanRef.current(decodedText);
+          },
           () => {}
         )
         .then(() => {
