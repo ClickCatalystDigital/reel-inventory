@@ -463,10 +463,9 @@ export default function OutwardPage() {
   }
 
   async function undoOutward(outwardId: number, reelNumber: string) {
-    const password = window.prompt(`Undo outward for ${reelNumber}?\n\nThis will:\n• Delete the outward record\n• Restore reel to In Stock\n\nEnter password to confirm:`);
-    if (!password) return;
+    if (!window.confirm(`Undo outward for ${reelNumber}?\n\nThis will:\n• Delete the outward record\n• Restore reel to In Stock`)) return;
     try {
-      const result = await api<{ message: string }>("/api/outward/undo", { method: "POST", body: { outward_id: outwardId, password } });
+      const result = await api<{ message: string }>("/api/outward/undo", { method: "POST", body: { outward_id: outwardId } });
       showToast(result.message);
       loadRecentOutwards(1, 10);
       loadOutwardSummary();

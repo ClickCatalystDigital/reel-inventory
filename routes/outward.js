@@ -125,17 +125,12 @@ router.get('/for-reprint', async (req, res) => {
 });
 
 router.post('/undo', async (req, res) => {
-  // Role check added alongside the hardcoded password below — this hardens the gate,
-  // it doesn't replace it. The password itself stays a single shared string, not
-  // user-specific or rotatable without a deploy; that's a separate, deferred item.
+  // Role check is the only gate now — the hardcoded password was dropped here
+  // per request, matching the same change already made to transfer.js's undo.
   if (!['admin', 'manager'].includes(req.user?.role)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
-  const { outward_id, password } = req.body;
-
-  if (password !== 'admin123') {
-    return res.status(403).json({ error: 'Incorrect password' });
-  }
+  const { outward_id } = req.body;
 
   if (!outward_id) {
     return res.status(400).json({ error: 'outward_id is required' });
