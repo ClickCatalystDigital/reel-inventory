@@ -317,10 +317,9 @@ export default function TransferPage() {
   }
 
   async function undoTransfer(transferId: number, label: string) {
-    const password = window.prompt(`Undo transfer of ${label}?\n\nEnter password to confirm:`);
-    if (!password) return;
+    if (!window.confirm(`Undo transfer of ${label}?`)) return;
     try {
-      const result = await api<{ message: string }>("/api/transfer/undo", { method: "POST", body: { transfer_id: transferId, password } });
+      const result = await api<{ message: string }>("/api/transfer/undo", { method: "POST", body: { transfer_id: transferId } });
       showToast(result.message);
       loadRecentTransfers();
     } catch {

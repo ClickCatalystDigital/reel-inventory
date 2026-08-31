@@ -494,15 +494,75 @@ router.get('/daily-report', ah(async (req, res) => {
     y += rowH;
   }
 
-  // --- Alerts summary ---
+  // --- Transfers Today table ---
   y += 14;
-  if (y + 60 > PAGE_H - MARGIN) {
+  if (y + 40 > PAGE_H - MARGIN) {
     doc.addPage({ size: 'A4', layout: 'landscape' });
     y = MARGIN;
   }
   doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
-  doc.text(`Transfers Today: ${data.transfers.length}`, MARGIN, y);
-  y += 16;
+  doc.text(`Transfers Today (${data.transfers.length})`, MARGIN, y);
+  y += 18;
+
+  const TCOL_WIDTHS = { item: 110, from: 130, to: 130, qty: 90, by: 140, at: CONTENT_W - 110 - 130 - 130 - 90 - 140 };
+  const tcol = {
+    item: MARGIN,
+    from: MARGIN + TCOL_WIDTHS.item,
+    to: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from,
+    qty: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to,
+    by: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty,
+    at: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty + TCOL_WIDTHS.by,
+  };
+
+  function drawTransferTableHeader(doc, y) {
+    doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
+    doc.text('ITEM', tcol.item, y + 6, { width: TCOL_WIDTHS.item, lineBreak: false });
+    doc.text('FROM', tcol.from, y + 6, { width: TCOL_WIDTHS.from, lineBreak: false });
+    doc.text('TO', tcol.to, y + 6, { width: TCOL_WIDTHS.to, lineBreak: false });
+    doc.text('QTY', tcol.qty, y + 6, { width: TCOL_WIDTHS.qty, lineBreak: false });
+    doc.text('BY', tcol.by, y + 6, { width: TCOL_WIDTHS.by, lineBreak: false });
+    doc.text('AT', tcol.at, y + 6, { width: TCOL_WIDTHS.at, lineBreak: false });
+    return y + 22;
+  }
+
+  y = drawTransferTableHeader(doc, y);
+
+  if (!data.transfers.length) {
+    doc.fontSize(9).font('Helvetica').fillColor('#666666');
+    doc.text('No transfers today.', MARGIN, y + 6);
+    y += 22;
+  }
+
+  for (let i = 0; i < data.transfers.length; i++) {
+    const t = data.transfers[i];
+    const rowH = 20;
+    if (y + rowH > PAGE_H - MARGIN - 40) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = MARGIN;
+      y = drawTransferTableHeader(doc, y);
+    }
+    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
+
+    doc.fontSize(8).fillColor('#333333');
+    doc.font('Helvetica-Bold').text(t.reel_number || t.box_number || '-', tcol.item, y + 6, { width: TCOL_WIDTHS.item, lineBreak: false });
+    doc.font('Helvetica').text(t.from_store_name || t.from_store, tcol.from, y + 6, { width: TCOL_WIDTHS.from, lineBreak: false });
+    doc.text(t.to_store_name || t.to_store, tcol.to, y + 6, { width: TCOL_WIDTHS.to, lineBreak: false });
+    doc.text(String(t.quantity ?? 0), tcol.qty, y + 6, { width: TCOL_WIDTHS.qty, lineBreak: false });
+    doc.text(t.transferred_by || '-', tcol.by, y + 6, { width: TCOL_WIDTHS.by, lineBreak: false });
+    doc.text((t.transferred_at || '').slice(0, 16), tcol.at, y + 6, { width: TCOL_WIDTHS.at, lineBreak: false });
+
+    doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + CONTENT_W, y + rowH).lineWidth(0.5).stroke('#dddddd');
+    y += rowH;
+  }
+
+  // --- Alerts summary ---
+  y += 14;
+  if (y + 40 > PAGE_H - MARGIN) {
+    doc.addPage({ size: 'A4', layout: 'landscape' });
+    y = MARGIN;
+  }
+  doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
   doc.text(`Dead Stock (30+ days no movement): ${data.deadStock.length} item(s)`, MARGIN, y);
   y += 16;
   doc.text(`Low Stock (below 5 reels): ${data.lowStock.length} item(s)`, MARGIN, y);

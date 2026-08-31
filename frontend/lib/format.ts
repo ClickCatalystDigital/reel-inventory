@@ -31,6 +31,13 @@ export function todayISTDateString(): string {
   return new Date(Date.now() + istOffset).toISOString().substring(0, 10);
 }
 
+// Same "YYYY-MM-DD HH:MM:SS" naive-IST format db/schema.js's nowIST() stores —
+// used as the Gelco outward "label" in place of a typed invoice number.
+export function nowISTString(): string {
+  const istOffset = 5.5 * 60 * 60 * 1000;
+  return new Date(Date.now() + istOffset).toISOString().replace("T", " ").substring(0, 19);
+}
+
 export type BadgeVariant = "success" | "warning" | "danger";
 
 const STATUS_VARIANT: Record<string, BadgeVariant> = {

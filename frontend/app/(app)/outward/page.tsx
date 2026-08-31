@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, PenLine } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { formatQty, formatDateTime } from "@/lib/format";
+import { formatQty, formatDateTime, nowISTString } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { GELCO_ROLES } from "@/lib/role-allowlist";
@@ -101,6 +101,16 @@ export default function OutwardPage() {
   const scanInputRef = useRef<HTMLInputElement>(null);
   const customerBoxRef = useRef<HTMLDivElement>(null);
 
+  // loadStores() below is only ever invoked once, from the mount effect — its
+  // closure captures whatever `isGelco` was on that very first render (almost
+  // always false, since useAuth()'s user fetch hasn't resolved yet). Reading a
+  // ref instead of the closed-over variable means its setStoreCode call always
+  // sees the real, current role once the async fetch actually resolves.
+  const isGelcoRef = useRef(isGelco);
+  useEffect(() => {
+    isGelcoRef.current = isGelco;
+  }, [isGelco]);
+
   const scanner = useQrScanner("reader", (text) => {
     setScanInput(text);
     void addToCart(text);
@@ -122,7 +132,7 @@ export default function OutwardPage() {
       const list = await api<Store[]>("/api/stores");
       setStores(list);
       const preferred = selectedStore !== "all" ? selectedStore : "primary";
-      setStoreCode(isGelco ? "secondary" : preferred);
+      setStoreCode(isGelcoRef.current ? "secondary" : preferred);
     } catch {
       // api() already toasted
     }
@@ -168,6 +178,14 @@ export default function OutwardPage() {
     loadStores();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    // useAuth() resolves after this mount, so loadStores() above can run while
+    // isGelco is still stale-false and lock the dropdown open on the wrong store.
+    // Re-force it once the real role is known.
+    if (isGelco) setStoreCode("secondary");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGelco]);
 
   useEffect(() => {
     // Data fetch reacting to the store selector — a legitimate effect use.
@@ -309,7 +327,7 @@ export default function OutwardPage() {
   }
 
   async function addBoxToCart(boxNumber: string) {
-    const data = await api<{ box: { box_number: string }; reels: { reel_number: string; item_code: string; description: string; quantity: number; status: string }[] }>(
+    const data = await api<{ box: { box_number: string }; reels: { reel_number: string; item_code: string; description: string; quantity: number; status: string; store_code: string }[] }>(
       `/api/outward/box/${boxNumber}`
     );
     let added = 0;
@@ -318,6 +336,10 @@ export default function OutwardPage() {
     for (const reel of data.reels) {
       if (reel.status === "Outwarded") {
         newSkipped.push({ reel_number: reel.reel_number, reason: "Already outwarded" });
+        continue;
+      }
+      if (isGelco && reel.store_code !== "secondary") {
+        newSkipped.push({ reel_number: reel.reel_number, reason: "Not at Gelco Stores" });
         continue;
       }
       if (cart.find((r) => r.reel_number === reel.reel_number) || newItems.find((r) => r.reel_number === reel.reel_number)) continue;
@@ -331,7 +353,7 @@ export default function OutwardPage() {
       showToast(`Added ${added} reel(s) from ${boxNumber}`);
     } else if (newSkipped.length > 0) {
       playErrorSound();
-      showToast(`All reels in ${boxNumber} already outwarded or in cart`, "error");
+      showToast(`No eligible reels in ${boxNumber} — already outwarded, not at this store, or already in cart`, "error");
     }
   }
 
@@ -372,13 +394,22 @@ export default function OutwardPage() {
 
   async function submitCart() {
     if (cart.length === 0) return showToast("Cart is empty", "error");
-    if (!companyId) return showToast("Select a customer from the suggestions (must be a CRM company)", "error");
-    if (!invoiceNumber.trim()) return showToast("Invoice number is required", "error");
+    if (!isGelco) {
+      if (!companyId) return showToast("Select a customer from the suggestions (must be a CRM company)", "error");
+      if (!invoiceNumber.trim()) return showToast("Invoice number is required", "error");
+    }
     if (poBlocked) return showToast("Resolve PO mismatches before submitting", "error");
 
     setSubmitting(true);
     const byItem: Record<string, CartItem[]> = {};
     for (const reel of cart) (byItem[reel.item_code] ||= []).push(reel);
+
+    // Gelco outward skips the CRM customer/PO tie-in entirely — a fixed
+    // customer label and today's date/time (shared across every item group
+    // in this submission, so they stay groupable for reprint) stand in for
+    // the fields a real customer shipment would need.
+    const shipmentCustomer = isGelco ? "Gelco Stores" : customerName.trim();
+    const shipmentInvoice = isGelco ? nowISTString() : invoiceNumber.trim();
 
     let successCount = 0;
     let pendingCount = 0;
@@ -390,12 +421,12 @@ export default function OutwardPage() {
           body: {
             item_code,
             reel_numbers: reels.map((r) => r.reel_number),
-            customer_name: customerName.trim(),
-            invoice_number: invoiceNumber.trim(),
+            customer_name: shipmentCustomer,
+            invoice_number: shipmentInvoice,
             outward_type: "Full",
             notes: notes.trim() || undefined,
-            company_id: companyId,
-            po_id: poId ? parseInt(poId) : null,
+            company_id: isGelco ? null : companyId,
+            po_id: isGelco ? null : (poId ? parseInt(poId) : null),
             store_code: storeCode,
           },
         });
@@ -408,7 +439,7 @@ export default function OutwardPage() {
 
     if (successCount > 0) {
       showToast(`${successCount} reel(s) outwarded successfully`);
-      await downloadPackingList(customerName.trim(), invoiceNumber.trim(), cart, notes);
+      await downloadPackingList(shipmentCustomer, shipmentInvoice, cart, notes);
     }
     if (pendingCount > 0) showToast(`${pendingCount} reel(s) submitted for approval (grouped by item)`);
     if (errors.length > 0) showToast(`${errors.length} item(s) failed: ${errors[0]}`, "error");
@@ -516,7 +547,7 @@ export default function OutwardPage() {
           </div>
           {skipped.length > 0 && (
             <div className="mt-2 space-y-1.5">
-              <div className="text-[11px] text-warning">Skipped (already outwarded):</div>
+              <div className="text-[11px] text-warning">Skipped:</div>
               {skipped.map((s) => (
                 <div key={s.reel_number} className="flex items-center justify-between rounded-md border border-destructive/30 bg-destructive/5 px-3 py-2 text-sm line-through text-muted-foreground">
                   <span>{s.reel_number}</span>
@@ -527,69 +558,81 @@ export default function OutwardPage() {
           )}
 
           <div className="mt-4 space-y-4 border-t border-border pt-4">
-            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div ref={customerBoxRef} className="relative space-y-1.5">
-                <Label>Customer Name</Label>
-                <Input
-                  autoComplete="off"
-                  placeholder="Start typing a CRM company…"
-                  value={customerName}
-                  onChange={(e) => onCustomerInput(e.target.value)}
-                  onFocus={() => setSuggestOpen(!!customerName.trim())}
-                />
-                {suggestOpen && (
-                  <div className="absolute top-full right-0 left-0 z-50 max-h-[220px] overflow-y-auto rounded-b-md border border-t-0 border-border bg-card shadow-lg">
-                    {customerMatches.length === 0 ? (
-                      <div className="px-3 py-2 text-sm text-muted-foreground italic">No CRM company matches — add them in the CRM first</div>
-                    ) : (
-                      customerMatches.map((c) => (
-                        <div
-                          key={c.id}
-                          className="cursor-pointer border-b border-border px-3 py-2 text-sm last:border-b-0 hover:bg-secondary"
-                          onMouseDown={() => pickCustomer(c)}
-                        >
-                          {c.name}
-                        </div>
-                      ))
+            {isGelco ? (
+              <div className="space-y-1.5">
+                <Label>Shipment Label</Label>
+                <Input disabled value={formatDateTime(nowISTString())} />
+                <p className="text-[11px] text-muted-foreground">
+                  Gelco outward doesn&apos;t need a customer or invoice — today&apos;s date &amp; time is recorded as the shipment label.
+                </p>
+              </div>
+            ) : (
+              <>
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div ref={customerBoxRef} className="relative space-y-1.5">
+                    <Label>Customer Name</Label>
+                    <Input
+                      autoComplete="off"
+                      placeholder="Start typing a CRM company…"
+                      value={customerName}
+                      onChange={(e) => onCustomerInput(e.target.value)}
+                      onFocus={() => setSuggestOpen(!!customerName.trim())}
+                    />
+                    {suggestOpen && (
+                      <div className="absolute top-full right-0 left-0 z-50 max-h-[220px] overflow-y-auto rounded-b-md border border-t-0 border-border bg-card shadow-lg">
+                        {customerMatches.length === 0 ? (
+                          <div className="px-3 py-2 text-sm text-muted-foreground italic">No CRM company matches — add them in the CRM first</div>
+                        ) : (
+                          customerMatches.map((c) => (
+                            <div
+                              key={c.id}
+                              className="cursor-pointer border-b border-border px-3 py-2 text-sm last:border-b-0 hover:bg-secondary"
+                              onMouseDown={() => pickCustomer(c)}
+                            >
+                              {c.name}
+                            </div>
+                          ))
+                        )}
+                      </div>
                     )}
                   </div>
-                )}
-              </div>
-              <div className="space-y-1.5">
-                <Label>Invoice Number</Label>
-                <Input placeholder="e.g. INV-2025-001" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
-              </div>
-            </div>
+                  <div className="space-y-1.5">
+                    <Label>Invoice Number</Label>
+                    <Input placeholder="e.g. INV-2025-001" value={invoiceNumber} onChange={(e) => setInvoiceNumber(e.target.value)} />
+                  </div>
+                </div>
 
-            <div className="space-y-1.5">
-              <Label>
-                Purchase Order <span className="font-normal text-muted-foreground">(optional — confirmed POs only)</span>
-              </Label>
-              <select
-                disabled={!companyId || poOptions.length === 0}
-                className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-60"
-                value={poId}
-                onChange={(e) => onPOChange(e.target.value)}
-              >
-                {!companyId ? (
-                  <option value="">Select a customer first</option>
-                ) : poOptions.length === 0 ? (
-                  <option value="">No confirmed POs for this customer</option>
-                ) : (
-                  <>
-                    <option value="">— No PO (optional) —</option>
-                    {poOptions.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.po_number}
-                        {p.expected_dispatch_date ? ` · exp ${p.expected_dispatch_date}` : ""}
-                      </option>
-                    ))}
-                  </>
-                )}
-              </select>
-            </div>
+                <div className="space-y-1.5">
+                  <Label>
+                    Purchase Order <span className="font-normal text-muted-foreground">(optional — confirmed POs only)</span>
+                  </Label>
+                  <select
+                    disabled={!companyId || poOptions.length === 0}
+                    className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm disabled:opacity-60"
+                    value={poId}
+                    onChange={(e) => onPOChange(e.target.value)}
+                  >
+                    {!companyId ? (
+                      <option value="">Select a customer first</option>
+                    ) : poOptions.length === 0 ? (
+                      <option value="">No confirmed POs for this customer</option>
+                    ) : (
+                      <>
+                        <option value="">— No PO (optional) —</option>
+                        {poOptions.map((p) => (
+                          <option key={p.id} value={p.id}>
+                            {p.po_number}
+                            {p.expected_dispatch_date ? ` · exp ${p.expected_dispatch_date}` : ""}
+                          </option>
+                        ))}
+                      </>
+                    )}
+                  </select>
+                </div>
 
-            {selectedPO && <POValidationPanel po={selectedPO} issues={issues} />}
+                {selectedPO && <POValidationPanel po={selectedPO} issues={issues} />}
+              </>
+            )}
 
             <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-1.5">

@@ -140,19 +140,14 @@ router.get('/recent', ah(async (req, res) => {
 }));
 
 router.post('/undo', ah(async (req, res) => {
-  // Role check tightened from "just not client" to admin/manager, matching the same
-  // hardening applied to inward.js/outward.js/dashboard.js's password-gated undo
-  // endpoints — this hardens the gate, it doesn't replace the hardcoded password
-  // itself (a separate, deferred item: it's a single shared string, not user-specific
-  // or rotatable without a deploy).
+  // Role check is the only gate now — the shared hardcoded password other
+  // undo/delete endpoints (inward.js/outward.js/dashboard.js) still carry was
+  // deliberately dropped here per request; admin/manager-only is the boundary.
   if (!['admin', 'manager'].includes(req.user?.role)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
-  const { transfer_id, password } = req.body;
-  if (password !== 'admin123') {
-    return res.status(403).json({ error: 'Incorrect password' });
-  }
+  const { transfer_id } = req.body;
   if (!transfer_id) {
     return res.status(400).json({ error: 'transfer_id is required' });
   }

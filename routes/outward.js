@@ -25,6 +25,9 @@ router.get('/reel/:reelNumber', async (req, res) => {
   if (!reel) return res.status(404).json({ error: 'Reel not found' });
   if (reel.status === 'Outwarded') return res.status(400).json({ error: 'Reel already fully outwarded', reel });
   if (reel.status === 'Deleted') return res.status(400).json({ error: 'Reel has been deleted', reel });
+  if (GELCO_ROLES.includes(req.user?.role) && reel.store_code !== 'secondary') {
+    return res.status(403).json({ error: 'Reel not available at Gelco Stores', reel });
+  }
   res.json(reel);
 });
 
