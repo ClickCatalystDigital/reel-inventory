@@ -131,15 +131,15 @@ export default function SearchTracePage() {
         <p className="text-sm text-muted-foreground">Search, trace, and export your inventory</p>
       </div>
 
-      <Card className="p-5">
+      <Card className="space-y-3 p-5">
+        <Input
+          className="w-full"
+          autoComplete="off"
+          placeholder="Search reel, item, customer, invoice, or box…"
+          value={q}
+          onChange={(e) => onSearchInput(e.target.value)}
+        />
         <div className="flex flex-wrap items-center gap-2">
-          <Input
-            className="min-w-48 flex-1"
-            autoComplete="off"
-            placeholder="Search reel, item, customer, invoice, or box…"
-            value={q}
-            onChange={(e) => onSearchInput(e.target.value)}
-          />
           <Select
             value={status || "all"}
             onValueChange={(v) => {
@@ -148,7 +148,7 @@ export default function SearchTracePage() {
               doSearch(1, 10, q, s);
             }}
           >
-            <SelectTrigger size="sm" className="w-36">
+            <SelectTrigger size="sm" className="w-full sm:w-36">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -160,7 +160,7 @@ export default function SearchTracePage() {
           </Select>
           <Input
             type="date"
-            className="w-auto"
+            className="w-full sm:w-auto"
             value={dateFrom}
             onChange={(e) => {
               setDateFrom(e.target.value);
@@ -169,22 +169,24 @@ export default function SearchTracePage() {
           />
           <Input
             type="date"
-            className="w-auto"
+            className="w-full sm:w-auto"
             value={dateTo}
             onChange={(e) => {
               setDateTo(e.target.value);
               doSearch(1, 10, q, status, dateFrom, e.target.value);
             }}
           />
-          <Button variant="ghost" size="icon" title="Export filtered results as CSV" onClick={exportCSV}>
-            <Download />
-          </Button>
-          <Button variant="ghost" size="icon" title="Export current stock summary as CSV" onClick={exportStockCSV}>
-            <FileDown />
-          </Button>
-          <Button variant="ghost" size="icon" title="Clear filters" onClick={clearSearch}>
-            <X />
-          </Button>
+          <div className="flex items-center gap-1 sm:ml-auto">
+            <Button variant="ghost" size="icon" title="Export filtered results as CSV" onClick={exportCSV}>
+              <Download />
+            </Button>
+            <Button variant="ghost" size="icon" title="Export current stock summary as CSV" onClick={exportStockCSV}>
+              <FileDown />
+            </Button>
+            <Button variant="ghost" size="icon" title="Clear filters" onClick={clearSearch}>
+              <X />
+            </Button>
+          </div>
         </div>
       </Card>
 

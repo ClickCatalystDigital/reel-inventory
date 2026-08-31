@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
-import { formatQty } from "@/lib/format";
+import { formatQty, formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -16,10 +16,22 @@ interface ItemQty {
   reel_count: number;
   total_qty: number;
 }
+interface TransferRow {
+  reel_number: string | null;
+  box_number: string | null;
+  from_store: string;
+  to_store: string;
+  from_store_name: string | null;
+  to_store_name: string | null;
+  quantity: number;
+  transferred_by: string;
+  transferred_at: string;
+}
 interface DailyReport {
   date: string;
   inward: ItemQty[];
   outward: ItemQty[];
+  transfers: TransferRow[];
   deadStock: { item_code: string; description: string }[];
   lowStock: { item_code: string; description: string; in_stock_reels: number }[];
   pendingApprovals: number;
@@ -67,15 +79,17 @@ export default function DailyReportPage() {
       </div>
 
       <Card className="p-5">
-        <div className="flex items-center gap-4 text-center">
+        <div className="grid grid-cols-2 gap-4 text-center sm:flex sm:items-center">
           <Stat label="Inward Reels" value={inwardReels} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Inward Qty" value={inwardQty} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Outward Reels" value={outwardReels} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Outward Qty" value={outwardQty} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
+          <Stat label="Transfers" value={report?.transfers.length || 0} />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Pending Approvals" value={report?.pendingApprovals || 0} />
         </div>
       </Card>
@@ -108,6 +122,23 @@ export default function DailyReportPage() {
           />
         </Card>
       </div>
+
+      <Card className="p-5">
+        <DataTable
+          title="Transfers Today"
+          data={report?.transfers || []}
+          pageSize={10}
+          getRowKey={(t) => `${t.reel_number || t.box_number}-${t.transferred_at}`}
+          columns={[
+            { label: "Item", render: (t) => <strong>{t.reel_number || t.box_number}</strong> },
+            { label: "From", render: (t) => t.from_store_name || t.from_store },
+            { label: "To", render: (t) => t.to_store_name || t.to_store },
+            { label: "Qty", render: (t) => formatQty(t.quantity) },
+            { label: "By", render: (t) => t.transferred_by },
+            { label: "At", render: (t) => formatDateTime(t.transferred_at) },
+          ]}
+        />
+      </Card>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <Card className="border-l-[3px] border-l-destructive p-5">

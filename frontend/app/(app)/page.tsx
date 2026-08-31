@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate, formatQty } from "@/lib/format";
+import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -19,6 +20,7 @@ interface Item {
 }
 
 export default function CatalogPage() {
+  const { selectedStore } = useSelectedStore();
   const [items, setItems] = useState<Item[]>([]);
   const [itemCode, setItemCode] = useState("");
   const [description, setDescription] = useState("");
@@ -31,7 +33,8 @@ export default function CatalogPage() {
 
   async function loadItems() {
     try {
-      const list = await api<Item[]>("/api/items");
+      const sp = storeQueryParam(selectedStore);
+      const list = await api<Item[]>(`/api/items${sp ? "?" + sp : ""}`);
       list.sort((a, b) => a.item_code.localeCompare(b.item_code));
       setItems(list);
     } catch {
@@ -40,10 +43,11 @@ export default function CatalogPage() {
   }
 
   useEffect(() => {
-    // Data fetch on mount — a legitimate effect use, not state derived from a prop.
+    // Data fetch reacting to the store selector (and on mount) — a legitimate effect use.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadItems();
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStore]);
 
   async function addItem() {
     const code = itemCode.trim();

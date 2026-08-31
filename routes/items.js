@@ -5,7 +5,18 @@ const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 
 router.get('/', async (req, res) => {
-  const items = await queryAll("SELECT * FROM items WHERE status != 'Deleted' ORDER BY created_at DESC");
+  const { store } = req.query;
+  let sql = "SELECT * FROM items WHERE status != 'Deleted'";
+  const params = [];
+  if (store && store !== 'all') {
+    // Catalog membership for a store is derived from live reel stock, not stored —
+    // items stays store-agnostic (a shared SKU list can exist in multiple stores at
+    // once, so a static store_code on items would be wrong data modeling).
+    sql += " AND EXISTS (SELECT 1 FROM reels r WHERE r.item_code = items.item_code AND r.store_code = ? AND r.status = 'In Stock')";
+    params.push(store);
+  }
+  sql += " ORDER BY created_at DESC";
+  const items = await queryAll(sql, params);
   res.json(items);
 });
 

@@ -501,6 +501,8 @@ router.get('/daily-report', ah(async (req, res) => {
     y = MARGIN;
   }
   doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
+  doc.text(`Transfers Today: ${data.transfers.length}`, MARGIN, y);
+  y += 16;
   doc.text(`Dead Stock (30+ days no movement): ${data.deadStock.length} item(s)`, MARGIN, y);
   y += 16;
   doc.text(`Low Stock (below 5 reels): ${data.lowStock.length} item(s)`, MARGIN, y);

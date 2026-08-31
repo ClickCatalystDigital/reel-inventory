@@ -78,6 +78,16 @@ router.get('/stock-summary', ah(async (req, res) => {
   let query;
   let params = [];
 
+  // When a specific store is selected, an item only belongs to that store's Stock
+  // Summary if it currently has live stock there — same EXISTS membership rule as
+  // Catalog (routes/items.js) — otherwise every item would show a row of zeros
+  // instead of just not appearing. The LEFT JOIN below stays a LEFT JOIN (not
+  // switched to inner) so the aggregate counts (total/outwarded) stay accurate
+  // for items that do qualify; this WHERE EXISTS only controls which items appear.
+  const membershipFilter = storeFilter
+    ? `WHERE EXISTS (SELECT 1 FROM reels re WHERE re.item_code = i.item_code AND re.store_code = ? AND re.status = 'In Stock')`
+    : '';
+
   if (as_on_date) {
     query = `
       SELECT i.item_code, i.description, i.default_spq,
@@ -86,10 +96,11 @@ router.get('/stock-summary', ah(async (req, res) => {
         SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
       FROM items i
       LEFT JOIN reels r ON i.item_code = r.item_code AND r.inward_date <= ?${storeFilter ? ' AND r.store_code = ?' : ''}
+      ${membershipFilter}
       GROUP BY i.item_code ORDER BY i.item_code
     `;
     params.push(as_on_date + ' 23:59:59');
-    if (storeFilter) params.push(store);
+    if (storeFilter) params.push(store, store);
   } else {
     query = `
       SELECT i.item_code, i.description, i.default_spq,
@@ -98,9 +109,10 @@ router.get('/stock-summary', ah(async (req, res) => {
         SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
       FROM items i
       LEFT JOIN reels r ON i.item_code = r.item_code${storeFilter ? ' AND r.store_code = ?' : ''}
+      ${membershipFilter}
       GROUP BY i.item_code ORDER BY i.item_code
     `;
-    if (storeFilter) params.push(store);
+    if (storeFilter) params.push(store, store);
   }
 
   res.json(await queryAll(query, params));
@@ -342,13 +354,19 @@ router.get('/analytics', ah(async (req, res) => {
     ORDER BY days_since_last_outward DESC
   `, sp);
 
-  // 7. Low stock (items with fewer than 5 reels in stock)
+  // 7. Low stock (items with fewer than 5 reels in stock). Inner JOIN, not LEFT,
+  // when a store is selected — same reasoning as deadStock just above: an item
+  // with zero In Stock reels at that store isn't a "low stock" item there, it's
+  // simply not stocked there at all (matches Catalog's EXISTS membership rule).
+  // LEFT JOIN stays for the all-stores case, where "0 reels anywhere" is a
+  // legitimate global low-stock signal.
+  const lowStockJoin = storeFilter ? 'JOIN' : 'LEFT JOIN';
   const lowStock = await queryAll(`
     SELECT i.item_code, i.description, i.default_spq,
       COUNT(r.id) as in_stock_reels,
       SUM(r.quantity) as total_quantity
     FROM items i
-    LEFT JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
+    ${lowStockJoin} reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY i.item_code
     HAVING in_stock_reels < 5
     ORDER BY in_stock_reels ASC
@@ -400,7 +418,12 @@ router.get('/export-stock', ah(async (req, res) => {
   const as_on_date = req.query.as_on_date || new Date().toISOString().split('T')[0];
   const { store } = req.query;
   const storeFilter = store && store !== 'all';
-  const params = storeFilter ? [store] : [];
+  const params = storeFilter ? [store, store] : [];
+
+  // Same EXISTS membership rule as /stock-summary above and Catalog (routes/items.js).
+  const membershipFilter = storeFilter
+    ? `WHERE EXISTS (SELECT 1 FROM reels re WHERE re.item_code = i.item_code AND re.store_code = ? AND re.status = 'In Stock')`
+    : '';
 
   const rows = await queryAll(`
     SELECT i.item_code, i.description, i.default_spq,
@@ -408,6 +431,7 @@ router.get('/export-stock', ah(async (req, res) => {
       SUM(CASE WHEN r.status = 'In Stock' THEN r.quantity ELSE 0 END) as total_quantity
     FROM items i
     LEFT JOIN reels r ON i.item_code = r.item_code${storeFilter ? ' AND r.store_code = ?' : ''}
+    ${membershipFilter}
     GROUP BY i.item_code
     ORDER BY i.item_code
   `, params);

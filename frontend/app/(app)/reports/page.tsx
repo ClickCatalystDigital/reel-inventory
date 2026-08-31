@@ -71,13 +71,13 @@ export default function StockSummaryPage() {
       </div>
 
       <Card className="p-5">
-        <div className="mb-4 flex items-center gap-4 text-center">
+        <div className="mb-4 grid grid-cols-2 gap-4 text-center sm:flex sm:items-center">
           <Stat label="Items" value={summary.length} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Total Reels" value={totalReels} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="In Stock" value={inStockReels} />
-          <Separator orientation="vertical" className="h-10" />
+          <Separator orientation="vertical" className="hidden h-10 sm:block" />
           <Stat label="Outwarded" value={totalReels - inStockReels} />
         </div>
         <DataTable

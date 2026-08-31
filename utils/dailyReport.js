@@ -45,12 +45,16 @@ async function getDailyReportData(storeCode) {
     ORDER BY last_outward_date ASC
   `, storeFilter ? [storeCode] : []);
 
+  // Inner JOIN, not LEFT, when a store is selected — same reasoning as deadStock
+  // just above and routes/dashboard.js's /analytics lowStock: zero In Stock reels
+  // at that store means "not stocked there," not "low stock there."
+  const lowStockJoin = storeFilter ? 'JOIN' : 'LEFT JOIN';
   const lowStock = await queryAll(`
     SELECT i.item_code, i.description,
       COUNT(r.id) as in_stock_reels,
       SUM(r.quantity) as total_quantity
     FROM items i
-    LEFT JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
+    ${lowStockJoin} reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
     GROUP BY i.item_code
     HAVING in_stock_reels < 5
     ORDER BY in_stock_reels ASC
@@ -58,10 +62,23 @@ async function getDailyReportData(storeCode) {
 
   const pendingRow = await queryOne(`SELECT COUNT(*) as count FROM requests WHERE status = 'pending'`, []);
 
+  // Genuinely missing before: stock_transfers has its own daily activity, distinct
+  // from inward/outward, that Daily Report never surfaced at all.
+  const transfers = await queryAll(`
+    SELECT st.reel_number, st.box_number, st.from_store, st.to_store, st.quantity,
+      st.transferred_by, st.transferred_at, fs.name as from_store_name, ts.name as to_store_name
+    FROM stock_transfers st
+    LEFT JOIN stores fs ON fs.code = st.from_store
+    LEFT JOIN stores ts ON ts.code = st.to_store
+    WHERE st.transferred_at BETWEEN ? AND ?${storeFilter ? ' AND (st.from_store = ? OR st.to_store = ?)' : ''}
+    ORDER BY st.transferred_at DESC
+  `, storeFilter ? [start, end, storeCode, storeCode] : [start, end]);
+
   return {
     date: today,
     inward,
     outward,
+    transfers,
     deadStock,
     lowStock,
     pendingApprovals: pendingRow?.count || 0,
