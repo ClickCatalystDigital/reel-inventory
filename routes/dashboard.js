@@ -162,6 +162,12 @@ router.get('/export', ah(async (req, res) => {
 
 // POST soft delete reels
 router.post('/delete', ah(async (req, res) => {
+  // Role check added alongside the hardcoded password below — this hardens the gate,
+  // it doesn't replace it. The password itself stays a single shared string, not
+  // user-specific or rotatable without a deploy; that's a separate, deferred item.
+  if (!['admin', 'manager'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
   const { reel_numbers, box_numbers, password } = req.body;
 
   if (password !== 'admin123') {

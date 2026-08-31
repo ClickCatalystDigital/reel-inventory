@@ -3,8 +3,9 @@
 const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
+const ah = require('../utils/asyncHandler');
 
-router.get('/', async (req, res) => {
+router.get('/', ah(async (req, res) => {
   const { store } = req.query;
   let sql = "SELECT * FROM items WHERE status != 'Deleted'";
   const params = [];
@@ -18,15 +19,15 @@ router.get('/', async (req, res) => {
   sql += " ORDER BY created_at DESC";
   const items = await queryAll(sql, params);
   res.json(items);
-});
+}));
 
-router.get('/:itemCode', async (req, res) => {
+router.get('/:itemCode', ah(async (req, res) => {
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [req.params.itemCode]);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   res.json(item);
-});
+}));
 
-router.post('/', async (req, res) => {
+router.post('/', ah(async (req, res) => {
   const { item_code, description, default_spq } = req.body;
   if (!item_code || !description || !default_spq) {
     return res.status(400).json({ error: 'item_code, description, and default_spq are required' });
@@ -53,9 +54,9 @@ router.post('/', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
-router.put('/:itemCode', async (req, res) => {
+router.put('/:itemCode', ah(async (req, res) => {
   const { item_code, description, default_spq } = req.body;
   const newCode = item_code ? item_code.trim().toUpperCase() : req.params.itemCode;
 
@@ -71,9 +72,9 @@ router.put('/:itemCode', async (req, res) => {
   );
   if (result.changes === 0) return res.status(404).json({ error: 'Item not found' });
   res.json({ success: true, message: 'Item updated' });
-});
+}));
 
-router.delete('/:itemCode', async (req, res) => {
+router.delete('/:itemCode', ah(async (req, res) => {
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [req.params.itemCode]);
   if (!item) return res.status(404).json({ error: 'Item not found' });
   if (item.status === 'Deleted') return res.status(400).json({ error: 'Item already archived' });
@@ -81,6 +82,6 @@ router.delete('/:itemCode', async (req, res) => {
   const result = await execute("UPDATE items SET status = 'Deleted' WHERE item_code = ?", [req.params.itemCode]);
   if (result.changes === 0) return res.status(404).json({ error: 'Item not found' });
   res.json({ success: true, message: `Item ${req.params.itemCode} archived` });
-});
+}));
 
 module.exports = router;

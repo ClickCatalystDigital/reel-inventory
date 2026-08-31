@@ -142,6 +142,18 @@ function requireLogin(req, res, next) {
     next();
   });
 
+  // `client` is meant to be read-only, restricted to /stock — but the page-redirect
+  // middleware above explicitly skips /api/*, so without this a `client` JWT could
+  // call almost any endpoint directly (curl/Postman), not just the one /stock uses.
+  // One allowlist here instead of patching ~10 route files individually. Every other
+  // role is untouched — this only ever branches on role === 'client'.
+  const CLIENT_API_ALLOWLIST = ['/api/auth/me', '/api/stores', '/api/dashboard/stock-summary'];
+  app.use((req, res, next) => {
+    if (req.user?.role !== 'client') return next();
+    if (!req.path.startsWith('/api/') || CLIENT_API_ALLOWLIST.includes(req.path)) return next();
+    return res.status(403).json({ error: 'Not authorized' });
+  });
+
   // Handles /_next/* (Next.js static assets/RSC payloads) plus every path in
   // MIGRATED_PAGE_PATHS. Mounted globally (not app.use('/transfer', ...)) so
   // Express never strips the path before the proxy sees it — pathFilter does

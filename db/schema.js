@@ -147,6 +147,41 @@ async function initDB() {
   } catch (e) {
     // Column already exists — safe to ignore
   }
+  // routes/po.js's outward tie-in — outwards.company_id/po_id are genuinely owned by
+  // this app (unlike crm_* below), just missing from this migration list until now.
+  try {
+    await db.execute(`ALTER TABLE outwards ADD COLUMN company_id INTEGER`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+  try {
+    await db.execute(`ALTER TABLE outwards ADD COLUMN po_id INTEGER`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+
+  // routes/po.js reads/writes 5 crm_* tables this app does NOT own — the same Turso
+  // database is shared with the sibling `ls_crm` app, which owns and evolves these
+  // tables' schema (confirmed by inspecting sqlite_master: crm_contacts/crm_purchase_orders
+  // carry ls_crm-specific columns like `severity`/`industry`/`file_url` accumulated via
+  // ls_crm's own ALTER TABLE migrations over time). Deliberately NOT creating them here —
+  // doing so would make this file a second, drifting source of truth for tables another
+  // app owns. Instead: a loud startup warning if they're ever missing, so a PO-feature
+  // 500 doesn't have to be debugged from scratch to discover why.
+  const CRM_TABLES = ['crm_companies', 'crm_contacts', 'crm_purchase_orders', 'crm_po_items', 'crm_tasks'];
+  const crmCheck = await db.execute(
+    `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${CRM_TABLES.map(() => '?').join(',')})`,
+    CRM_TABLES
+  );
+  const foundCrmTables = new Set(crmCheck.rows.map(r => r.name));
+  const missingCrmTables = CRM_TABLES.filter(t => !foundCrmTables.has(t));
+  if (missingCrmTables.length) {
+    console.warn(
+      `⚠️  Missing table(s) required by routes/po.js: ${missingCrmTables.join(', ')}. ` +
+      `These are owned by the sibling ls_crm app (same Turso DB), not this repo — ` +
+      `PO features will 500 until they exist. See SYSTEM.md §2.`
+    );
+  }
 
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_outwards_date ON outwards(outward_date)`);
   await db.execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);

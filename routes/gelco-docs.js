@@ -5,6 +5,7 @@ const router = express.Router();
 const multer = require('multer');
 const { queryAll, execute, queryOne, nowIST } = require('../db/schema');
 const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const ah = require('../utils/asyncHandler');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -27,7 +28,7 @@ router.use(requireDocsAccess);
 
 const VALID_DOC_TYPES = ['po', 'invoice'];
 
-router.get('/', async (req, res) => {
+router.get('/', ah(async (req, res) => {
   const { doc_type, store } = req.query;
   let sql = 'SELECT * FROM gelco_docs';
   const conditions = [];
@@ -43,9 +44,9 @@ router.get('/', async (req, res) => {
   if (conditions.length) sql += ' WHERE ' + conditions.join(' AND ');
   sql += ' ORDER BY uploaded_at DESC';
   res.json(await queryAll(sql, params));
-});
+}));
 
-router.post('/upload', upload.single('file'), async (req, res) => {
+router.post('/upload', upload.single('file'), ah(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   const doc_type = req.body.doc_type;
   if (!VALID_DOC_TYPES.includes(doc_type)) {
@@ -75,9 +76,9 @@ router.post('/upload', upload.single('file'), async (req, res) => {
     console.error('Docs upload error:', err.message);
     res.status(500).json({ error: 'Upload failed: ' + err.message });
   }
-});
+}));
 
-router.delete('/:id', async (req, res) => {
+router.delete('/:id', ah(async (req, res) => {
   const doc = await queryOne('SELECT * FROM gelco_docs WHERE id = ?', [req.params.id]);
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
@@ -94,6 +95,6 @@ router.delete('/:id', async (req, res) => {
 
   await execute('DELETE FROM gelco_docs WHERE id = ?', [req.params.id]);
   res.json({ success: true, message: 'Document deleted' });
-});
+}));
 
 module.exports = router;

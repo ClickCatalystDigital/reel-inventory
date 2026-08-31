@@ -5,6 +5,7 @@ const router = express.Router();
 const { queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
 const { executeInward } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
+const ah = require('../utils/asyncHandler');
 
 // Roles that bypass approval
 const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
@@ -55,7 +56,7 @@ const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 //   return { boxes: createdBoxes, reels: createdReels };
 // }
 
-router.post('/', async (req, res) => {
+router.post('/', ah(async (req, res) => {
   const { item_code, num_reels, num_boxes, notes, store_code } = req.body;
   if (!item_code || !num_reels || num_reels < 1) {
     return res.status(400).json({ error: 'item_code and num_reels (>= 1) are required' });
@@ -110,9 +111,9 @@ router.post('/', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-});
+}));
 
-router.get('/recent', async (req, res) => {
+router.get('/recent', ah(async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
   const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
@@ -132,9 +133,15 @@ router.get('/recent', async (req, res) => {
     LIMIT ? OFFSET ?
   `, params);
   res.json(reels);
-});
+}));
 
-router.post('/undo', async (req, res) => {
+router.post('/undo', ah(async (req, res) => {
+  // Role check added alongside the hardcoded password below — this hardens the gate,
+  // it doesn't replace it. The password itself stays a single shared string, not
+  // user-specific or rotatable without a deploy; that's a separate, deferred item.
+  if (!['admin', 'manager'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
   const { reel_numbers, password } = req.body;
 
   if (password !== 'admin123') {
@@ -174,6 +181,6 @@ router.post('/undo', async (req, res) => {
     success: true,
     message: `${undone} reel(s) undone${skipped ? `, ${skipped} skipped (outwarded or not found)` : ''}`
   });
-});
+}));
 
 module.exports = router;

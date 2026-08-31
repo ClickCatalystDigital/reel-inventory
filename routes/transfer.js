@@ -5,11 +5,12 @@ const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 const { executeStockTransfer } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
+const ah = require('../utils/asyncHandler');
 
 const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
 const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
-router.get('/reel/:reelNumber', async (req, res) => {
+router.get('/reel/:reelNumber', ah(async (req, res) => {
   const reel = await queryOne(`
     SELECT r.*, i.description
     FROM reels r
@@ -21,9 +22,9 @@ router.get('/reel/:reelNumber', async (req, res) => {
   if (reel.status === 'Outwarded') return res.status(400).json({ error: 'Reel already fully outwarded', reel });
   if (reel.status === 'Deleted') return res.status(400).json({ error: 'Reel has been deleted', reel });
   res.json(reel);
-});
+}));
 
-router.get('/box/:boxNumber', async (req, res) => {
+router.get('/box/:boxNumber', ah(async (req, res) => {
   const box = await queryOne('SELECT * FROM boxes WHERE box_number = ?', [req.params.boxNumber]);
   if (!box) return res.status(404).json({ error: 'Box not found' });
 
@@ -36,9 +37,9 @@ router.get('/box/:boxNumber', async (req, res) => {
   `, [req.params.boxNumber]);
 
   res.json({ box, reels });
-});
+}));
 
-router.post('/', async (req, res) => {
+router.post('/', ah(async (req, res) => {
   if (req.user?.role === 'client') {
     return res.status(403).json({ error: 'Not authorized' });
   }
@@ -98,9 +99,9 @@ router.post('/', async (req, res) => {
   } catch (err) {
     return res.status(500).json({ error: err.message });
   }
-});
+}));
 
-router.get('/recent', async (req, res) => {
+router.get('/recent', ah(async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
   const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
@@ -121,10 +122,15 @@ router.get('/recent', async (req, res) => {
     LIMIT ? OFFSET ?
   `, params);
   res.json({ rows, total: countRow.total });
-});
+}));
 
-router.post('/undo', async (req, res) => {
-  if (req.user?.role === 'client') {
+router.post('/undo', ah(async (req, res) => {
+  // Role check tightened from "just not client" to admin/manager, matching the same
+  // hardening applied to inward.js/outward.js/dashboard.js's password-gated undo
+  // endpoints — this hardens the gate, it doesn't replace the hardcoded password
+  // itself (a separate, deferred item: it's a single shared string, not user-specific
+  // or rotatable without a deploy).
+  if (!['admin', 'manager'].includes(req.user?.role)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
@@ -155,6 +161,6 @@ router.post('/undo', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 module.exports = router;

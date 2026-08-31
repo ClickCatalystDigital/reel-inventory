@@ -55,184 +55,6 @@ router.get('/box/:boxNumber', async (req, res) => {
   });
 });
 
-// Extracted so both direct-approve and request-approve paths use same logic
-// async function executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes) {
-//   const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
-//   if (!reel) throw new Error(`Reel ${reel_number} not found`);
-//   if (reel.status === 'Outwarded') throw new Error(`Reel ${reel_number} already outwarded`);
-
-//   const type = outward_type || 'Full';
-//   let qtyShipped;
-
-//   if (type === 'Partial') {
-//     qtyShipped = parseInt(quantity_shipped);
-//     if (!qtyShipped || qtyShipped <= 0 || qtyShipped >= reel.quantity) {
-//       throw new Error(`Partial quantity must be between 1 and ${reel.quantity - 1}`);
-//     }
-//   } else {
-//     qtyShipped = reel.quantity;
-//   }
-
-//   await execute(
-//     `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date)
-//      VALUES (?, ?, ?, ?, ?, ?, ?)`,
-//     [reel_number, customer_name.trim(), invoice_number.trim(), qtyShipped, type, notes || null, nowIST()]
-//   );
-
-//   if (type === 'Full') {
-//     await execute('UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel_number]);
-//   } else {
-//     await execute('UPDATE reels SET quantity = ? WHERE reel_number = ?', [reel.quantity - qtyShipped, reel_number]);
-//   }
-
-//   return { qtyShipped, remaining: type === 'Full' ? 0 : reel.quantity - qtyShipped };
-// }
-
-router.post('/', async (req, res) => {
-  const { reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, store_code } = req.body;
-  if (!reel_number || !customer_name || !invoice_number) {
-    return res.status(400).json({ error: 'reel_number, customer_name, and invoice_number are required' });
-  }
-
-  const userRole = req.user?.role;
-  const username = req.user?.username;
-  let storeCode = store_code;
-
-  if (GELCO_ROLES.includes(userRole)) {
-    const reel = await queryOne('SELECT store_code FROM reels WHERE reel_number = ?', [reel_number]);
-    if (!reel) return res.status(404).json({ error: 'Reel not found' });
-    if (reel.store_code !== 'secondary') return res.status(403).json({ error: 'This reel belongs to a different store' });
-    storeCode = 'secondary';
-    if (!(await isGateApprovedToday('secondary'))) {
-      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
-    }
-  }
-
-  if (APPROVER_ROLES.includes(userRole)) {
-    try {
-      const result = await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, null, null, storeCode);
-      return res.json({
-        success: true,
-        approved: true,
-        message: `Outward recorded: ${result.qtyShipped} units from ${reel_number}`,
-        remaining: result.remaining
-      });
-    } catch (err) {
-      return res.status(400).json({ error: err.message });
-    }
-  }
-
-  // Staff: check reel exists and is in stock first, then save as pending
-  const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
-  if (!reel) return res.status(404).json({ error: 'Reel not found' });
-  if (reel.status === 'Outwarded') return res.status(400).json({ error: 'Reel already fully outwarded' });
-
-  try {
-    const payload = JSON.stringify({
-      reel_number, customer_name, invoice_number,
-      outward_type: outward_type || 'Full',
-      quantity_shipped: quantity_shipped || null,
-      notes: notes || null,
-      store_code: storeCode || null
-    });
-    await execute(
-      'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
-      ['outward', 'pending', username, nowIST(), payload]
-    );
-    return res.json({
-      success: true,
-      approved: false,
-      pending: true,
-      message: `Outward request submitted for approval`
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
-router.post('/box', async (req, res) => {
-  const { box_number, customer_name, invoice_number, notes, store_code } = req.body;
-  if (!box_number || !customer_name || !invoice_number) {
-    return res.status(400).json({ error: 'box_number, customer_name, and invoice_number are required' });
-  }
-
-  const box = await queryOne('SELECT * FROM boxes WHERE box_number = ?', [box_number]);
-  if (!box) return res.status(404).json({ error: 'Box not found' });
-
-  const reels = await queryAll('SELECT * FROM reels WHERE box_number = ?', [box_number]);
-  const inStock = reels.filter(r => r.status === 'In Stock');
-  const alreadyOutwarded = reels.filter(r => r.status === 'Outwarded');
-
-  if (inStock.length === 0) {
-    return res.status(400).json({
-      error: 'All reels in this box are already outwarded',
-      outwarded_reels: alreadyOutwarded.map(r => r.reel_number)
-    });
-  }
-
-  const userRole = req.user?.role;
-  const username = req.user?.username;
-  let storeCode = store_code;
-
-  if (GELCO_ROLES.includes(userRole)) {
-    if (box.store_code !== 'secondary') return res.status(403).json({ error: 'This box belongs to a different store' });
-    storeCode = 'secondary';
-    if (!(await isGateApprovedToday('secondary'))) {
-      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
-    }
-  }
-
-  if (APPROVER_ROLES.includes(userRole)) {
-    const results = { success: [], skipped: [] };
-    try {
-      for (const reel of reels) {
-        if (reel.status === 'Outwarded') {
-          results.skipped.push({ reel_number: reel.reel_number, reason: 'Already outwarded' });
-          continue;
-        }
-        await execute(
-          `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, store_code)
-           VALUES (?, ?, ?, ?, 'Full', ?, ?, ?)`,
-          [reel.reel_number, customer_name.trim(), invoice_number.trim(), reel.quantity, notes || null, nowIST(), storeCode || reel.store_code]
-        );
-        await execute('UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel.reel_number]);
-        results.success.push(reel.reel_number);
-      }
-      let message = `${results.success.length} reel(s) outwarded from ${box_number}`;
-      if (results.skipped.length > 0) {
-        message += `. ${results.skipped.length} skipped (already outwarded)`;
-      }
-      return res.json({ success: true, approved: true, message, results });
-    } catch (err) {
-      return res.status(500).json({ error: err.message });
-    }
-  }
-
-  // Staff: save entire box outward as single pending request
-  try {
-    const payload = JSON.stringify({
-      box_number,
-      customer_name,
-      invoice_number,
-      notes: notes || null,
-      reel_numbers: inStock.map(r => r.reel_number),
-      store_code: storeCode || null
-    });
-    await execute(
-      'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
-      ['outward', 'pending', username, nowIST(), payload]
-    );
-    return res.json({
-      success: true,
-      approved: false,
-      pending: true,
-      message: `Box outward request submitted for approval (${inStock.length} reels)`
-    });
-  } catch (err) {
-    return res.status(500).json({ error: err.message });
-  }
-});
-
 router.get('/recent', async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
@@ -300,6 +122,12 @@ router.get('/for-reprint', async (req, res) => {
 });
 
 router.post('/undo', async (req, res) => {
+  // Role check added alongside the hardcoded password below — this hardens the gate,
+  // it doesn't replace it. The password itself stays a single shared string, not
+  // user-specific or rotatable without a deploy; that's a separate, deferred item.
+  if (!['admin', 'manager'].includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
   const { outward_id, password } = req.body;
 
   if (password !== 'admin123') {

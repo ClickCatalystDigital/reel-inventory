@@ -4,6 +4,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcrypt');
 const { queryAll, queryOne, execute } = require('../db/schema');
+const ah = require('../utils/asyncHandler');
 
 const ALLOWED_ROLES = ['admin', 'manager'];
 
@@ -17,15 +18,15 @@ function requireAdmin(req, res, next) {
 router.use(requireAdmin);
 
 // GET all users (no passwords)
-router.get('/users', async (req, res) => {
+router.get('/users', ah(async (req, res) => {
   const users = await queryAll(
     'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC'
   );
   res.json(users);
-});
+}));
 
 // POST add user
-router.post('/users', async (req, res) => {
+router.post('/users', ah(async (req, res) => {
   const { username, password, role } = req.body;
   if (!username || !password || !role) {
     return res.status(400).json({ error: 'username, password, and role are required' });
@@ -47,10 +48,10 @@ router.post('/users', async (req, res) => {
     }
     res.status(500).json({ error: err.message });
   }
-});
+}));
 
 // PUT update role and/or password
-router.put('/users/:id', async (req, res) => {
+router.put('/users/:id', ah(async (req, res) => {
   const { role, password } = req.body;
   const { id } = req.params;
   const validRoles = ['user', 'client', 'manager', 'admin', 'gelco_manager', 'gelco_worker'];
@@ -71,10 +72,10 @@ router.put('/users/:id', async (req, res) => {
   }
 
   res.json({ success: true, message: 'User updated' });
-});
+}));
 
 // DELETE user
-router.delete('/users/:id', async (req, res) => {
+router.delete('/users/:id', ah(async (req, res) => {
   const { id } = req.params;
   // Prevent deleting yourself
   if (parseInt(id) === req.user.id) {
@@ -83,6 +84,6 @@ router.delete('/users/:id', async (req, res) => {
   const result = await execute('DELETE FROM users WHERE id = ?', [id]);
   if (result.changes === 0) return res.status(404).json({ error: 'User not found' });
   res.json({ success: true, message: 'User deleted' });
-});
+}));
 
 module.exports = router;
