@@ -236,6 +236,29 @@ async function execute(sql, params = []) {
   return { changes: result.rowsAffected };
 }
 
+// Real transaction support — used only where genuine atomicity matters (currently
+// just the multi-reel box transfer in utils/inventory.js). Not used elsewhere in
+// this codebase, which otherwise relies on sequential best-effort execute() calls;
+// keep it that way outside cases that specifically need all-or-nothing guarantees.
+// fn receives a (sql, params) => {changes} function bound to the transaction,
+// matching execute()'s own calling convention so callers can share helper code
+// between transactional and non-transactional paths.
+async function withTransaction(fn) {
+  const tx = await db.transaction('write');
+  const txExecute = async (sql, params = []) => {
+    const result = await tx.execute({ sql, args: params });
+    return { changes: result.rowsAffected };
+  };
+  try {
+    const result = await fn(txExecute);
+    await tx.commit();
+    return result;
+  } catch (err) {
+    await tx.rollback();
+    throw err;
+  }
+}
+
 async function getNextReelNumber() {
   // Auto-heal: ensure counter is always ahead of actual max
   await db.execute(`
@@ -289,4 +312,4 @@ function istDayBounds(dateStr) {
   return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, createUser, nowIST, istDateString, istDayBounds };
+module.exports = { initDB, queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, createUser, nowIST, istDateString, istDayBounds };

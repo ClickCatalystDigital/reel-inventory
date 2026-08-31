@@ -1,4 +1,4 @@
-const { queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
+const { queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
 
 async function executeInward(item_code, num_reels, num_boxes, notes, store_code = 'primary') {
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [item_code]);
@@ -78,45 +78,96 @@ async function executeOutwardReel(reel_number, customer_name, invoice_number, ou
   return { qtyShipped, remaining: type === 'Full' ? 0 : reel.quantity - qtyShipped };
 }
 
+// Moves one reel and logs its own stock_transfers row — shared by both the
+// single-reel path and the box path below, so every reel ever moved (whether
+// alone or as part of a box batch) gets independently identifiable, precisely
+// undoable history. `exec` is either the module-level execute (non-transactional,
+// single-reel path) or a withTransaction-bound execute (box path, see below) —
+// both share the (sql, params) => {changes} signature, so this needs no branching.
+// The UPDATE is a compare-and-swap (WHERE store_code = the value just read): if
+// another request already moved this reel between the read and this write,
+// `changes` comes back 0 and we throw instead of silently double-logging a move
+// that only half-happened. This is the concurrency guarantee — not the SELECT.
+async function transferOneReel(exec, reel, to_store, transferred_by, notes, box_number = null) {
+  const result = await exec(
+    'UPDATE reels SET store_code = ? WHERE reel_number = ? AND store_code = ?',
+    [to_store, reel.reel_number, reel.store_code]
+  );
+  if (result.changes === 0) {
+    throw new Error(`Reel ${reel.reel_number} was already moved by another transfer — refresh and try again`);
+  }
+  await exec(
+    `INSERT INTO stock_transfers (reel_number, box_number, from_store, to_store, quantity, transferred_by, transferred_at, notes)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [reel.reel_number, box_number, reel.store_code, to_store, reel.quantity, transferred_by, nowIST(), notes || null]
+  );
+}
+
 async function executeStockTransfer(kind, number, to_store, notes, transferred_by) {
   if (kind === 'reel') {
     const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [number]);
     if (!reel) throw new Error(`Reel ${number} not found`);
     if (reel.status === 'Outwarded') throw new Error(`Reel ${number} already outwarded`);
     if (reel.status === 'Deleted') throw new Error(`Reel ${number} has been deleted`);
-    if (reel.box_number) throw new Error(`Reel ${number} belongs to box ${reel.box_number} — transfer the whole box instead`);
     const from_store = reel.store_code;
     if (to_store === from_store) throw new Error('Source and destination store cannot be the same');
 
-    await execute('UPDATE reels SET store_code = ? WHERE reel_number = ?', [to_store, number]);
-    await execute(
-      `INSERT INTO stock_transfers (reel_number, from_store, to_store, quantity, transferred_by, transferred_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [number, from_store, to_store, reel.quantity, transferred_by, nowIST(), notes || null]
-    );
+    // A reel that belongs to a box can move on its own now (business rule change —
+    // see SYSTEM.md) — its box_number is preserved as display/history context on
+    // the log row, not as a constraint. Reels in the same box are explicitly
+    // allowed to end up in different stores as a result.
+    await transferOneReel(execute, reel, to_store, transferred_by, notes, reel.box_number || null);
     return { from_store, to_store, quantity: reel.quantity };
   }
 
   if (kind === 'box') {
     const box = await queryOne('SELECT * FROM boxes WHERE box_number = ?', [number]);
     if (!box) throw new Error(`Box ${number} not found`);
-    const from_store = box.store_code;
-    if (to_store === from_store) throw new Error('Source and destination store cannot be the same');
 
-    const reels = await queryAll(
-      "SELECT * FROM reels WHERE box_number = ? AND status != 'Deleted'",
+    // boxes.store_code is no longer trusted as authoritative for eligibility —
+    // only reels.store_code is, read fresh here. Only In Stock reels count:
+    // Outwarded/Deleted reels aren't meaningfully "transferable" and don't block
+    // or participate in the move (same "only in-stock is actionable" precedent
+    // Outward already uses for its own box scans).
+    const activeReels = await queryAll(
+      "SELECT * FROM reels WHERE box_number = ? AND status = 'In Stock'",
       [number]
     );
-    const quantity = reels.reduce((sum, r) => sum + r.quantity, 0);
+    if (activeReels.length === 0) {
+      throw new Error(`Box ${number} has no in-stock reels to transfer`);
+    }
 
-    await execute('UPDATE boxes SET store_code = ? WHERE box_number = ?', [to_store, number]);
-    await execute('UPDATE reels SET store_code = ? WHERE box_number = ?', [to_store, number]);
-    await execute(
-      `INSERT INTO stock_transfers (box_number, from_store, to_store, quantity, transferred_by, transferred_at, notes)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [number, from_store, to_store, quantity, transferred_by, nowIST(), notes || null]
-    );
-    return { from_store, to_store, quantity };
+    const stores = new Set(activeReels.map((r) => r.store_code));
+    if (stores.size > 1) {
+      const breakdown = [...stores]
+        .map((s) => `${s}: ${activeReels.filter((r) => r.store_code === s).length}`)
+        .join(', ');
+      throw new Error(`Box ${number}'s reels are split across stores (${breakdown}) — transfer eligible reels individually instead`);
+    }
+    const from_store = [...stores][0];
+    if (to_store === from_store) throw new Error('Source and destination store cannot be the same');
+
+    const quantity = activeReels.reduce((sum, r) => sum + r.quantity, 0);
+
+    // Real transaction — the one place in this codebase that needs genuine
+    // all-or-nothing atomicity (a "box transfer" that only moved 3 of 5 reels
+    // before failing would be exactly the kind of corruption "atomic" rules out).
+    // Every reel's own CAS-protected move, plus the box's own store_code, commit
+    // together or not at all.
+    await withTransaction(async (tx) => {
+      for (const reel of activeReels) {
+        await transferOneReel(tx, reel, to_store, transferred_by, notes, number);
+      }
+      const boxResult = await tx(
+        'UPDATE boxes SET store_code = ? WHERE box_number = ? AND store_code = ?',
+        [to_store, number, from_store]
+      );
+      if (boxResult.changes === 0) {
+        throw new Error(`Box ${number} was already moved by another transfer — refresh and try again`);
+      }
+    });
+
+    return { from_store, to_store, quantity, reelCount: activeReels.length };
   }
 
   throw new Error(`Unknown transfer kind "${kind}"`);

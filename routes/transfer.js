@@ -55,11 +55,26 @@ router.post('/', ah(async (req, res) => {
   const userRole = req.user?.role;
   const username = req.user?.username;
 
-  const current = kind === 'box'
-    ? await queryOne('SELECT store_code FROM boxes WHERE box_number = ?', [number])
-    : await queryOne('SELECT store_code FROM reels WHERE reel_number = ?', [number]);
-  if (!current) return res.status(404).json({ error: `${kind === 'box' ? 'Box' : 'Reel'} ${number} not found` });
-  const fromStore = current.store_code;
+  // boxes.store_code is no longer authoritative once reels can scatter via
+  // individual transfers (see executeStockTransfer) — this is only a coarse
+  // role-eligibility gate below, not the real eligibility check, so for a box
+  // derive it from whether any of its current in-stock reels are at secondary
+  // rather than trusting the box's own possibly-stale store_code. executeStockTransfer
+  // independently re-derives the real, authoritative eligibility from scratch.
+  let fromStore;
+  if (kind === 'box') {
+    const box = await queryOne('SELECT box_number FROM boxes WHERE box_number = ?', [number]);
+    if (!box) return res.status(404).json({ error: `Box ${number} not found` });
+    const secondaryReel = await queryOne(
+      "SELECT 1 as found FROM reels WHERE box_number = ? AND status = 'In Stock' AND store_code = 'secondary' LIMIT 1",
+      [number]
+    );
+    fromStore = secondaryReel ? 'secondary' : 'primary';
+  } else {
+    const reel = await queryOne('SELECT store_code FROM reels WHERE reel_number = ?', [number]);
+    if (!reel) return res.status(404).json({ error: `Reel ${number} not found` });
+    fromStore = reel.store_code;
+  }
 
   if (GELCO_ROLES.includes(userRole)) {
     if (to_store !== 'secondary' && fromStore !== 'secondary') {
@@ -147,8 +162,18 @@ router.post('/undo', ah(async (req, res) => {
 
   try {
     if (transfer.reel_number) {
+      // Every row logged since utils/inventory.js started giving each moved reel
+      // its own stock_transfers row (including box-batch moves) carries a
+      // reel_number — undo always targets that exact reel, never "whatever's in
+      // the box now". This is what makes undo correct once boxed reels can move
+      // individually: a later, unrelated transfer of a different reel from the
+      // same box can no longer get dragged back by undoing this one.
       await execute('UPDATE reels SET store_code = ? WHERE reel_number = ?', [transfer.from_store, transfer.reel_number]);
     } else if (transfer.box_number) {
+      // Legacy fallback only — rows logged before that change summed an entire
+      // box into one row with no reel_number. Best-effort revert of every reel
+      // currently in the box, same imprecision that shape always had. No new
+      // rows are ever created this way, so this only matters for old history.
       await execute('UPDATE boxes SET store_code = ? WHERE box_number = ?', [transfer.from_store, transfer.box_number]);
       await execute('UPDATE reels SET store_code = ? WHERE box_number = ?', [transfer.from_store, transfer.box_number]);
     }
