@@ -55,12 +55,17 @@ export function Nav() {
           only ever carried Settings/Pending Requests/theme/logout, so store
           context and approval/notification counts were completely unreachable
           on mobile. Reuses the exact same components as the desktop row above,
-          just relocated to their own thin strip — no new logic, no desktop
-          markup touched. */}
-      <div className="flex items-center justify-end gap-2 border-t border-white/10 px-4 py-1.5 md:hidden">
-        <StoreSelector />
-        <ApprovalsBell />
-        <NotificationsBell />
+          just relocated to their own strip — no desktop markup touched.
+          Store selector takes the flexible width (bigger tap target, and it's
+          the control people actually reach for) with a touch-sized bell group
+          pinned to the right, instead of cramming all three into a tight
+          right-aligned cluster with dead space on the left. */}
+      <div className="flex items-center gap-2 border-t border-white/10 px-4 py-2 md:hidden">
+        <StoreSelector className="w-full flex-1 py-2 text-sm" />
+        <div className="flex shrink-0 items-center gap-1">
+          <ApprovalsBell />
+          <NotificationsBell />
+        </div>
       </div>
     </nav>
   );

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useSelectedStore } from "@/lib/store-context";
+import { cn } from "@/lib/utils";
 
 interface Store {
   code: string;
@@ -10,7 +11,10 @@ interface Store {
 
 // Declarative port of injectStoreSelector(): a view-filter dropdown, or a
 // locked badge for the two Gelco roles (permanently on 'secondary').
-export function StoreSelector() {
+// `className` lets call sites (the mobile nav strip) size this differently
+// (e.g. flex-1 + a bigger tap target) without affecting the desktop instance,
+// which passes nothing and keeps its original compact sizing.
+export function StoreSelector({ className }: { className?: string } = {}) {
   const { selectedStore, setSelectedStore, isLocked } = useSelectedStore();
   const [stores, setStores] = useState<Store[]>([]);
 
@@ -24,7 +28,7 @@ export function StoreSelector() {
 
   if (isLocked) {
     return (
-      <span className="rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs text-secondary-foreground">
+      <span className={cn("rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs text-secondary-foreground", className)}>
         🔒 Gelco Stores
       </span>
     );
@@ -34,7 +38,7 @@ export function StoreSelector() {
 
   return (
     <select
-      className="rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-secondary-foreground"
+      className={cn("rounded-md border border-border bg-secondary px-2 py-1.5 text-xs text-secondary-foreground", className)}
       title="Viewing store"
       value={selectedStore}
       onChange={(e) => setSelectedStore(e.target.value)}
