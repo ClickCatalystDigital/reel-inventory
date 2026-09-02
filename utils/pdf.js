@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { generateQRBuffer } = require('./qr');
-const { queryAll } = require('../db/schema');
+const { queryAll, queryOne, istDateString } = require('../db/schema');
 const ah = require('./asyncHandler');
 const { getDailyReportData } = require('./dailyReport');
 
@@ -569,5 +569,160 @@ router.get('/daily-report', ah(async (req, res) => {
 
   doc.end();
 }));
+
+// GET Stock Transfer report PDF — mirrors the Transfer page's Recent Transfers filters
+// (store/date_from/date_to) exactly, so "download PDF" always matches what's on screen.
+// Not blocked for Gelco roles outright (unlike /daily-report) — GET /api/transfer/recent
+// already scopes them to their own store rather than refusing them, so this matches that.
+router.get('/transfer-report', ah(async (req, res) => {
+  const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
+  const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
+  const { date_from, date_to } = req.query;
+
+  const conditions = [];
+  const params = [];
+  if (store && store !== 'all') {
+    conditions.push('(st.from_store = ? OR st.to_store = ?)');
+    params.push(store, store);
+  }
+  if (date_from) { conditions.push('st.transferred_at >= ?'); params.push(date_from + ' 00:00:00'); }
+  if (date_to) { conditions.push('st.transferred_at <= ?'); params.push(date_to + ' 23:59:59'); }
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
+
+  const rows = await queryAll(`
+    SELECT st.reel_number, st.box_number, st.from_store, st.to_store, st.quantity,
+      st.transferred_by, st.transferred_at, st.notes,
+      fs.name as from_store_name, ts.name as to_store_name
+    FROM stock_transfers st
+    LEFT JOIN stores fs ON fs.code = st.from_store
+    LEFT JOIN stores ts ON ts.code = st.to_store
+    ${where}
+    ORDER BY st.transferred_at DESC
+  `, params);
+
+  const PAGE_W = 841.89;
+  const PAGE_H = 595.28;
+  const MARGIN = 35;
+  const CONTENT_W = PAGE_W - MARGIN * 2;
+
+  const doc = new PDFDocument({
+    size: 'A4',
+    layout: 'landscape',
+    margins: { top: MARGIN, bottom: MARGIN, left: MARGIN, right: MARGIN }
+  });
+
+  const rangeLabel = date_from || date_to ? `${date_from || 'start'}_to_${date_to || istDateString()}` : istDateString();
+  res.setHeader('Content-Type', 'application/pdf');
+  res.setHeader('Content-Disposition', `attachment; filename=transfer_report_${rangeLabel}.pdf`);
+  doc.pipe(res);
+
+  const COL_WIDTHS = { item: 85, box: 85, from: 105, to: 105, qty: 65, by: 110, at: 105, notes: CONTENT_W - 85 - 85 - 105 - 105 - 65 - 110 - 105 };
+  const col = {
+    item: MARGIN,
+    box: MARGIN + COL_WIDTHS.item,
+    from: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box,
+    to: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from,
+    qty: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to,
+    by: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty,
+    at: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by,
+    notes: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by + COL_WIDTHS.at,
+  };
+
+  function drawTableHeader(doc, y) {
+    doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
+    doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
+    doc.text('ITEM', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.text('BOX', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
+    doc.text('FROM', col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
+    doc.text('TO', col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
+    doc.text('QTY', col.qty, y + 6, { width: COL_WIDTHS.qty, lineBreak: false });
+    doc.text('BY', col.by, y + 6, { width: COL_WIDTHS.by, lineBreak: false });
+    doc.text('DATE & TIME', col.at, y + 6, { width: COL_WIDTHS.at, lineBreak: false });
+    doc.text('NOTES', col.notes, y + 6, { width: COL_WIDTHS.notes, lineBreak: false });
+    return y + 22;
+  }
+
+  // --- Header ---
+  doc.fontSize(20).font('Helvetica-Bold').fillColor('#000000');
+  doc.text('STOCK TRANSFER REPORT', MARGIN, MARGIN, { width: CONTENT_W, align: 'center' });
+  doc.moveTo(MARGIN, MARGIN + 26).lineTo(MARGIN + CONTENT_W, MARGIN + 26).lineWidth(2).stroke('#000000');
+
+  const metaY = MARGIN + 34;
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
+  doc.text('Period:', MARGIN, metaY);
+  doc.font('Helvetica').text(date_from || date_to ? `${date_from || 'Start'} to ${date_to || 'Today'}` : 'All Time', MARGIN + 45, metaY);
+
+  let storeLabel = 'All Stores';
+  if (store && store !== 'all') {
+    const storeRow = await queryOne('SELECT name FROM stores WHERE code = ?', [store]);
+    storeLabel = storeRow?.name || store;
+  }
+  doc.font('Helvetica-Bold').text('Store:', MARGIN + 260, metaY);
+  doc.font('Helvetica').text(storeLabel, MARGIN + 300, metaY);
+
+  doc.font('Helvetica-Bold').text('Generated:', MARGIN + 500, metaY);
+  doc.font('Helvetica').text(
+    new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    MARGIN + 560, metaY
+  );
+  doc.font('Helvetica-Bold').text('Total Transfers:', MARGIN + 650, metaY);
+  doc.font('Helvetica').text(String(rows.length), MARGIN + 745, metaY);
+
+  // --- Table ---
+  let y = metaY + 22;
+  y = drawTableHeader(doc, y);
+
+  if (!rows.length) {
+    doc.fontSize(9).font('Helvetica').fillColor('#666666');
+    doc.text('No transfers found for this filter.', MARGIN, y + 6);
+    y += 22;
+  }
+
+  let totalQty = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const t = rows[i];
+    totalQty += t.quantity || 0;
+    const rowH = 20;
+    if (y + rowH > PAGE_H - MARGIN - 40) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = MARGIN;
+      y = drawTableHeader(doc, y);
+    }
+    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
+
+    doc.fontSize(8).fillColor('#333333');
+    doc.font('Helvetica-Bold').text(t.reel_number || t.box_number || '-', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.font('Helvetica').text(t.reel_number ? (t.box_number || '—') : '—', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
+    doc.text(t.from_store_name || t.from_store, col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
+    doc.text(t.to_store_name || t.to_store, col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
+    doc.text(formatQtyStr(t.quantity), col.qty, y + 6, { width: COL_WIDTHS.qty, lineBreak: false });
+    doc.text(t.transferred_by || '-', col.by, y + 6, { width: COL_WIDTHS.by, lineBreak: false });
+    doc.text((t.transferred_at || '').slice(0, 16), col.at, y + 6, { width: COL_WIDTHS.at, lineBreak: false });
+    doc.fontSize(7).text(t.notes || '—', col.notes, y + 6, { width: COL_WIDTHS.notes, lineBreak: false });
+
+    doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + CONTENT_W, y + rowH).lineWidth(0.5).stroke('#dddddd');
+    y += rowH;
+  }
+
+  // --- Totals row ---
+  if (rows.length) {
+    y += 4;
+    if (y + 22 > PAGE_H - MARGIN) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = MARGIN;
+    }
+    doc.rect(MARGIN, y, CONTENT_W, 22).fill('#f0f0ec');
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000');
+    doc.text('TOTAL', col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
+    doc.text(`${rows.length} transfer${rows.length !== 1 ? 's' : ''}`, col.qty, y + 6, { width: COL_WIDTHS.qty + COL_WIDTHS.by, lineBreak: false });
+    doc.text(formatQtyStr(totalQty) + ' units', col.at, y + 6, { width: COL_WIDTHS.at + COL_WIDTHS.notes, lineBreak: false });
+  }
+
+  doc.end();
+}));
+
+function formatQtyStr(n) {
+  return (n || 0).toLocaleString('en-IN');
+}
 
 module.exports = router;

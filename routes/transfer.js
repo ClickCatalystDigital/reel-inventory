@@ -120,12 +120,16 @@ router.get('/recent', ah(async (req, res) => {
   const limit = parseInt(req.query.limit) || 50;
   const offset = parseInt(req.query.offset) || 0;
   const store = GELCO_ROLES.includes(req.user?.role) ? 'secondary' : req.query.store;
+  const { date_from, date_to } = req.query;
   const params = [];
-  let where = '';
+  const conditions = [];
   if (store && store !== 'all') {
-    where = 'WHERE from_store = ? OR to_store = ?';
+    conditions.push('(from_store = ? OR to_store = ?)');
     params.push(store, store);
   }
+  if (date_from) { conditions.push('transferred_at >= ?'); params.push(date_from + ' 00:00:00'); }
+  if (date_to) { conditions.push('transferred_at <= ?'); params.push(date_to + ' 23:59:59'); }
+  const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
   const countRow = await queryOne(`SELECT COUNT(*) as total FROM stock_transfers ${where}`, params);
 

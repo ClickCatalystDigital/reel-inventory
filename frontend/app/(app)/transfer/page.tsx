@@ -1,11 +1,11 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Camera, CameraOff, PenLine } from "lucide-react";
+import { Camera, CameraOff, FileDown, PenLine } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
-import { useSelectedStore } from "@/lib/store-context";
+import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { playSuccessSound, playErrorSound } from "@/lib/scan-sound";
 import { useQrScanner } from "@/hooks/use-qr-scanner";
 import { Button } from "@/components/ui/button";
@@ -66,6 +66,8 @@ export default function TransferPage() {
   const [boxTotals, setBoxTotals] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
   const [transfers, setTransfers] = useState<Transfer[]>([]);
+  const [dateFrom, setDateFrom] = useState("");
+  const [dateTo, setDateTo] = useState("");
 
   const scanInputRef = useRef<HTMLInputElement>(null);
   // Mirrors which reel_numbers are in the cart, but synchronous (unlike `cart`
@@ -85,7 +87,7 @@ export default function TransferPage() {
 
   const storeLabel = (code: string) => stores.find((s) => s.code === code)?.name || code;
 
-  // One-time setup — store list + default From Store + recent transfers.
+  // One-time setup — store list + default From Store.
   useEffect(() => {
     // Data fetch on mount — a legitimate effect use, not state derived from a prop.
     // eslint-disable-next-line react-hooks/set-state-in-effect
@@ -98,17 +100,43 @@ export default function TransferPage() {
         // api() already toasted
       }
     })();
-    loadRecentTransfers();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function loadRecentTransfers() {
+  // Recent Transfers reacts to the top-nav store filter, matching every other
+  // Reports-adjacent list (Outward, Notifications, Daily Report) — it wasn't
+  // wired up before, so this list was the one place in the app that silently
+  // ignored the store dropdown.
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadRecentTransfers();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedStore]);
+
+  async function loadRecentTransfers(from = dateFrom, to = dateTo) {
     try {
-      const { rows } = await api<{ rows: Transfer[] }>("/api/transfer/recent?limit=50");
+      const params = new URLSearchParams();
+      params.set("limit", "50");
+      if (from) params.set("date_from", from);
+      if (to) params.set("date_to", to);
+      const sp = storeQueryParam(selectedStore);
+      if (sp) params.set("store", selectedStore);
+      const { rows } = await api<{ rows: Transfer[] }>(`/api/transfer/recent?${params}`);
       setTransfers(rows);
     } catch {
       // api() already toasted
     }
+  }
+
+  function downloadTransferReport() {
+    const params = new URLSearchParams();
+    if (dateFrom) params.set("date_from", dateFrom);
+    if (dateTo) params.set("date_to", dateTo);
+    const sp = storeQueryParam(selectedStore);
+    if (sp) params.set("store", selectedStore);
+    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+    window.location.href = `/api/labels/transfer-report?${params}`;
+    showToast("PDF download started");
   }
 
   // Changing From Store invalidates every eligibility check the current cart was
@@ -512,6 +540,27 @@ export default function TransferPage() {
       )}
 
       <Card className="p-5">
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <Input type="date" className="w-auto" value={dateFrom} onChange={(e) => setDateFrom(e.target.value)} />
+          <Input type="date" className="w-auto" value={dateTo} onChange={(e) => setDateTo(e.target.value)} />
+          <Button size="sm" onClick={() => loadRecentTransfers()}>
+            Apply
+          </Button>
+          <Button
+            size="sm"
+            variant="ghost"
+            onClick={() => {
+              setDateFrom("");
+              setDateTo("");
+              loadRecentTransfers("", "");
+            }}
+          >
+            Clear
+          </Button>
+          <Button size="sm" variant="outline" className="ml-auto" onClick={downloadTransferReport}>
+            <FileDown /> Download PDF
+          </Button>
+        </div>
         <DataTable
           title="Recent Transfers"
           data={transfers}
