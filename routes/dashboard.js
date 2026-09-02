@@ -6,8 +6,13 @@ const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
 const { getDailyReportData } = require('../utils/dailyReport');
 
-// Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block outright.
+// Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block
+// outright — except gelco_manager reading /stock-summary, which backs their "Stocks" tab
+// (they pick LS Stores vs. Gelco Stores there via a store dropdown to decide what to order).
 router.use((req, res, next) => {
+  if (req.user?.role === 'gelco_manager' && req.method === 'GET' && req.path === '/stock-summary') {
+    return next();
+  }
   if (['gelco_manager', 'gelco_worker'].includes(req.user?.role)) {
     return res.status(403).json({ error: 'Not authorized' });
   }
@@ -454,7 +459,7 @@ router.get('/export-stock', ah(async (req, res) => {
 
 // GET today's (IST) inward/outward summary + dead/low stock + pending approvals — Reports > Daily Report
 router.get('/daily-report', ah(async (req, res) => {
-  res.json(await getDailyReportData(req.query.store));
+  res.json(await getDailyReportData(req.query.store, req.query.date));
 }));
 
 module.exports = router;

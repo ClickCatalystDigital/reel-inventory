@@ -400,7 +400,7 @@ router.get('/daily-report', ah(async (req, res) => {
     return res.status(403).json({ error: 'Not authorized' });
   }
 
-  const data = await getDailyReportData(req.query.store);
+  const data = await getDailyReportData(req.query.store, req.query.date);
 
   const PAGE_W = 841.89;
   const PAGE_H = 595.28;

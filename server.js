@@ -26,7 +26,7 @@ const NEXT_ORIGIN = process.env.NEXT_ORIGIN || 'http://localhost:3001';
 // frontend/app/favicon.ico) is reachable — without it, the browser's
 // implicit favicon request 404s for any role not already redirected
 // elsewhere by the allowlist middleware above.
-const MIGRATED_PAGE_PATHS = ['/transfer', '/settings', '/notifications', '/gelco-docs', '/stock', '/', '/requests', '/inward', '/login', '/outward', '/reports', '/reports/search', '/reports/analytics', '/reports/alerts', '/reports/daily', '/favicon.ico'];
+const MIGRATED_PAGE_PATHS = ['/transfer', '/settings', '/notifications', '/gelco-docs', '/stock', '/stocks', '/', '/requests', '/inward', '/login', '/outward', '/reports', '/reports/search', '/reports/analytics', '/reports/alerts', '/reports/daily', '/favicon.ico'];
 
 const nextProxy = createProxyMiddleware({
   target: NEXT_ORIGIN,
@@ -131,7 +131,7 @@ function requireLogin(req, res, next) {
   const ROLE_PAGE_ALLOWLIST = {
     client: { pages: ['/stock'], redirectTo: '/stock' },
     gelco_worker: { pages: ['/outward'], redirectTo: '/outward' },
-    gelco_manager: { pages: ['/', '/outward', '/gelco-docs'], redirectTo: '/outward' },
+    gelco_manager: { pages: ['/', '/outward', '/gelco-docs', '/stocks'], redirectTo: '/outward' },
   };
   app.use((req, res, next) => {
     if (req.path.startsWith('/api/')) return next();

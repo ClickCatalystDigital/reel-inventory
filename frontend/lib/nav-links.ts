@@ -1,5 +1,5 @@
-import { LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText } from "lucide-react";
-import { isNavLinkVisible, GELCO_DOCS_ROLES } from "./role-allowlist";
+import { LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
+import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-allowlist";
 
 // The 5 primary links shown in both the desktop nav-links bar and the mobile
 // bottom-nav on every "full chrome" page.
@@ -19,10 +19,16 @@ export const PRIMARY_NAV_LINKS = [
 // each need their own copy of this extra rule.
 const DOCS_LINK = { href: "/gelco-docs", label: "Docs", icon: FileText } as const;
 
+// Stocks (/stocks) is gelco_manager's own Stock Summary view (with its own
+// LS/Gelco store dropdown, unlike the rest of Reports which they can't reach
+// at all) — same "extra link outside the per-role page list" pattern as Docs.
+const STOCKS_LINK = { href: "/stocks", label: "Stocks", icon: Warehouse } as const;
+
 export function getVisibleNavLinks(role: string | undefined) {
   const links: { href: string; label: string; icon: typeof FileText }[] = PRIMARY_NAV_LINKS.filter((l) =>
     isNavLinkVisible(role, l.href)
   );
   if (role && (GELCO_DOCS_ROLES as readonly string[]).includes(role)) links.push(DOCS_LINK);
+  if (role && (GELCO_STOCKS_ROLES as readonly string[]).includes(role)) links.push(STOCKS_LINK);
   return links;
 }

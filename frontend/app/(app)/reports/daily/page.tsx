@@ -7,6 +7,7 @@ import { formatQty, formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/data-table/DataTable";
 import { FileDown } from "lucide-react";
@@ -40,24 +41,29 @@ interface DailyReport {
 export default function DailyReportPage() {
   const { selectedStore } = useSelectedStore();
   const [report, setReport] = useState<DailyReport | null>(null);
+  const [date, setDate] = useState("");
 
   useEffect(() => {
     async function load() {
       try {
-        const sp = storeQueryParam(selectedStore);
-        setReport(await api<DailyReport>(`/api/dashboard/daily-report${sp ? "?" + sp : ""}`));
+        const params = new URLSearchParams(storeQueryParam(selectedStore));
+        if (date) params.set("date", date);
+        const qs = params.toString();
+        setReport(await api<DailyReport>(`/api/dashboard/daily-report${qs ? "?" + qs : ""}`));
       } catch {
         showToast("Failed to load daily report", "error");
       }
     }
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
-  }, [selectedStore]);
+  }, [selectedStore, date]);
 
   function downloadPDF() {
-    const sp = storeQueryParam(selectedStore);
+    const params = new URLSearchParams(storeQueryParam(selectedStore));
+    if (date) params.set("date", date);
+    const qs = params.toString();
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/labels/daily-report${sp ? "?" + sp : ""}`;
+    window.location.href = `/api/labels/daily-report${qs ? "?" + qs : ""}`;
     showToast("PDF download started");
   }
 
@@ -68,14 +74,29 @@ export default function DailyReportPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between">
+      <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Daily Report</h1>
-          <p className="text-sm text-muted-foreground">Today&apos;s key numbers{report ? ` — ${report.date}` : ""}</p>
+          <p className="text-sm text-muted-foreground">
+            {date ? "Key numbers for" : "Today's key numbers"}{report ? ` — ${report.date}` : ""}
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={downloadPDF}>
-          <FileDown /> Download PDF
-        </Button>
+        <div className="flex items-center gap-2">
+          <Input
+            type="date"
+            value={date}
+            onChange={(e) => setDate(e.target.value)}
+            className="h-9 w-auto"
+          />
+          {date && (
+            <Button variant="ghost" size="sm" onClick={() => setDate("")}>
+              Today
+            </Button>
+          )}
+          <Button variant="outline" size="sm" onClick={downloadPDF}>
+            <FileDown /> Download PDF
+          </Button>
+        </div>
       </div>
 
       <Card className="p-5">

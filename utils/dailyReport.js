@@ -5,9 +5,9 @@
 
 const { queryAll, queryOne, istDateString, istDayBounds } = require('../db/schema');
 
-async function getDailyReportData(storeCode) {
+async function getDailyReportData(storeCode, date) {
   const storeFilter = storeCode && storeCode !== 'all';
-  const today = istDateString();
+  const today = date || istDateString();
   const { start, end } = istDayBounds(today);
 
   const inward = await queryAll(`

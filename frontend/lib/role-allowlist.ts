@@ -5,13 +5,14 @@
 export const ROLE_PAGE_ALLOWLIST: Record<string, string[]> = {
   client: ["/stock"],
   gelco_worker: ["/outward"],
-  gelco_manager: ["/", "/outward", "/gelco-docs"],
+  gelco_manager: ["/", "/outward", "/gelco-docs", "/stocks"],
 };
 
 export const APPROVER_ROLES = ["admin", "manager", "gelco_manager"];
 export const GELCO_ROLES = ["gelco_manager", "gelco_worker"];
 export const NOTIFICATION_ROLES = ["admin", "manager"];
 export const GELCO_DOCS_ROLES = ["admin", "manager", "gelco_manager"];
+export const GELCO_STOCKS_ROLES = ["gelco_manager"];
 
 export function isNavLinkVisible(role: string | undefined, href: string): boolean {
   if (!role) return true;
