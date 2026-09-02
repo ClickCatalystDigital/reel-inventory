@@ -177,6 +177,11 @@ router.post('/grouped', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
+  // storeCode is no longer what gets recorded on the outward — executeOutwardReel
+  // always derives that from the reel's own current store_code now (see utils/
+  // inventory.js). It's kept only as informational metadata on a pending request's
+  // payload (what the requester's Shipping Store dropdown showed) and for the
+  // Gelco eligibility check just below.
   let storeCode = store_code;
   const isGelco = GELCO_ROLES.includes(userRole);
   if (isGelco) storeCode = 'secondary';
@@ -199,7 +204,7 @@ router.post('/grouped', async (req, res) => {
     const errors = [];
     for (const reel_number of reel_numbers) {
       try {
-        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id, storeCode);
+        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id);
       } catch (err) {
         errors.push(`${reel_number}: ${err.message}`);
       }

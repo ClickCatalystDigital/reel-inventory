@@ -46,7 +46,13 @@ async function executeInward(item_code, num_reels, num_boxes, notes, store_code 
   return { boxes: createdBoxes, reels: createdReels };
 }
 
-async function executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id, store_code) {
+// store_code is deliberately NOT a caller-settable parameter — it's always the
+// reel's own current store_code, read fresh below. Letting a caller override it
+// (the pre-fix behavior) let an outward's recorded store silently disagree with
+// where the reel physically was, since nothing outside the Gelco-role path ever
+// checked the two matched — see SYSTEM.md's outward.js notes for the incident
+// this caused in production.
+async function executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id) {
   const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
   if (!reel) throw new Error(`Reel ${reel_number} not found`);
   if (reel.status === 'Outwarded') throw new Error(`Reel ${reel_number} already outwarded`);
@@ -66,7 +72,7 @@ async function executeOutwardReel(reel_number, customer_name, invoice_number, ou
   await execute(
     `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, company_id, po_id, store_code)
      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [reel_number, customer_name.trim(), invoice_number.trim(), qtyShipped, type, notes || null, nowIST(), company_id || null, po_id || null, store_code || reel.store_code]
+    [reel_number, customer_name.trim(), invoice_number.trim(), qtyShipped, type, notes || null, nowIST(), company_id || null, po_id || null, reel.store_code]
   );
 
   if (type === 'Full') {

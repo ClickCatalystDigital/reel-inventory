@@ -107,8 +107,7 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
             payload.quantity_shipped || null,
             payload.notes,
             payload.company_id || null,
-            payload.po_id || null,
-            payload.store_code || null
+            payload.po_id || null
           );
         } catch (err) {
           errors.push(`${reel_number}: ${err.message}`);
@@ -204,8 +203,7 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
             newPayload.quantity_shipped || null,
             newPayload.notes,
             newPayload.company_id || null,
-            newPayload.po_id || null,
-            newPayload.store_code || null
+            newPayload.po_id || null
           );
         } catch (err) {
           errors.push(`${reel_number}: ${err.message}`);
