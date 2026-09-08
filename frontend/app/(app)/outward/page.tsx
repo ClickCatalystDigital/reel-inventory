@@ -778,13 +778,6 @@ export default function OutwardPage() {
         }}
         icon={<Camera className="size-6" />}
       />
-      <button
-        onClick={submitCart}
-        disabled={!canSubmit || submitting}
-        className="fixed bottom-[76px] left-4 z-40 flex h-[52px] items-center gap-2 rounded-full bg-primary px-5 text-sm font-bold text-white shadow-lg disabled:opacity-50 md:hidden"
-      >
-        {submitting ? "Processing..." : `Outward (${cart.length})`}
-      </button>
     </div>
   );
 }
