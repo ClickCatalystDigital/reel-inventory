@@ -3,7 +3,7 @@ const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { generateQRBuffer } = require('./qr');
-const { queryAll, queryOne, istDateString } = require('../db/schema');
+const { queryAll, queryOne, istDateString, nowIST } = require('../db/schema');
 const ah = require('./asyncHandler');
 const { getDailyReportData } = require('./dailyReport');
 
@@ -310,8 +310,16 @@ router.post('/packing-list', ah(async (req, res) => {
   doc.font('Helvetica-Bold').text('Total Reels:', MARGIN + 650, metaY);
   doc.font('Helvetica').text(String(reels.length), MARGIN + 718, metaY);
 
+  // Second meta line — generation-time reference, same semantics as the
+  // Date field above (both reflect when this PDF was rendered, not the
+  // original outward timestamp — so a reprint shows the reprint's own time).
+  const metaY2 = metaY + 14;
+  doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
+  doc.text('Invoice Timestamp Ref#:', MARGIN, metaY2);
+  doc.font('Helvetica').text(nowIST(), MARGIN + 140, metaY2);
+
   // --- Table ---
-  let y = metaY + 22;
+  let y = metaY2 + 22;
   y = drawTableHeader(doc, y);
 
   let grandTotalQty = 0;
