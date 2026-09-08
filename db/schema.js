@@ -209,7 +209,7 @@ async function initDB() {
   }
   const invoiceCounter = await db.execute("SELECT value FROM counters WHERE name = 'invoice'");
   if (!invoiceCounter.rows.length) {
-    await db.execute("INSERT INTO counters (name, value) VALUES ('invoice', 10000)");
+    await db.execute("INSERT INTO counters (name, value) VALUES ('invoice', 9999)");
   }
 
   // Seed default admin user if no users exist
