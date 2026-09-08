@@ -207,6 +207,10 @@ async function initDB() {
   if (!boxCounter.rows.length) {
     await db.execute("INSERT INTO counters (name, value) VALUES ('box', 1000)");
   }
+  const invoiceCounter = await db.execute("SELECT value FROM counters WHERE name = 'invoice'");
+  if (!invoiceCounter.rows.length) {
+    await db.execute("INSERT INTO counters (name, value) VALUES ('invoice', 10000)");
+  }
 
   // Seed default admin user if no users exist
   const userCount = await db.execute("SELECT COUNT(*) as count FROM users");
@@ -284,6 +288,17 @@ async function getNextBoxNumber() {
   return `BOX-${result.rows[0].value}`;
 }
 
+// Gelco outward's invoice number, replacing the timestamp string it used to
+// send. No self-heal scan like getNextReelNumber/getNextBoxNumber — those
+// work because reel/box numbers are always PREFIX-<int>, but
+// outwards.invoice_number is free text (real customer invoices look like
+// "INV-2025-001"), so scanning it for a numeric max would be unreliable.
+async function getNextInvoiceNumber() {
+  await db.execute("UPDATE counters SET value = value + 1 WHERE name = 'invoice'");
+  const result = await db.execute("SELECT value FROM counters WHERE name = 'invoice'");
+  return String(result.rows[0].value);
+}
+
 // Helper for adding new users
 async function createUser(username, password, role = 'user') {
   const bcrypt = require('bcrypt');
@@ -312,4 +327,4 @@ function istDayBounds(dateStr) {
   return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, createUser, nowIST, istDateString, istDayBounds };
+module.exports = { initDB, queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };

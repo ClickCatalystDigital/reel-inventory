@@ -413,6 +413,11 @@ export default function OutwardPage() {
     }
   }
 
+  async function getNextGelcoInvoiceNumber() {
+    const { invoice_number } = await api<{ invoice_number: string }>("/api/outward/next-invoice-number", { method: "POST" });
+    return invoice_number;
+  }
+
   async function submitCart() {
     if (cart.length === 0) return showToast("Cart is empty", "error");
     if (!isGelco) {
@@ -427,11 +432,12 @@ export default function OutwardPage() {
       for (const reel of cart) (byItem[reel.item_code] ||= []).push(reel);
 
       // Gelco outward skips the CRM customer/PO tie-in entirely — a fixed
-      // customer label and today's date/time (shared across every item group
-      // in this submission, so they stay groupable for reprint) stand in for
-      // the fields a real customer shipment would need.
+      // customer label and a server-generated sequential invoice number
+      // (fetched once here, shared across every item group in this
+      // submission, so they stay groupable for reprint) stand in for the
+      // fields a real customer shipment would need.
       const shipmentCustomer = isGelco ? "Gelco Stores" : customerName.trim();
-      const shipmentInvoice = isGelco ? nowISTString() : invoiceNumber.trim();
+      const shipmentInvoice = isGelco ? await getNextGelcoInvoiceNumber() : invoiceNumber.trim();
 
       let successCount = 0;
       let pendingCount = 0;

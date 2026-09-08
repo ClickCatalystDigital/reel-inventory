@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
+const { queryAll, queryOne, execute, nowIST, getNextInvoiceNumber } = require('../db/schema');
 const { executeOutwardReel } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
 
@@ -162,6 +162,19 @@ router.post('/undo', async (req, res) => {
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
+});
+
+// Gelco-only — fetched once per shipment before the item-code-grouped submit
+// loop below, so every group in one packing list shares the same number.
+router.post('/next-invoice-number', async (req, res) => {
+  if (!GELCO_ROLES.includes(req.user?.role)) {
+    return res.status(403).json({ error: 'Not authorized' });
+  }
+  if (!(await isGateApprovedToday('secondary'))) {
+    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+  }
+  const invoice_number = await getNextInvoiceNumber();
+  res.json({ invoice_number });
 });
 
 router.post('/grouped', async (req, res) => {

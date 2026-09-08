@@ -315,7 +315,7 @@ router.post('/packing-list', ah(async (req, res) => {
   // original outward timestamp — so a reprint shows the reprint's own time).
   const metaY2 = metaY + 14;
   doc.fontSize(9).font('Helvetica-Bold').fillColor('#333333');
-  doc.text('Invoice Timestamp Ref#:', MARGIN, metaY2);
+  doc.text('Timestamp:', MARGIN, metaY2);
   doc.font('Helvetica').text(nowIST(), MARGIN + 140, metaY2);
 
   // --- Table ---
