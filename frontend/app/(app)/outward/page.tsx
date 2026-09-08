@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
+import { PdfOverlay } from "@/components/layout/PdfOverlay";
 import { cn } from "@/lib/utils";
 
 interface Store {
@@ -286,6 +287,7 @@ export default function OutwardPage() {
 
   // === Cart operations ===
   async function addToCart(raw: string) {
+    if (submitting) return;
     const value = raw.trim().toUpperCase();
     if (!value) return;
     setScanInput("");
@@ -420,53 +422,56 @@ export default function OutwardPage() {
     if (poBlocked) return showToast("Resolve PO mismatches before submitting", "error");
 
     setSubmitting(true);
-    const byItem: Record<string, CartItem[]> = {};
-    for (const reel of cart) (byItem[reel.item_code] ||= []).push(reel);
+    try {
+      const byItem: Record<string, CartItem[]> = {};
+      for (const reel of cart) (byItem[reel.item_code] ||= []).push(reel);
 
-    // Gelco outward skips the CRM customer/PO tie-in entirely — a fixed
-    // customer label and today's date/time (shared across every item group
-    // in this submission, so they stay groupable for reprint) stand in for
-    // the fields a real customer shipment would need.
-    const shipmentCustomer = isGelco ? "Gelco Stores" : customerName.trim();
-    const shipmentInvoice = isGelco ? nowISTString() : invoiceNumber.trim();
+      // Gelco outward skips the CRM customer/PO tie-in entirely — a fixed
+      // customer label and today's date/time (shared across every item group
+      // in this submission, so they stay groupable for reprint) stand in for
+      // the fields a real customer shipment would need.
+      const shipmentCustomer = isGelco ? "Gelco Stores" : customerName.trim();
+      const shipmentInvoice = isGelco ? nowISTString() : invoiceNumber.trim();
 
-    let successCount = 0;
-    let pendingCount = 0;
-    const errors: string[] = [];
-    for (const [item_code, reels] of Object.entries(byItem)) {
-      try {
-        const result = await api<{ pending?: boolean }>("/api/outward/grouped", {
-          method: "POST",
-          body: {
-            item_code,
-            reel_numbers: reels.map((r) => r.reel_number),
-            customer_name: shipmentCustomer,
-            invoice_number: shipmentInvoice,
-            outward_type: "Full",
-            notes: notes.trim() || undefined,
-            company_id: isGelco ? null : companyId,
-            po_id: isGelco ? null : (poId ? parseInt(poId) : null),
-            store_code: storeCode,
-          },
-        });
-        if (result.pending) pendingCount += reels.length;
-        else successCount += reels.length;
-      } catch (err) {
-        errors.push(`${item_code}: ${err instanceof Error ? err.message : "failed"}`);
+      let successCount = 0;
+      let pendingCount = 0;
+      const errors: string[] = [];
+      for (const [item_code, reels] of Object.entries(byItem)) {
+        try {
+          const result = await api<{ pending?: boolean }>("/api/outward/grouped", {
+            method: "POST",
+            body: {
+              item_code,
+              reel_numbers: reels.map((r) => r.reel_number),
+              customer_name: shipmentCustomer,
+              invoice_number: shipmentInvoice,
+              outward_type: "Full",
+              notes: notes.trim() || undefined,
+              company_id: isGelco ? null : companyId,
+              po_id: isGelco ? null : (poId ? parseInt(poId) : null),
+              store_code: storeCode,
+            },
+          });
+          if (result.pending) pendingCount += reels.length;
+          else successCount += reels.length;
+        } catch (err) {
+          errors.push(`${item_code}: ${err instanceof Error ? err.message : "failed"}`);
+        }
       }
-    }
 
-    if (successCount > 0) {
-      showToast(`${successCount} reel(s) outwarded successfully`);
-      await downloadPackingList(shipmentCustomer, shipmentInvoice, cart, notes);
-    }
-    if (pendingCount > 0) showToast(`${pendingCount} reel(s) submitted for approval (grouped by item)`);
-    if (errors.length > 0) showToast(`${errors.length} item(s) failed: ${errors[0]}`, "error");
+      if (successCount > 0) {
+        showToast(`${successCount} reel(s) outwarded successfully`);
+        await downloadPackingList(shipmentCustomer, shipmentInvoice, cart, notes);
+      }
+      if (pendingCount > 0) showToast(`${pendingCount} reel(s) submitted for approval (grouped by item)`);
+      if (errors.length > 0) showToast(`${errors.length} item(s) failed: ${errors[0]}`, "error");
 
-    clearCart();
-    loadRecentOutwards(1, 10);
-    loadOutwardSummary();
-    setSubmitting(false);
+      clearCart();
+      loadRecentOutwards(1, 10);
+      loadOutwardSummary();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function regenPackingList(customer: string, invoice: string) {
@@ -498,6 +503,7 @@ export default function OutwardPage() {
 
   return (
     <div className="space-y-4">
+      <PdfOverlay active={submitting} message="Processing..." />
       <div>
         <h1 className="text-xl font-bold">Outward Stock</h1>
         <p className="text-sm text-muted-foreground">Scan reels or boxes to build a shipment, then submit</p>
@@ -516,6 +522,7 @@ export default function OutwardPage() {
           <Input
             ref={scanInputRef}
             autoFocus
+            disabled={submitting}
             className="min-w-48 flex-1"
             placeholder="Scan QR or type number — keeps adding to cart"
             value={scanInput}
@@ -527,7 +534,9 @@ export default function OutwardPage() {
               }
             }}
           />
-          <Button onClick={() => addToCart(scanInput)}>Add to Cart</Button>
+          <Button disabled={submitting} onClick={() => addToCart(scanInput)}>
+            Add to Cart
+          </Button>
         </div>
         {scanner.active && (
           <div className="mt-3.5 overflow-hidden rounded-md border border-border">

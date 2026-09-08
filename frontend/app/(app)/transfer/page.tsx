@@ -15,6 +15,7 @@ import { Card } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
+import { PdfOverlay } from "@/components/layout/PdfOverlay";
 import { cn } from "@/lib/utils";
 
 interface Store {
@@ -52,6 +53,8 @@ interface Transfer {
   transferred_by: string;
   transferred_at: string;
   notes: string | null;
+  item_code: string | null;
+  description: string | null;
 }
 
 export default function TransferPage() {
@@ -167,6 +170,7 @@ export default function TransferPage() {
   }
 
   async function addToCart(raw: string) {
+    if (submitting) return;
     const value = raw.trim().toUpperCase();
     if (!value) return;
     setScanInput("");
@@ -290,79 +294,81 @@ export default function TransferPage() {
     if (!toStore) return showToast("Select a destination store", "error");
 
     setSubmitting(true);
-
-    const { standalone, boxes } = groupedCart;
-    // A box only submits as one atomic kind:'box' call when the cart holds every
-    // currently-eligible reel of that box. Anything less — including a box that
-    // can never be "complete" because some of its reels have already scattered
-    // to another store — submits as individual kind:'reel' calls instead, which
-    // the backend now genuinely supports.
-    const units: ({ type: "box"; boxNumber: string; items: CartItem[] } | { type: "reel"; item: CartItem })[] = [];
-    for (const [boxNumber, items] of Object.entries(boxes)) {
-      const total = boxTotals[boxNumber];
-      if (total !== undefined && items.length === total) {
-        units.push({ type: "box", boxNumber, items });
-      } else {
-        items.forEach((item) => units.push({ type: "reel", item }));
-      }
-    }
-    standalone.forEach((item) => units.push({ type: "reel", item }));
-
-    let successReels = 0;
-    let successBoxes = 0;
-    let pendingReels = 0;
-    const errors: string[] = [];
-    // "Handled" = removed from the cart — both an immediate transfer and a
-    // queued-for-approval request are done as far as this cart is concerned,
-    // they just haven't necessarily moved yet (non-approver roles queue a
-    // pending request here exactly like every other write in this app — see
-    // routes/transfer.js POST /). Report the two outcomes separately so a
-    // pending submission never gets reported as an already-completed transfer.
-    const handled = new Set<string>();
-
-    for (const unit of units) {
-      try {
-        const result = await api<{ pending?: boolean }>("/api/transfer", {
-          method: "POST",
-          body: {
-            kind: unit.type,
-            number: unit.type === "box" ? unit.boxNumber : unit.item.reel_number,
-            to_store: toStore,
-            notes: notes.trim() || undefined,
-          },
-        });
-        const reelNumbers = unit.type === "box" ? unit.items.map((i) => i.reel_number) : [unit.item.reel_number];
-        reelNumbers.forEach((rn) => handled.add(rn));
-        if (result.pending) {
-          pendingReels += reelNumbers.length;
+    try {
+      const { standalone, boxes } = groupedCart;
+      // A box only submits as one atomic kind:'box' call when the cart holds every
+      // currently-eligible reel of that box. Anything less — including a box that
+      // can never be "complete" because some of its reels have already scattered
+      // to another store — submits as individual kind:'reel' calls instead, which
+      // the backend now genuinely supports.
+      const units: ({ type: "box"; boxNumber: string; items: CartItem[] } | { type: "reel"; item: CartItem })[] = [];
+      for (const [boxNumber, items] of Object.entries(boxes)) {
+        const total = boxTotals[boxNumber];
+        if (total !== undefined && items.length === total) {
+          units.push({ type: "box", boxNumber, items });
         } else {
-          successReels += reelNumbers.length;
-          if (unit.type === "box") successBoxes++;
+          items.forEach((item) => units.push({ type: "reel", item }));
         }
-      } catch (err) {
-        const label = unit.type === "box" ? unit.boxNumber : unit.item.reel_number;
-        errors.push(`${label}: ${err instanceof Error ? err.message : "failed"}`);
       }
-    }
+      standalone.forEach((item) => units.push({ type: "reel", item }));
 
-    handled.forEach((rn) => cartReelsRef.current.delete(rn));
-    setCart((prev) => prev.filter((item) => !handled.has(item.reel_number)));
+      let successReels = 0;
+      let successBoxes = 0;
+      let pendingReels = 0;
+      const errors: string[] = [];
+      // "Handled" = removed from the cart — both an immediate transfer and a
+      // queued-for-approval request are done as far as this cart is concerned,
+      // they just haven't necessarily moved yet (non-approver roles queue a
+      // pending request here exactly like every other write in this app — see
+      // routes/transfer.js POST /). Report the two outcomes separately so a
+      // pending submission never gets reported as an already-completed transfer.
+      const handled = new Set<string>();
 
-    if (successReels > 0) {
-      showToast(`${successReels} reel(s)${successBoxes ? ` — ${successBoxes} as whole box${successBoxes > 1 ? "es" : ""}` : ""} transferred`);
-    }
-    if (pendingReels > 0) {
-      showToast(`${pendingReels} reel(s) submitted for approval`);
-    }
-    if (errors.length > 0) {
-      showToast(`${errors.length} failed: ${errors[0]}`, "error");
-    }
-    if (successReels === 0 && pendingReels === 0 && errors.length === 0) {
-      showToast("Nothing to transfer", "error");
-    }
+      for (const unit of units) {
+        try {
+          const result = await api<{ pending?: boolean }>("/api/transfer", {
+            method: "POST",
+            body: {
+              kind: unit.type,
+              number: unit.type === "box" ? unit.boxNumber : unit.item.reel_number,
+              to_store: toStore,
+              notes: notes.trim() || undefined,
+            },
+          });
+          const reelNumbers = unit.type === "box" ? unit.items.map((i) => i.reel_number) : [unit.item.reel_number];
+          reelNumbers.forEach((rn) => handled.add(rn));
+          if (result.pending) {
+            pendingReels += reelNumbers.length;
+          } else {
+            successReels += reelNumbers.length;
+            if (unit.type === "box") successBoxes++;
+          }
+        } catch (err) {
+          const label = unit.type === "box" ? unit.boxNumber : unit.item.reel_number;
+          errors.push(`${label}: ${err instanceof Error ? err.message : "failed"}`);
+        }
+      }
 
-    loadRecentTransfers();
-    setSubmitting(false);
+      handled.forEach((rn) => cartReelsRef.current.delete(rn));
+      setCart((prev) => prev.filter((item) => !handled.has(item.reel_number)));
+
+      if (successReels > 0) {
+        showToast(`${successReels} reel(s)${successBoxes ? ` — ${successBoxes} as whole box${successBoxes > 1 ? "es" : ""}` : ""} transferred`);
+      }
+      if (pendingReels > 0) {
+        showToast(`${pendingReels} reel(s) submitted for approval`);
+      }
+      if (errors.length > 0) {
+        showToast(`${errors.length} failed: ${errors[0]}`, "error");
+      }
+      if (successReels === 0 && pendingReels === 0 && errors.length === 0) {
+        showToast("Nothing to transfer", "error");
+      }
+
+      loadRecentTransfers();
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   async function undoTransfer(transferId: number, label: string) {
@@ -381,6 +387,7 @@ export default function TransferPage() {
 
   return (
     <div className="space-y-4">
+      <PdfOverlay active={submitting} message="Processing..." />
       <div>
         <h1 className="text-xl font-bold">Stock Transfer</h1>
         <p className="text-sm text-muted-foreground">Scan reels or boxes to build a transfer, then submit</p>
@@ -434,6 +441,7 @@ export default function TransferPage() {
           <Input
             ref={scanInputRef}
             autoFocus
+            disabled={submitting}
             className="min-w-48 flex-1"
             placeholder="Scan or type REEL-##### or BOX-####"
             value={scanInput}
@@ -445,7 +453,9 @@ export default function TransferPage() {
               }
             }}
           />
-          <Button onClick={() => addToCart(scanInput)}>Add to Cart</Button>
+          <Button disabled={submitting} onClick={() => addToCart(scanInput)}>
+            Add to Cart
+          </Button>
         </div>
         {scanner.active && (
           <div className="mt-3.5 overflow-hidden rounded-md border border-border">
@@ -566,7 +576,19 @@ export default function TransferPage() {
           data={transfers}
           getRowKey={(t) => t.id}
           columns={[
-            { label: "Item", render: (t) => <strong>{t.reel_number || t.box_number}</strong> },
+            { label: "Reel/Box", render: (t) => <strong>{t.reel_number || t.box_number}</strong> },
+            {
+              label: "Item",
+              render: (t) =>
+                t.item_code ? (
+                  <>
+                    {t.item_code}
+                    <div className="text-xs text-muted-foreground">{t.description || "—"}</div>
+                  </>
+                ) : (
+                  "—"
+                ),
+            },
             { label: "Box", render: (t) => (t.reel_number ? t.box_number || "—" : "—") },
             { label: "From", render: (t) => storeLabel(t.from_store) },
             { label: "To", render: (t) => storeLabel(t.to_store) },

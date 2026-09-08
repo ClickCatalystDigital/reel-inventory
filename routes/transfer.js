@@ -124,20 +124,26 @@ router.get('/recent', ah(async (req, res) => {
   const params = [];
   const conditions = [];
   if (store && store !== 'all') {
-    conditions.push('(from_store = ? OR to_store = ?)');
+    conditions.push('(t.from_store = ? OR t.to_store = ?)');
     params.push(store, store);
   }
-  if (date_from) { conditions.push('transferred_at >= ?'); params.push(date_from + ' 00:00:00'); }
-  if (date_to) { conditions.push('transferred_at <= ?'); params.push(date_to + ' 23:59:59'); }
+  if (date_from) { conditions.push('t.transferred_at >= ?'); params.push(date_from + ' 00:00:00'); }
+  if (date_to) { conditions.push('t.transferred_at <= ?'); params.push(date_to + ' 23:59:59'); }
   const where = conditions.length ? 'WHERE ' + conditions.join(' AND ') : '';
 
-  const countRow = await queryOne(`SELECT COUNT(*) as total FROM stock_transfers ${where}`, params);
+  const countRow = await queryOne(`SELECT COUNT(*) as total FROM stock_transfers t ${where}`, params);
 
+  // LEFT JOIN (not JOIN) — legacy pre-per-reel-logging transfer rows can have
+  // reel_number IS NULL (box-summed rows, see routes/transfer.js's undo legacy
+  // fallback), so item_code/description just come back null for those.
   params.push(limit, offset);
   const rows = await queryAll(`
-    SELECT * FROM stock_transfers
+    SELECT t.*, r.item_code, i.description
+    FROM stock_transfers t
+    LEFT JOIN reels r ON t.reel_number = r.reel_number
+    LEFT JOIN items i ON r.item_code = i.item_code
     ${where}
-    ORDER BY transferred_at DESC
+    ORDER BY t.transferred_at DESC
     LIMIT ? OFFSET ?
   `, params);
   res.json({ rows, total: countRow.total });
