@@ -512,20 +512,25 @@ router.get('/daily-report', ah(async (req, res) => {
   doc.text(`Transfers Today (${data.transfers.length})`, MARGIN, y);
   y += 18;
 
-  const TCOL_WIDTHS = { item: 110, from: 130, to: 130, qty: 90, by: 140, at: CONTENT_W - 110 - 130 - 130 - 90 - 140 };
+  const TCOL_WIDTHS = {
+    itemCode: 160, reelBox: 90, from: 100, to: 100, qty: 60, by: 105,
+    at: CONTENT_W - 160 - 90 - 100 - 100 - 60 - 105,
+  };
   const tcol = {
-    item: MARGIN,
-    from: MARGIN + TCOL_WIDTHS.item,
-    to: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from,
-    qty: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to,
-    by: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty,
-    at: MARGIN + TCOL_WIDTHS.item + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty + TCOL_WIDTHS.by,
+    itemCode: MARGIN,
+    reelBox: MARGIN + TCOL_WIDTHS.itemCode,
+    from: MARGIN + TCOL_WIDTHS.itemCode + TCOL_WIDTHS.reelBox,
+    to: MARGIN + TCOL_WIDTHS.itemCode + TCOL_WIDTHS.reelBox + TCOL_WIDTHS.from,
+    qty: MARGIN + TCOL_WIDTHS.itemCode + TCOL_WIDTHS.reelBox + TCOL_WIDTHS.from + TCOL_WIDTHS.to,
+    by: MARGIN + TCOL_WIDTHS.itemCode + TCOL_WIDTHS.reelBox + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty,
+    at: MARGIN + TCOL_WIDTHS.itemCode + TCOL_WIDTHS.reelBox + TCOL_WIDTHS.from + TCOL_WIDTHS.to + TCOL_WIDTHS.qty + TCOL_WIDTHS.by,
   };
 
   function drawTransferTableHeader(doc, y) {
     doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
     doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
-    doc.text('ITEM', tcol.item, y + 6, { width: TCOL_WIDTHS.item, lineBreak: false });
+    doc.text('ITEM CODE', tcol.itemCode, y + 6, { width: TCOL_WIDTHS.itemCode, lineBreak: false });
+    doc.text('REEL/BOX', tcol.reelBox, y + 6, { width: TCOL_WIDTHS.reelBox, lineBreak: false });
     doc.text('FROM', tcol.from, y + 6, { width: TCOL_WIDTHS.from, lineBreak: false });
     doc.text('TO', tcol.to, y + 6, { width: TCOL_WIDTHS.to, lineBreak: false });
     doc.text('QTY', tcol.qty, y + 6, { width: TCOL_WIDTHS.qty, lineBreak: false });
@@ -553,8 +558,9 @@ router.get('/daily-report', ah(async (req, res) => {
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
 
     doc.fontSize(8).fillColor('#333333');
-    doc.font('Helvetica-Bold').text(t.reel_number || t.box_number || '-', tcol.item, y + 6, { width: TCOL_WIDTHS.item, lineBreak: false });
-    doc.font('Helvetica').text(t.from_store_name || t.from_store, tcol.from, y + 6, { width: TCOL_WIDTHS.from, lineBreak: false });
+    doc.font('Helvetica-Bold').text(t.item_code || '-', tcol.itemCode, y + 6, { width: TCOL_WIDTHS.itemCode, lineBreak: false, ellipsis: true });
+    doc.font('Helvetica').text(t.reel_number || t.box_number || '-', tcol.reelBox, y + 6, { width: TCOL_WIDTHS.reelBox, lineBreak: false });
+    doc.text(t.from_store_name || t.from_store, tcol.from, y + 6, { width: TCOL_WIDTHS.from, lineBreak: false });
     doc.text(t.to_store_name || t.to_store, tcol.to, y + 6, { width: TCOL_WIDTHS.to, lineBreak: false });
     doc.text(String(t.quantity ?? 0), tcol.qty, y + 6, { width: TCOL_WIDTHS.qty, lineBreak: false });
     doc.text(t.transferred_by || '-', tcol.by, y + 6, { width: TCOL_WIDTHS.by, lineBreak: false });
@@ -600,8 +606,10 @@ router.get('/transfer-report', ah(async (req, res) => {
   const rows = await queryAll(`
     SELECT st.reel_number, st.box_number, st.from_store, st.to_store, st.quantity,
       st.transferred_by, st.transferred_at, st.notes,
-      fs.name as from_store_name, ts.name as to_store_name
+      fs.name as from_store_name, ts.name as to_store_name,
+      r.item_code
     FROM stock_transfers st
+    LEFT JOIN reels r ON r.reel_number = st.reel_number
     LEFT JOIN stores fs ON fs.code = st.from_store
     LEFT JOIN stores ts ON ts.code = st.to_store
     ${where}
@@ -624,22 +632,27 @@ router.get('/transfer-report', ah(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename=transfer_report_${rangeLabel}.pdf`);
   doc.pipe(res);
 
-  const COL_WIDTHS = { item: 85, box: 85, from: 105, to: 105, qty: 65, by: 110, at: 105, notes: CONTENT_W - 85 - 85 - 105 - 105 - 65 - 110 - 105 };
+  const COL_WIDTHS = {
+    itemCode: 130, reel: 65, box: 55, from: 90, to: 90, qty: 50, by: 90, at: 90,
+    notes: CONTENT_W - 130 - 65 - 55 - 90 - 90 - 50 - 90 - 90,
+  };
   const col = {
-    item: MARGIN,
-    box: MARGIN + COL_WIDTHS.item,
-    from: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box,
-    to: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from,
-    qty: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to,
-    by: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty,
-    at: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by,
-    notes: MARGIN + COL_WIDTHS.item + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by + COL_WIDTHS.at,
+    itemCode: MARGIN,
+    reel: MARGIN + COL_WIDTHS.itemCode,
+    box: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel,
+    from: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box,
+    to: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from,
+    qty: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to,
+    by: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty,
+    at: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by,
+    notes: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by + COL_WIDTHS.at,
   };
 
   function drawTableHeader(doc, y) {
     doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
     doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
-    doc.text('ITEM', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.text('ITEM CODE', col.itemCode, y + 6, { width: COL_WIDTHS.itemCode, lineBreak: false });
+    doc.text('REEL', col.reel, y + 6, { width: COL_WIDTHS.reel, lineBreak: false });
     doc.text('BOX', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
     doc.text('FROM', col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
     doc.text('TO', col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
@@ -699,8 +712,9 @@ router.get('/transfer-report', ah(async (req, res) => {
     if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
 
     doc.fontSize(8).fillColor('#333333');
-    doc.font('Helvetica-Bold').text(t.reel_number || t.box_number || '-', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
-    doc.font('Helvetica').text(t.reel_number ? (t.box_number || '—') : '—', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
+    doc.font('Helvetica-Bold').text(t.item_code || '-', col.itemCode, y + 6, { width: COL_WIDTHS.itemCode, lineBreak: false, ellipsis: true });
+    doc.font('Helvetica').text(t.reel_number || '—', col.reel, y + 6, { width: COL_WIDTHS.reel, lineBreak: false });
+    doc.text(t.box_number || '—', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
     doc.text(t.from_store_name || t.from_store, col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
     doc.text(t.to_store_name || t.to_store, col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
     doc.text(formatQtyStr(t.quantity), col.qty, y + 6, { width: COL_WIDTHS.qty, lineBreak: false });

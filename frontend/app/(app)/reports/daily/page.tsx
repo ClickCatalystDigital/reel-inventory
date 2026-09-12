@@ -20,6 +20,7 @@ interface ItemQty {
 interface TransferRow {
   reel_number: string | null;
   box_number: string | null;
+  item_code: string | null;
   from_store: string;
   to_store: string;
   from_store_name: string | null;
@@ -151,7 +152,8 @@ export default function DailyReportPage() {
           pageSize={10}
           getRowKey={(t) => `${t.reel_number || t.box_number}-${t.transferred_at}`}
           columns={[
-            { label: "Item", render: (t) => <strong>{t.reel_number || t.box_number}</strong> },
+            { label: "Item Code", render: (t) => <strong>{t.item_code || "-"}</strong> },
+            { label: "Reel/Box", render: (t) => t.reel_number || t.box_number },
             { label: "From", render: (t) => t.from_store_name || t.from_store },
             { label: "To", render: (t) => t.to_store_name || t.to_store },
             { label: "Qty", render: (t) => formatQty(t.quantity) },

@@ -66,8 +66,10 @@ async function getDailyReportData(storeCode, date) {
   // from inward/outward, that Daily Report never surfaced at all.
   const transfers = await queryAll(`
     SELECT st.reel_number, st.box_number, st.from_store, st.to_store, st.quantity,
-      st.transferred_by, st.transferred_at, fs.name as from_store_name, ts.name as to_store_name
+      st.transferred_by, st.transferred_at, fs.name as from_store_name, ts.name as to_store_name,
+      r.item_code
     FROM stock_transfers st
+    LEFT JOIN reels r ON r.reel_number = st.reel_number
     LEFT JOIN stores fs ON fs.code = st.from_store
     LEFT JOIN stores ts ON ts.code = st.to_store
     WHERE st.transferred_at BETWEEN ? AND ?${storeFilter ? ' AND (st.from_store = ? OR st.to_store = ?)' : ''}
