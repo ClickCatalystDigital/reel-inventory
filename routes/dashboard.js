@@ -5,6 +5,7 @@ const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
 const { getDailyReportData } = require('../utils/dailyReport');
+const { hadStockAtStore } = require('../utils/storeMembership');
 
 // Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block
 // outright — except gelco_manager reading /stock-summary, which backs their "Stocks" tab
@@ -84,13 +85,13 @@ router.get('/stock-summary', ah(async (req, res) => {
   let params = [];
 
   // When a specific store is selected, an item only belongs to that store's Stock
-  // Summary if it currently has live stock there — same EXISTS membership rule as
-  // Catalog (routes/items.js) — otherwise every item would show a row of zeros
-  // instead of just not appearing. The LEFT JOIN below stays a LEFT JOIN (not
+  // Summary if it has ever had stock there (utils/storeMembership.js) — same rule as
+  // Catalog (routes/items.js): a zero-stock item keeps showing with 0 Qty, but items
+  // never stocked there don't appear as rows of zeros. The LEFT JOIN below stays a LEFT JOIN (not
   // switched to inner) so the aggregate counts (total/outwarded) stay accurate
   // for items that do qualify; this WHERE EXISTS only controls which items appear.
   const membershipFilter = storeFilter
-    ? `WHERE EXISTS (SELECT 1 FROM reels re WHERE re.item_code = i.item_code AND re.store_code = ? AND re.status = 'In Stock')`
+    ? `WHERE ${hadStockAtStore('i.item_code')}`
     : '';
 
   if (as_on_date) {
@@ -105,7 +106,7 @@ router.get('/stock-summary', ah(async (req, res) => {
       GROUP BY i.item_code ORDER BY i.item_code
     `;
     params.push(as_on_date + ' 23:59:59');
-    if (storeFilter) params.push(store, store);
+    if (storeFilter) params.push(store, store, store);
   } else {
     query = `
       SELECT i.item_code, i.description, i.default_spq,
@@ -117,7 +118,7 @@ router.get('/stock-summary', ah(async (req, res) => {
       ${membershipFilter}
       GROUP BY i.item_code ORDER BY i.item_code
     `;
-    if (storeFilter) params.push(store, store);
+    if (storeFilter) params.push(store, store, store);
   }
 
   res.json(await queryAll(query, params));
@@ -429,11 +430,11 @@ router.get('/export-stock', ah(async (req, res) => {
   const as_on_date = req.query.as_on_date || new Date().toISOString().split('T')[0];
   const { store } = req.query;
   const storeFilter = store && store !== 'all';
-  const params = storeFilter ? [store, store] : [];
+  const params = storeFilter ? [store, store, store] : [];
 
-  // Same EXISTS membership rule as /stock-summary above and Catalog (routes/items.js).
+  // Same membership rule as /stock-summary above and Catalog (routes/items.js).
   const membershipFilter = storeFilter
-    ? `WHERE EXISTS (SELECT 1 FROM reels re WHERE re.item_code = i.item_code AND re.store_code = ? AND re.status = 'In Stock')`
+    ? `WHERE ${hadStockAtStore('i.item_code')}`
     : '';
 
   const rows = await queryAll(`

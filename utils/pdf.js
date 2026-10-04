@@ -584,7 +584,7 @@ router.get('/daily-report', ah(async (req, res) => {
   doc.end();
 }));
 
-// GET Stock Transfer report PDF — mirrors the Transfer page's Recent Transfers filters
+// GET Stock Transfer report PDF — aggregated per direction/item like the Packing List; mirrors the Transfer page's Recent Transfers filters
 // (store/date_from/date_to) exactly, so "download PDF" always matches what's on screen.
 // Not blocked for Gelco roles outright (unlike /daily-report) — GET /api/transfer/recent
 // already scopes them to their own store rather than refusing them, so this matches that.
@@ -605,16 +605,33 @@ router.get('/transfer-report', ah(async (req, res) => {
 
   const rows = await queryAll(`
     SELECT st.reel_number, st.box_number, st.from_store, st.to_store, st.quantity,
-      st.transferred_by, st.transferred_at, st.notes,
       fs.name as from_store_name, ts.name as to_store_name,
-      r.item_code
+      r.item_code, i.description, i.default_spq
     FROM stock_transfers st
     LEFT JOIN reels r ON r.reel_number = st.reel_number
+    LEFT JOIN items i ON i.item_code = r.item_code
     LEFT JOIN stores fs ON fs.code = st.from_store
     LEFT JOIN stores ts ON ts.code = st.to_store
     ${where}
-    ORDER BY st.transferred_at DESC
+    ORDER BY st.from_store, st.to_store, r.item_code, st.reel_number
   `, params);
+
+  // Aggregate like the Packing List: one section per direction (From → To), one row
+  // per item within it. From/To is mostly identical across a report, so it lives in
+  // the section header instead of repeating on every row.
+  const sections = new Map();
+  for (const t of rows) {
+    const key = `${t.from_store}|${t.to_store}`;
+    if (!sections.has(key)) {
+      sections.set(key, { from: t.from_store_name || t.from_store, to: t.to_store_name || t.to_store, items: new Map() });
+    }
+    const items = sections.get(key).items;
+    const code = t.item_code || '-';
+    if (!items.has(code)) items.set(code, { item_code: code, description: t.description || '', spq: t.default_spq ?? '—', reels: [], qty: 0 });
+    const it = items.get(code);
+    it.reels.push((t.reel_number || t.box_number || '—').replace('REEL-', ''));
+    it.qty += t.quantity || 0;
+  }
 
   const PAGE_W = 841.89;
   const PAGE_H = 595.28;
@@ -632,34 +649,22 @@ router.get('/transfer-report', ah(async (req, res) => {
   res.setHeader('Content-Disposition', `attachment; filename=transfer_report_${rangeLabel}.pdf`);
   doc.pipe(res);
 
-  const COL_WIDTHS = {
-    itemCode: 130, reel: 65, box: 55, from: 90, to: 90, qty: 50, by: 90, at: 90,
-    notes: CONTENT_W - 130 - 65 - 55 - 90 - 90 - 50 - 90 - 90,
-  };
-  const col = {
-    itemCode: MARGIN,
-    reel: MARGIN + COL_WIDTHS.itemCode,
-    box: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel,
-    from: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box,
-    to: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from,
-    qty: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to,
-    by: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty,
-    at: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by,
-    notes: MARGIN + COL_WIDTHS.itemCode + COL_WIDTHS.reel + COL_WIDTHS.box + COL_WIDTHS.from + COL_WIDTHS.to + COL_WIDTHS.qty + COL_WIDTHS.by + COL_WIDTHS.at,
-  };
+  // Same column layout as the Packing List: # | Item | Description | SPQ | Reels | Qty | Reel Numbers
+  const COL_WIDTHS = { sn: 30, item: 110, desc: 200, spq: 55, reelQty: 80, totalQty: 85, reelNums: CONTENT_W - 30 - 110 - 200 - 55 - 80 - 85 };
+  const col = { sn: MARGIN };
+  let x = MARGIN;
+  for (const k of ['sn', 'item', 'desc', 'spq', 'reelQty', 'totalQty', 'reelNums']) { col[k] = x; x += COL_WIDTHS[k]; }
 
   function drawTableHeader(doc, y) {
     doc.rect(MARGIN, y, CONTENT_W, 20).fill('#1a1a18');
     doc.fontSize(7.5).font('Helvetica-Bold').fillColor('#ffffff');
-    doc.text('ITEM CODE', col.itemCode, y + 6, { width: COL_WIDTHS.itemCode, lineBreak: false });
-    doc.text('REEL', col.reel, y + 6, { width: COL_WIDTHS.reel, lineBreak: false });
-    doc.text('BOX', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
-    doc.text('FROM', col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
-    doc.text('TO', col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
-    doc.text('QTY', col.qty, y + 6, { width: COL_WIDTHS.qty, lineBreak: false });
-    doc.text('BY', col.by, y + 6, { width: COL_WIDTHS.by, lineBreak: false });
-    doc.text('DATE & TIME', col.at, y + 6, { width: COL_WIDTHS.at, lineBreak: false });
-    doc.text('NOTES', col.notes, y + 6, { width: COL_WIDTHS.notes, lineBreak: false });
+    doc.text('#', col.sn + 10, y + 6, { width: COL_WIDTHS.sn, lineBreak: false });
+    doc.text('ITEM CODE', col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false });
+    doc.text('DESCRIPTION', col.desc, y + 6, { width: COL_WIDTHS.desc, lineBreak: false });
+    doc.text('SPQ', col.spq, y + 6, { width: COL_WIDTHS.spq, lineBreak: false });
+    doc.text('NO. OF REELS', col.reelQty, y + 6, { width: COL_WIDTHS.reelQty, lineBreak: false });
+    doc.text('TOTAL QTY', col.totalQty, y + 6, { width: COL_WIDTHS.totalQty, lineBreak: false });
+    doc.text('REEL NUMBERS', col.reelNums, y + 6, { width: COL_WIDTHS.reelNums, lineBreak: false });
     return y + 22;
   }
 
@@ -686,48 +691,60 @@ router.get('/transfer-report', ah(async (req, res) => {
     new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
     MARGIN + 560, metaY
   );
-  doc.font('Helvetica-Bold').text('Total Transfers:', MARGIN + 650, metaY);
-  doc.font('Helvetica').text(String(rows.length), MARGIN + 745, metaY);
+  doc.font('Helvetica-Bold').text('Total Reels:', MARGIN + 670, metaY);
+  doc.font('Helvetica').text(String(rows.length), MARGIN + 735, metaY);
 
-  // --- Table ---
   let y = metaY + 22;
-  y = drawTableHeader(doc, y);
 
   if (!rows.length) {
     doc.fontSize(9).font('Helvetica').fillColor('#666666');
     doc.text('No transfers found for this filter.', MARGIN, y + 6);
-    y += 22;
   }
 
-  let totalQty = 0;
-  for (let i = 0; i < rows.length; i++) {
-    const t = rows[i];
-    totalQty += t.quantity || 0;
-    const rowH = 20;
-    if (y + rowH > PAGE_H - MARGIN - 40) {
+  let grandReels = 0;
+  let grandQty = 0;
+  for (const sec of sections.values()) {
+    // Section band + table header need room for at least one row, else start a new page.
+    if (y + 22 + 22 + 30 > PAGE_H - MARGIN - 40) {
       doc.addPage({ size: 'A4', layout: 'landscape' });
       y = MARGIN;
-      y = drawTableHeader(doc, y);
     }
-    if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
+    doc.rect(MARGIN, y, CONTENT_W, 22).fill('#e8e8e2');
+    doc.fontSize(10).font('Helvetica-Bold').fillColor('#000000');
+    doc.text(`FROM: ${sec.from}      TO: ${sec.to}`, MARGIN + 8, y + 6, { width: CONTENT_W - 16, lineBreak: false });
+    y += 24;
+    y = drawTableHeader(doc, y);
 
-    doc.fontSize(8).fillColor('#333333');
-    doc.font('Helvetica-Bold').text(t.item_code || '-', col.itemCode, y + 6, { width: COL_WIDTHS.itemCode, lineBreak: false, ellipsis: true });
-    doc.font('Helvetica').text(t.reel_number || '—', col.reel, y + 6, { width: COL_WIDTHS.reel, lineBreak: false });
-    doc.text(t.box_number || '—', col.box, y + 6, { width: COL_WIDTHS.box, lineBreak: false });
-    doc.text(t.from_store_name || t.from_store, col.from, y + 6, { width: COL_WIDTHS.from, lineBreak: false });
-    doc.text(t.to_store_name || t.to_store, col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
-    doc.text(formatQtyStr(t.quantity), col.qty, y + 6, { width: COL_WIDTHS.qty, lineBreak: false });
-    doc.text(t.transferred_by || '-', col.by, y + 6, { width: COL_WIDTHS.by, lineBreak: false });
-    doc.text((t.transferred_at || '').slice(0, 16), col.at, y + 6, { width: COL_WIDTHS.at, lineBreak: false });
-    doc.fontSize(7).text(t.notes || '—', col.notes, y + 6, { width: COL_WIDTHS.notes, lineBreak: false });
+    let secReels = 0;
+    let secQty = 0;
+    let i = 0;
+    for (const it of sec.items.values()) {
+      const reelNumbers = it.reels.join(', ');
+      const estimatedLines = Math.ceil((reelNumbers.length * 5.5) / COL_WIDTHS.reelNums) + 1;
+      const rowH = Math.max(20, estimatedLines * 11 + 8);
+      if (y + rowH > PAGE_H - MARGIN - 40) {
+        doc.addPage({ size: 'A4', layout: 'landscape' });
+        y = MARGIN;
+        y = drawTableHeader(doc, y);
+      }
+      if (i % 2 === 0) doc.rect(MARGIN, y, CONTENT_W, rowH).fill('#f8f8f5');
 
-    doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + CONTENT_W, y + rowH).lineWidth(0.5).stroke('#dddddd');
-    y += rowH;
-  }
+      doc.fontSize(8).fillColor('#333333');
+      doc.font('Helvetica').text(String(i + 1), col.sn + 10, y + 6, { width: COL_WIDTHS.sn, lineBreak: false });
+      doc.font('Helvetica-Bold').text(it.item_code, col.item, y + 6, { width: COL_WIDTHS.item, lineBreak: false, ellipsis: true });
+      doc.font('Helvetica').text(it.description, col.desc, y + 6, { width: COL_WIDTHS.desc, lineBreak: false, ellipsis: true });
+      doc.text(String(it.spq), col.spq, y + 6, { width: COL_WIDTHS.spq, lineBreak: false });
+      doc.text(String(it.reels.length), col.reelQty, y + 6, { width: COL_WIDTHS.reelQty, lineBreak: false });
+      doc.font('Helvetica-Bold').text(formatQtyStr(it.qty), col.totalQty, y + 6, { width: COL_WIDTHS.totalQty, lineBreak: false });
+      doc.font('Helvetica').fontSize(7).text(reelNumbers, col.reelNums, y + 6, { width: COL_WIDTHS.reelNums, lineBreak: true });
+      doc.moveTo(MARGIN, y + rowH).lineTo(MARGIN + CONTENT_W, y + rowH).lineWidth(0.5).stroke('#dddddd');
 
-  // --- Totals row ---
-  if (rows.length) {
+      y += rowH;
+      i++;
+      secReels += it.reels.length;
+      secQty += it.qty;
+    }
+
     y += 4;
     if (y + 22 > PAGE_H - MARGIN) {
       doc.addPage({ size: 'A4', layout: 'landscape' });
@@ -735,9 +752,25 @@ router.get('/transfer-report', ah(async (req, res) => {
     }
     doc.rect(MARGIN, y, CONTENT_W, 22).fill('#f0f0ec');
     doc.fontSize(9).font('Helvetica-Bold').fillColor('#000000');
-    doc.text('TOTAL', col.to, y + 6, { width: COL_WIDTHS.to, lineBreak: false });
-    doc.text(`${rows.length} transfer${rows.length !== 1 ? 's' : ''}`, col.qty, y + 6, { width: COL_WIDTHS.qty + COL_WIDTHS.by, lineBreak: false });
-    doc.text(formatQtyStr(totalQty) + ' units', col.at, y + 6, { width: COL_WIDTHS.at + COL_WIDTHS.notes, lineBreak: false });
+    doc.text('TOTAL', col.desc, y + 6, { width: COL_WIDTHS.desc, lineBreak: false });
+    doc.text(`${secReels} reel${secReels !== 1 ? 's' : ''}`, col.reelQty, y + 6, { width: COL_WIDTHS.reelQty, lineBreak: false });
+    doc.text(formatQtyStr(secQty), col.totalQty, y + 6, { width: COL_WIDTHS.totalQty, lineBreak: false });
+    y += 34;
+    grandReels += secReels;
+    grandQty += secQty;
+  }
+
+  // Grand total only when there is more than one direction to add up.
+  if (sections.size > 1) {
+    if (y + 22 > PAGE_H - MARGIN) {
+      doc.addPage({ size: 'A4', layout: 'landscape' });
+      y = MARGIN;
+    }
+    doc.rect(MARGIN, y, CONTENT_W, 22).fill('#1a1a18');
+    doc.fontSize(9).font('Helvetica-Bold').fillColor('#ffffff');
+    doc.text('GRAND TOTAL', col.desc, y + 6, { width: COL_WIDTHS.desc, lineBreak: false });
+    doc.text(`${grandReels} reel${grandReels !== 1 ? 's' : ''}`, col.reelQty, y + 6, { width: COL_WIDTHS.reelQty, lineBreak: false });
+    doc.text(formatQtyStr(grandQty), col.totalQty, y + 6, { width: COL_WIDTHS.totalQty, lineBreak: false });
   }
 
   doc.end();

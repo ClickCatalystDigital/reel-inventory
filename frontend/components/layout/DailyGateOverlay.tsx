@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { usePathname } from "next/navigation";
 import { useDailyGate } from "@/hooks/use-daily-gate";
 import { api } from "@/lib/api";
 import { formatQty } from "@/lib/format";
@@ -12,8 +13,10 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 export function DailyGateOverlay() {
   const { isGelco, role, status, refetch } = useDailyGate();
   const [approving, setApproving] = useState(false);
+  const pathname = usePathname();
 
-  if (!isGelco || !status || status.approved) return null;
+  // /stocks is read-only (stock-summary lookup only) — viewable without clearing the gate.
+  if (pathname === "/stocks" || !isGelco || !status || status.approved) return null;
 
   async function approve() {
     setApproving(true);

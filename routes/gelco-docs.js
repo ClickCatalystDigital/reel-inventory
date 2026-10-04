@@ -4,19 +4,12 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { queryAll, execute, queryOne, nowIST } = require('../db/schema');
-const { S3Client, PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
+const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const ah = require('../utils/asyncHandler');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-const r2Client = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+const r2Client = require('../utils/r2');
 
 function requireDocsAccess(req, res, next) {
   if (!['admin', 'manager', 'gelco_manager'].includes(req.user?.role)) {

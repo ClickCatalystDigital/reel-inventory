@@ -50,3 +50,16 @@ const STATUS_VARIANT: Record<string, BadgeVariant> = {
 export function statusVariant(status: string): BadgeVariant {
   return STATUS_VARIANT[status] || "warning";
 }
+
+export function formatBytes(n: number | null | undefined): string {
+  const b = n || 0;
+  if (b < 1024) return `${b} B`;
+  const units = ["KB", "MB", "GB", "TB"];
+  let v = b / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${v >= 100 ? v.toFixed(0) : v.toFixed(1)} ${units[i]}`;
+}

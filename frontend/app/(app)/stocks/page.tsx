@@ -5,6 +5,7 @@ import { api } from "@/lib/api";
 import { formatQty } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 
 interface Store {
@@ -21,9 +22,10 @@ interface StockSummaryRow {
 }
 
 // gelco_manager's own Stock Summary view — same data/shape as Reports > Stock
-// Summary, but with its own store dropdown (LS Stores / Gelco Stores), since
+// Summary, but with its own LS/Gelco store tabs, since
 // the global top-nav selector is locked to Gelco Stores for this role and
-// Reports itself is outside their page allowlist. Lets them see either
+// Reports itself is outside their page allowlist. Read-only, so DailyGateOverlay
+// deliberately skips this page (nothing here writes data). Lets them see either
 // store's stock to decide what to order.
 export default function StocksPage() {
   const [stores, setStores] = useState<Store[]>([]);
@@ -57,17 +59,15 @@ export default function StocksPage() {
           <h1 className="text-xl font-bold">Stocks</h1>
           <p className="text-sm text-muted-foreground">Per-item stock levels — pick a store to see what to order</p>
         </div>
-        <select
-          className="h-9 rounded-md border border-border bg-secondary px-2 text-xs text-secondary-foreground"
-          value={store}
-          onChange={(e) => setStore(e.target.value)}
-        >
-          {stores.map((s) => (
-            <option key={s.code} value={s.code}>
-              {s.name}
-            </option>
-          ))}
-        </select>
+        <Tabs value={store} onValueChange={setStore}>
+          <TabsList>
+            {stores.map((s) => (
+              <TabsTrigger key={s.code} value={s.code}>
+                {s.name}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
       </div>
 
       <Card className="p-5">

@@ -5,6 +5,8 @@ const router = express.Router();
 const bcrypt = require('bcrypt');
 const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
+const { ListObjectsV2Command } = require('@aws-sdk/client-s3');
+const r2Client = require('../utils/r2');
 
 const ALLOWED_ROLES = ['admin', 'manager'];
 
@@ -84,6 +86,72 @@ router.delete('/users/:id', ah(async (req, res) => {
   const result = await execute('DELETE FROM users WHERE id = ?', [id]);
   if (result.changes === 0) return res.status(404).json({ error: 'User not found' });
   res.json({ success: true, message: 'User deleted' });
+}));
+
+// GET storage usage (read-only) — Turso per-table sizes via dbstat + Cloudflare R2 bucket size by prefix.
+function tableCategory(name) {
+  if (name.startsWith('crm_')) return 'CRM (shared)';
+  if (name === 'reels') return 'Reels';
+  if (name === 'outwards') return 'Outwards';
+  if (name === 'stock_transfers') return 'Transfers';
+  if (name === 'items' || name === 'boxes') return 'Items & boxes';
+  return 'Other';
+}
+
+async function tursoUsage() {
+  try {
+    // Indexes are folded into their table via sqlite_master.tbl_name.
+    const sizes = await queryAll(
+      'SELECT m.tbl_name AS name, SUM(d.pgsize) AS bytes FROM dbstat d JOIN sqlite_master m ON m.name = d.name GROUP BY m.tbl_name'
+    );
+    const total = (await queryOne('SELECT SUM(pgsize) AS bytes FROM dbstat')).bytes || 0;
+    const items = await Promise.all(sizes.map(async (t) => ({
+      name: t.name,
+      category: tableCategory(t.name),
+      bytes: t.bytes,
+      rows: (await queryOne(`SELECT COUNT(*) AS c FROM "${t.name.replace(/"/g, '""')}"`)).c,
+    })));
+    const rest = total - items.reduce((s, t) => s + t.bytes, 0);
+    if (rest > 0) items.push({ name: 'sqlite_schema', category: 'Other', bytes: rest, rows: null });
+    items.sort((a, b) => b.bytes - a.bytes);
+    return { available: true, total_bytes: total, items };
+  } catch (e) {
+    // dbstat can be missing on a local SQLite build — show "unavailable", not an error.
+    return { available: false, error: e.message };
+  }
+}
+
+async function r2Usage() {
+  const bucket = process.env.R2_BUCKET_NAME;
+  if (!bucket || !process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
+    return { configured: false };
+  }
+  try {
+    // Bucket is shared with the ls_crm app; this app's own files live under inventory-docs/.
+    const groups = {
+      'inventory-docs/': { name: 'Inventory docs (this app)', category: 'Inventory docs', objects: 0, bytes: 0 },
+      other: { name: 'CRM files (ls_crm)', category: 'CRM files', objects: 0, bytes: 0 },
+    };
+    let token;
+    do {
+      const out = await r2Client.send(new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }));
+      for (const o of out.Contents || []) {
+        const g = o.Key.startsWith('inventory-docs/') ? groups['inventory-docs/'] : groups.other;
+        g.objects += 1;
+        g.bytes += o.Size || 0;
+      }
+      token = out.IsTruncated ? out.NextContinuationToken : undefined;
+    } while (token);
+    const items = Object.values(groups);
+    return { configured: true, total_bytes: items.reduce((s, g) => s + g.bytes, 0), items };
+  } catch (e) {
+    return { configured: true, error: e.message };
+  }
+}
+
+router.get('/storage', ah(async (req, res) => {
+  const [turso, r2] = await Promise.all([tursoUsage(), r2Usage()]);
+  res.json({ turso, r2 });
 }));
 
 module.exports = router;

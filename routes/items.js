@@ -4,17 +4,17 @@ const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
+const { hadStockAtStore } = require('../utils/storeMembership');
 
 router.get('/', ah(async (req, res) => {
   const { store } = req.query;
   let sql = "SELECT * FROM items WHERE status != 'Deleted'";
   const params = [];
   if (store && store !== 'all') {
-    // Catalog membership for a store is derived from live reel stock, not stored —
-    // items stays store-agnostic (a shared SKU list can exist in multiple stores at
-    // once, so a static store_code on items would be wrong data modeling).
-    sql += " AND EXISTS (SELECT 1 FROM reels r WHERE r.item_code = items.item_code AND r.store_code = ? AND r.status = 'In Stock')";
-    params.push(store);
+    // Catalog membership for a store is derived at query time, not stored (items stays
+    // store-agnostic). "Ever had stock there" so an item at 0 Qty keeps showing.
+    sql += ` AND ${hadStockAtStore('items.item_code')}`;
+    params.push(store, store);
   }
   sql += " ORDER BY created_at DESC";
   const items = await queryAll(sql, params);

@@ -9,6 +9,7 @@ import { useSelectedStore } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
+import { StorageCard } from "@/components/settings/StorageCard";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -81,6 +82,8 @@ export default function SettingsPage() {
         <h1 className="text-xl font-bold">Settings</h1>
         <p className="text-sm text-muted-foreground">Manage users and access levels</p>
       </div>
+
+      <StorageCard />
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center gap-2">
