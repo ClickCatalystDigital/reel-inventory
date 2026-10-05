@@ -1,4 +1,9 @@
-const { queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
+const { queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, nowIST } = require('../db/schema');
+
+// Rows per multi-row INSERT / IN() list — keeps bound variables far below SQLite's limit.
+const CHUNK = 400;
+const chunk = (arr, n = CHUNK) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
+const marks = (n) => Array(n).fill('?').join(',');
 
 async function executeInward(item_code, num_reels, num_boxes, notes, store_code = 'primary') {
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [item_code]);
@@ -7,43 +12,59 @@ async function executeInward(item_code, num_reels, num_boxes, notes, store_code 
 
   const totalReels = parseInt(num_reels);
   const totalBoxes = Number(num_boxes) > 0 ? Number(num_boxes) : 0;
-  const createdBoxes = [];
-  const createdReels = [];
+  // Reels per box: even split, remainder to the first boxes. No boxes = standalone reels.
+  const perBox = Array.from({ length: totalBoxes }, (_, b) =>
+    Math.floor(totalReels / totalBoxes) + (b < totalReels % totalBoxes ? 1 : 0));
 
-  if (totalBoxes === 0) {
-    for (let r = 0; r < totalReels; r++) {
-      const reelNumber = await getNextReelNumber();
-      await execute(
-        'INSERT INTO reels (reel_number, item_code, box_number, quantity, notes, inward_date, store_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
-        [reelNumber, item_code, null, item.default_spq, notes || null, nowIST(), store_code]
-      );
-      createdReels.push({ reel_number: reelNumber, item_code, quantity: item.default_spq, box_number: null });
-    }
-  } else {
-    const reelsPerBox = Math.floor(totalReels / totalBoxes);
-    const remainder = totalReels % totalBoxes;
-    for (let b = 0; b < totalBoxes; b++) {
-      const boxNumber = await getNextBoxNumber();
-      const reelsInThisBox = reelsPerBox + (b < remainder ? 1 : 0);
-      await execute(
-        'INSERT INTO boxes (box_number, item_code, reel_count, created_at, store_code) VALUES (?, ?, ?, ?, ?)',
-        [boxNumber, item_code, reelsInThisBox, nowIST(), store_code]
-      );
-      const boxReels = [];
-      for (let r = 0; r < reelsInThisBox; r++) {
-        const reelNumber = await getNextReelNumber();
-        await execute(
-          'INSERT INTO reels (reel_number, item_code, box_number, quantity, notes, inward_date, store_code) VALUES (?, ?, ?, ?, ?, ?, ?)',
-          [reelNumber, item_code, boxNumber, item.default_spq, notes || null, nowIST(), store_code]
-        );
-        boxReels.push({ reel_number: reelNumber, item_code, quantity: item.default_spq });
-        createdReels.push({ reel_number: reelNumber, item_code, quantity: item.default_spq, box_number: boxNumber });
+  // Everything is reserved and written in a fixed handful of queries (any size), not several per reel.
+  // If a reserved number collides with an existing one the counter fell behind: heal once, retry once.
+  for (let attempt = 1; ; attempt++) {
+    const reelStart = totalReels > 0 ? await reserveNumbers('reel', totalReels) : 0;
+    const boxStart = totalBoxes > 0 ? await reserveNumbers('box', totalBoxes) : 0;
+    const now = nowIST();
+    const createdBoxes = [];
+    const createdReels = [];
+    let next = reelStart;
+
+    if (totalBoxes === 0) {
+      for (let r = 0; r < totalReels; r++) {
+        createdReels.push({ reel_number: `REEL-${next++}`, item_code, quantity: item.default_spq, box_number: null });
       }
-      createdBoxes.push({ box_number: boxNumber, item_code, reel_count: reelsInThisBox, reels: boxReels });
+    } else {
+      perBox.forEach((count, b) => {
+        const box_number = `BOX-${boxStart + b}`;
+        const reels = [];
+        for (let r = 0; r < count; r++) {
+          const reel_number = `REEL-${next++}`;
+          reels.push({ reel_number, item_code, quantity: item.default_spq });
+          createdReels.push({ reel_number, item_code, quantity: item.default_spq, box_number });
+        }
+        createdBoxes.push({ box_number, item_code, reel_count: count, reels });
+      });
+    }
+
+    const statements = [];
+    for (const rows of chunk(createdBoxes)) {
+      statements.push([
+        `INSERT INTO boxes (box_number, item_code, reel_count, created_at, store_code) VALUES ${rows.map(() => '(?, ?, ?, ?, ?)').join(', ')}`,
+        rows.flatMap((b) => [b.box_number, item_code, b.reel_count, now, store_code]),
+      ]);
+    }
+    for (const rows of chunk(createdReels)) {
+      statements.push([
+        `INSERT INTO reels (reel_number, item_code, box_number, quantity, notes, inward_date, store_code) VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+        rows.flatMap((r) => [r.reel_number, item_code, r.box_number, item.default_spq, notes || null, now, store_code]),
+      ]);
+    }
+
+    try {
+      await batch(statements);
+      return { boxes: createdBoxes, reels: createdReels };
+    } catch (err) {
+      if (attempt === 1 && /UNIQUE|constraint/i.test(err.message)) { await healCounters(); continue; }
+      throw err;
     }
   }
-
-  return { boxes: createdBoxes, reels: createdReels };
 }
 
 // store_code is deliberately NOT a caller-settable parameter — it's always the
@@ -52,8 +73,9 @@ async function executeInward(item_code, num_reels, num_boxes, notes, store_code 
 // where the reel physically was, since nothing outside the Gelco-role path ever
 // checked the two matched — see SYSTEM.md's outward.js notes for the incident
 // this caused in production.
-async function executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id) {
-  const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
+// Validates one reel and returns the statements that ship it (insert outward row + update reel),
+// without running them — so a whole cart can go out in one batch (see executeOutwardMany).
+function planOutward(reel, reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id) {
   if (!reel) throw new Error(`Reel ${reel_number} not found`);
   if (reel.status === 'Outwarded') throw new Error(`Reel ${reel_number} already outwarded`);
 
@@ -69,19 +91,49 @@ async function executeOutwardReel(reel_number, customer_name, invoice_number, ou
     qtyShipped = reel.quantity;
   }
 
-  await execute(
-    `INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, company_id, po_id, store_code)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-    [reel_number, customer_name.trim(), invoice_number.trim(), qtyShipped, type, notes || null, nowIST(), company_id || null, po_id || null, reel.store_code]
-  );
+  const statements = [
+    [`INSERT INTO outwards (reel_number, customer_name, invoice_number, quantity_shipped, outward_type, notes, outward_date, company_id, po_id, store_code)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [reel_number, customer_name.trim(), invoice_number.trim(), qtyShipped, type, notes || null, nowIST(), company_id || null, po_id || null, reel.store_code]],
+    type === 'Full'
+      ? ['UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel_number]]
+      : ['UPDATE reels SET quantity = ? WHERE reel_number = ?', [reel.quantity - qtyShipped, reel_number]],
+  ];
+  return { qtyShipped, remaining: type === 'Full' ? 0 : reel.quantity - qtyShipped, statements };
+}
 
-  if (type === 'Full') {
-    await execute('UPDATE reels SET quantity = 0, status = ? WHERE reel_number = ?', ['Outwarded', reel_number]);
-  } else {
-    await execute('UPDATE reels SET quantity = ? WHERE reel_number = ?', [reel.quantity - qtyShipped, reel_number]);
+// Ships many reels with ONE read and ONE write round trip (was ~3 queries per reel — a 20-reel
+// cart blew past Workers' per-request subrequest cap). Per-reel failures are collected, the rest
+// still ship; the shipped ones are written atomically.
+async function executeOutwardMany(reel_numbers, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id) {
+  const reels = new Map();
+  for (const part of chunk([...new Set(reel_numbers)])) {
+    const rows = await queryAll(`SELECT * FROM reels WHERE reel_number IN (${marks(part.length)})`, part);
+    rows.forEach((r) => reels.set(r.reel_number, r));
   }
+  const errors = [];
+  const statements = [];
+  const seen = new Set();
+  for (const reel_number of reel_numbers) {
+    try {
+      // A reel listed twice: the second one would have found it already outwarded.
+      if (seen.has(reel_number)) throw new Error(`Reel ${reel_number} already outwarded`);
+      const plan = planOutward(reels.get(reel_number), reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id);
+      seen.add(reel_number);
+      statements.push(...plan.statements);
+    } catch (err) {
+      errors.push(`${reel_number}: ${err.message}`);
+    }
+  }
+  await batch(statements);
+  return { errors };
+}
 
-  return { qtyShipped, remaining: type === 'Full' ? 0 : reel.quantity - qtyShipped };
+async function executeOutwardReel(reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id) {
+  const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
+  const { qtyShipped, remaining, statements } = planOutward(reel, reel_number, customer_name, invoice_number, outward_type, quantity_shipped, notes, company_id, po_id);
+  await batch(statements);
+  return { qtyShipped, remaining };
 }
 
 // Moves one reel and logs its own stock_transfers row — shared by both the
@@ -160,9 +212,27 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
     // before failing would be exactly the kind of corruption "atomic" rules out).
     // Every reel's own CAS-protected move, plus the box's own store_code, commit
     // together or not at all.
+    // Three statements regardless of box size (was two per reel — each a network round trip).
+    // The UPDATE is the compare-and-swap for the whole box: every in-stock reel was just read at
+    // from_store, so if any was moved by someone else meanwhile, fewer rows change and we roll back.
     await withTransaction(async (tx) => {
-      for (const reel of activeReels) {
-        await transferOneReel(tx, reel, to_store, transferred_by, notes, number);
+      const nums = activeReels.map((r) => r.reel_number);
+      for (const part of chunk(nums)) {
+        const moved = await tx(
+          `UPDATE reels SET store_code = ? WHERE reel_number IN (${marks(part.length)}) AND store_code = ?`,
+          [to_store, ...part, from_store]
+        );
+        if (moved.changes !== part.length) {
+          throw new Error(`Box ${number} had reels moved by another transfer — refresh and try again`);
+        }
+      }
+      const now = nowIST();
+      for (const rows of chunk(activeReels)) {
+        await tx(
+          `INSERT INTO stock_transfers (reel_number, box_number, from_store, to_store, quantity, transferred_by, transferred_at, notes)
+           VALUES ${rows.map(() => '(?, ?, ?, ?, ?, ?, ?, ?)').join(', ')}`,
+          rows.flatMap((r) => [r.reel_number, number, r.store_code, to_store, r.quantity, transferred_by, now, notes || null])
+        );
       }
       const boxResult = await tx(
         'UPDATE boxes SET store_code = ? WHERE box_number = ? AND store_code = ?',
@@ -179,4 +249,4 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
   throw new Error(`Unknown transfer kind "${kind}"`);
 }
 
-module.exports = { executeInward, executeOutwardReel, executeStockTransfer };
+module.exports = { executeInward, executeOutwardReel, executeOutwardMany, executeStockTransfer };

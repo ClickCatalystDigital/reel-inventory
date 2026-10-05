@@ -2,7 +2,7 @@
 
 const express = require('express');
 const router = express.Router();
-const { queryAll, queryOne, execute, getNextReelNumber, getNextBoxNumber, nowIST } = require('../db/schema');
+const { queryAll, queryOne, execute, batch, nowIST } = require('../db/schema');
 const { executeInward } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
 const ah = require('../utils/asyncHandler');
@@ -152,30 +152,44 @@ router.post('/undo', ah(async (req, res) => {
     return res.status(400).json({ error: 'reel_numbers required' });
   }
 
+  // One read, then one atomic batch (was a query or two per reel — Workers cap queries per request).
+  const found = new Map();
+  for (let i = 0; i < reel_numbers.length; i += 400) {
+    const part = reel_numbers.slice(i, i + 400);
+    const rows = await queryAll(`SELECT * FROM reels WHERE reel_number IN (${part.map(() => '?').join(',')})`, part);
+    rows.forEach((r) => found.set(r.reel_number, r));
+  }
+
   const boxNumbers = new Set();
+  const toDelete = [];
   let undone = 0;
   let skipped = 0;
 
   for (const rn of reel_numbers) {
-    const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [rn]);
+    const reel = found.get(rn);
     if (!reel) { skipped++; continue; }
     if (reel.status === 'Outwarded') { skipped++; continue; }
     if (reel.box_number) boxNumbers.add(reel.box_number);
-
-    await execute("UPDATE reels SET status = 'Deleted', quantity = 0 WHERE reel_number = ?", [rn]);
+    toDelete.push(rn);
     undone++;
   }
 
-  // Clean up any box whose reels are now all Deleted
-  for (const bn of boxNumbers) {
-    const remaining = await queryOne(
-      "SELECT COUNT(*) as count FROM reels WHERE box_number = ? AND status != 'Deleted'",
-      [bn]
-    );
-    if (remaining && remaining.count === 0) {
-      await execute('DELETE FROM boxes WHERE box_number = ?', [bn]);
-    }
+  const statements = [];
+  for (let i = 0; i < toDelete.length; i += 400) {
+    const part = toDelete.slice(i, i + 400);
+    statements.push([`UPDATE reels SET status = 'Deleted', quantity = 0 WHERE reel_number IN (${part.map(() => '?').join(',')})`, part]);
   }
+  // Clean up any box whose reels are now all Deleted
+  const boxes = [...boxNumbers];
+  for (let i = 0; i < boxes.length; i += 400) {
+    const part = boxes.slice(i, i + 400);
+    statements.push([
+      `DELETE FROM boxes WHERE box_number IN (${part.map(() => '?').join(',')})
+       AND NOT EXISTS (SELECT 1 FROM reels r WHERE r.box_number = boxes.box_number AND r.status != 'Deleted')`,
+      part,
+    ]);
+  }
+  await batch(statements);
 
   res.json({
     success: true,

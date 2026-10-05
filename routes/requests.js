@@ -3,7 +3,7 @@ const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 // const { executeInward } = require('./inward');
 // const { executeOutwardReel } = require('./outward');
-const { executeInward, executeOutwardReel, executeStockTransfer } = require('../utils/inventory');
+const { executeInward, executeOutwardMany, executeStockTransfer } = require('../utils/inventory');
 
 const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager'];
 
@@ -95,24 +95,16 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
     } else if (request.type === 'outward') {
       // Payload can be single reel or box (array of reel_numbers)
       const reelNumbers = payload.reel_numbers || [payload.reel_number];
-      const errors = [];
-
-      for (const reel_number of reelNumbers) {
-        try {
-          await executeOutwardReel(
-            reel_number,
-            payload.customer_name,
-            payload.invoice_number,
-            payload.outward_type || 'Full',
-            payload.quantity_shipped || null,
-            payload.notes,
-            payload.company_id || null,
-            payload.po_id || null
-          );
-        } catch (err) {
-          errors.push(`${reel_number}: ${err.message}`);
-        }
-      }
+      const { errors } = await executeOutwardMany(
+        reelNumbers,
+        payload.customer_name,
+        payload.invoice_number,
+        payload.outward_type || 'Full',
+        payload.quantity_shipped || null,
+        payload.notes,
+        payload.company_id || null,
+        payload.po_id || null
+      );
 
       if (errors.length > 0 && errors.length === reelNumbers.length) {
         return res.status(400).json({ error: 'All reels failed', details: errors });
@@ -191,24 +183,16 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
       );
     } else if (request.type === 'outward') {
       const reelNumbers = newPayload.reel_numbers || [newPayload.reel_number];
-      const errors = [];
-
-      for (const reel_number of reelNumbers) {
-        try {
-          await executeOutwardReel(
-            reel_number,
-            newPayload.customer_name,
-            newPayload.invoice_number,
-            newPayload.outward_type || 'Full',
-            newPayload.quantity_shipped || null,
-            newPayload.notes,
-            newPayload.company_id || null,
-            newPayload.po_id || null
-          );
-        } catch (err) {
-          errors.push(`${reel_number}: ${err.message}`);
-        }
-      }
+      const { errors } = await executeOutwardMany(
+        reelNumbers,
+        newPayload.customer_name,
+        newPayload.invoice_number,
+        newPayload.outward_type || 'Full',
+        newPayload.quantity_shipped || null,
+        newPayload.notes,
+        newPayload.company_id || null,
+        newPayload.po_id || null
+      );
 
       if (errors.length > 0 && errors.length === reelNumbers.length) {
         return res.status(400).json({ error: 'All reels failed', details: errors });

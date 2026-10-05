@@ -54,7 +54,8 @@ app.use('/api/requests', require('./routes/requests'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/po', require('./routes/po'));
-app.use('/api/labels', require('./utils/pdf'));
+// Lazy: pdfkit is ~1.5 MB of the Worker; only load it when a PDF is actually requested (faster cold starts).
+app.use('/api/labels', (req, res, next) => require('./utils/pdf')(req, res, next));
 app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/daily-gate', require('./routes/daily-gate'));
 app.use('/api/gelco-docs', require('./routes/gelco-docs'));

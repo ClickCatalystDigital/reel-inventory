@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST, getNextInvoiceNumber } = require('../db/schema');
-const { executeOutwardReel } = require('../utils/inventory');
+const { executeOutwardMany } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
 
 // gelco_worker included deliberately (unlike inward.js/transfer.js/requests.js's own
@@ -190,7 +190,7 @@ router.post('/grouped', async (req, res) => {
 
   const userRole = req.user?.role;
   const username = req.user?.username;
-  // storeCode is no longer what gets recorded on the outward — executeOutwardReel
+  // storeCode is no longer what gets recorded on the outward — executeOutwardMany
   // always derives that from the reel's own current store_code now (see utils/
   // inventory.js). It's kept only as informational metadata on a pending request's
   // payload (what the requester's Shipping Store dropdown showed) and for the
@@ -204,8 +204,14 @@ router.post('/grouped', async (req, res) => {
   }
 
   // Validate all reels exist and are in stock
+  const found = new Map();
+  for (let i = 0; i < reel_numbers.length; i += 400) {
+    const part = reel_numbers.slice(i, i + 400);
+    const rows = await queryAll(`SELECT * FROM reels WHERE reel_number IN (${part.map(() => '?').join(',')})`, part);
+    rows.forEach((r) => found.set(r.reel_number, r));
+  }
   for (const reel_number of reel_numbers) {
-    const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [reel_number]);
+    const reel = found.get(reel_number);
     if (!reel) return res.status(404).json({ error: `Reel ${reel_number} not found` });
     if (reel.status === 'Outwarded') return res.status(400).json({ error: `Reel ${reel_number} already outwarded` });
     if (isGelco && reel.store_code !== 'secondary') {
@@ -214,14 +220,7 @@ router.post('/grouped', async (req, res) => {
   }
 
   if (APPROVER_ROLES.includes(userRole)) {
-    const errors = [];
-    for (const reel_number of reel_numbers) {
-      try {
-        await executeOutwardReel(reel_number, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id);
-      } catch (err) {
-        errors.push(`${reel_number}: ${err.message}`);
-      }
-    }
+    const { errors } = await executeOutwardMany(reel_numbers, customer_name, invoice_number, outward_type || 'Full', null, notes, company_id, po_id);
     if (errors.length > 0 && errors.length === reel_numbers.length) {
       return res.status(400).json({ error: 'All reels failed', details: errors });
     }

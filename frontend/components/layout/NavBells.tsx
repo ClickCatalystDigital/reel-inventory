@@ -36,8 +36,15 @@ export function ApprovalsBell() {
         .then((d) => setCount(d.count || 0))
         .catch(() => {});
     refresh();
-    const id = setInterval(refresh, 30000);
-    return () => clearInterval(id);
+    // Skip polls while the tab is in the background (each one is a Worker + DB hit);
+    // catch up the moment it becomes visible again.
+    const tick = () => { if (!document.hidden) refresh(); };
+    const id = setInterval(tick, 30000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [isApprover]);
 
   if (!isApprover) return null;
@@ -60,8 +67,15 @@ export function NotificationsBell() {
         .catch(() => {});
     };
     refresh();
-    const id = setInterval(refresh, 30000);
-    return () => clearInterval(id);
+    // Skip polls while the tab is in the background (each one is a Worker + DB hit);
+    // catch up the moment it becomes visible again.
+    const tick = () => { if (!document.hidden) refresh(); };
+    const id = setInterval(tick, 30000);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener("visibilitychange", tick);
+    };
   }, [visible]);
 
   if (!visible) return null;

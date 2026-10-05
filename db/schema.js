@@ -191,6 +191,13 @@ async function initDB() {
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
+  // Lookups that used to scan whole tables on every call (item membership/stock summary per item,
+  // outward history per reel, box contents, the 30s pending-requests poll).
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_item_store_status ON reels(item_code, store_code, status)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_box ON reels(box_number)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_outwards_reel ON outwards(reel_number)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_requests_status ON requests(status)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_transfers_from_reel ON stock_transfers(from_store, reel_number)`);
 
   // Seed stores
   const primaryStore = await connect().execute("SELECT code FROM stores WHERE code = 'primary'");
@@ -267,33 +274,41 @@ async function withTransaction(fn) {
   }
 }
 
-async function getNextReelNumber() {
-  // Auto-heal: ensure counter is always ahead of actual max
-  await connect().execute(`
-    UPDATE counters SET value = MAX(value, (
-      SELECT COALESCE(MAX(CAST(REPLACE(reel_number, 'REEL-', '') AS INTEGER)), 10000)
-      FROM reels
-    )) WHERE name = 'reel'
-  `);
-  await connect().execute("UPDATE counters SET value = value + 1 WHERE name = 'reel'");
-  const result = await connect().execute("SELECT value FROM counters WHERE name = 'reel'");
-  return `REEL-${result.rows[0].value}`;
+// Reserve `count` consecutive numbers from a counter in ONE query; returns the first one.
+// (This used to scan the whole reels/boxes table to "self-heal" the counter for every single
+// number — see healCounters, which now only runs if a number actually collides.)
+async function reserveNumbers(name, count) {
+  const r = await connect().execute({
+    sql: 'UPDATE counters SET value = value + ? WHERE name = ? RETURNING value',
+    args: [count, name],
+  });
+  return Number(r.rows[0].value) - count + 1;
 }
 
-async function getNextBoxNumber() {
+// Lift the reel/box counters to at least the highest number really in the tables. Full scans, so
+// callers only use it after a UNIQUE collision (counter fell behind, e.g. manual DB edits).
+async function healCounters() {
   await connect().execute(`
     UPDATE counters SET value = MAX(value, (
-      SELECT COALESCE(MAX(CAST(REPLACE(box_number, 'BOX-', '') AS INTEGER)), 1000)
-      FROM boxes
+      SELECT COALESCE(MAX(CAST(REPLACE(reel_number, 'REEL-', '') AS INTEGER)), 10000) FROM reels
+    )) WHERE name = 'reel'
+  `);
+  await connect().execute(`
+    UPDATE counters SET value = MAX(value, (
+      SELECT COALESCE(MAX(CAST(REPLACE(box_number, 'BOX-', '') AS INTEGER)), 1000) FROM boxes
     )) WHERE name = 'box'
   `);
-  await connect().execute("UPDATE counters SET value = value + 1 WHERE name = 'box'");
-  const result = await connect().execute("SELECT value FROM counters WHERE name = 'box'");
-  return `BOX-${result.rows[0].value}`;
+}
+
+// Many statements, ONE round trip, all-or-nothing. Each is [sql, args]. Workers allow few
+// subrequests per request, and every execute() is one, so loops of queries must go through here.
+async function batch(statements) {
+  if (!statements.length) return [];
+  return connect().batch(statements.map(([sql, args = []]) => ({ sql, args })), 'write');
 }
 
 // Gelco outward's invoice number, replacing the timestamp string it used to
-// send. No self-heal scan like getNextReelNumber/getNextBoxNumber — those
+// send. No self-heal scan like healCounters — those
 // work because reel/box numbers are always PREFIX-<int>, but
 // outwards.invoice_number is free text (real customer invoices look like
 // "INV-2025-001"), so scanning it for a numeric max would be unreliable.
@@ -330,4 +345,4 @@ function istDayBounds(dateStr) {
   return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, withTransaction, getNextReelNumber, getNextBoxNumber, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };
+module.exports = { initDB, queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };

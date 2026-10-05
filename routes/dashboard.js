@@ -2,7 +2,11 @@
 
 const express = require('express');
 const router = express.Router();
-const { queryAll, queryOne, execute } = require('../db/schema');
+const { queryAll, queryOne, execute, batch } = require('../db/schema');
+
+// IN (...) lists in slices, so a big box/cart is a few queries instead of one per item.
+const slices = (arr, n = 400) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
+const qs = (n) => Array(n).fill('?').join(',');
 const ah = require('../utils/asyncHandler');
 const { getDailyReportData } = require('../utils/dailyReport');
 const { hadStockAtStore } = require('../utils/storeMembership');
@@ -184,10 +188,12 @@ router.post('/delete', ah(async (req, res) => {
 
   // Collect reels from box numbers
   if (box_numbers && box_numbers.length) {
-    for (const bn of box_numbers) {
-      const boxReels = await queryAll('SELECT reel_number FROM reels WHERE box_number = ?', [bn]);
-      reelsToDelete.push(...boxReels.map(r => r.reel_number));
+    const byBox = new Map();
+    for (const part of slices(box_numbers)) {
+      const rows = await queryAll(`SELECT reel_number, box_number FROM reels WHERE box_number IN (${qs(part.length)})`, part);
+      rows.forEach((r) => byBox.set(r.box_number, [...(byBox.get(r.box_number) || []), r.reel_number]));
     }
+    for (const bn of box_numbers) reelsToDelete.push(...(byBox.get(bn) || []));
   }
 
   // Add individual reel numbers
@@ -204,20 +210,20 @@ router.post('/delete', ah(async (req, res) => {
 
   // Get stats before deleting
   const stats = { in_stock: 0, outwarded: 0, already_deleted: 0 };
-  for (const rn of reelsToDelete) {
-    const reel = await queryOne('SELECT status FROM reels WHERE reel_number = ?', [rn]);
-    if (!reel) continue;
-    if (reel.status === 'Deleted') stats.already_deleted++;
-    else if (reel.status === 'Outwarded') stats.outwarded++;
-    else stats.in_stock++;
+  for (const part of slices(reelsToDelete)) {
+    const rows = await queryAll(`SELECT status FROM reels WHERE reel_number IN (${qs(part.length)})`, part);
+    for (const reel of rows) {
+      if (reel.status === 'Deleted') stats.already_deleted++;
+      else if (reel.status === 'Outwarded') stats.outwarded++;
+      else stats.in_stock++;
+    }
   }
 
-  // Soft delete
-  let deleted = 0;
-  for (const rn of reelsToDelete) {
-    const result = await execute("UPDATE reels SET status = 'Deleted', quantity = 0 WHERE reel_number = ? AND status != 'Deleted'", [rn]);
-    deleted += result.changes;
-  }
+  // Soft delete (one atomic batch)
+  const results = await batch(slices(reelsToDelete).map((part) => [
+    `UPDATE reels SET status = 'Deleted', quantity = 0 WHERE reel_number IN (${qs(part.length)}) AND status != 'Deleted'`, part,
+  ]));
+  const deleted = results.reduce((n, r) => n + r.rowsAffected, 0);
 
   res.json({
     success: true,
@@ -233,15 +239,25 @@ router.post('/delete-preview', ah(async (req, res) => {
   let reelsToCheck = [];
 
   if (box_numbers && box_numbers.length) {
+    const byBox = new Map();
+    for (const part of slices(box_numbers)) {
+      const rows = await queryAll(`SELECT reel_number, status, quantity, item_code, box_number FROM reels WHERE box_number IN (${qs(part.length)})`, part);
+      rows.forEach((r) => byBox.set(r.box_number, [...(byBox.get(r.box_number) || []), r]));
+    }
+    // Response rows keep their original shape (no box_number column on box-sourced rows).
     for (const bn of box_numbers) {
-      const boxReels = await queryAll('SELECT reel_number, status, quantity, item_code FROM reels WHERE box_number = ?', [bn]);
-      reelsToCheck.push(...boxReels);
+      reelsToCheck.push(...(byBox.get(bn) || []).map(({ box_number, ...rest }) => rest));
     }
   }
 
   if (reel_numbers && reel_numbers.length) {
+    const found = new Map();
+    for (const part of slices(reel_numbers)) {
+      const rows = await queryAll(`SELECT reel_number, status, quantity, item_code, box_number FROM reels WHERE reel_number IN (${qs(part.length)})`, part);
+      rows.forEach((r) => found.set(r.reel_number, r));
+    }
     for (const rn of reel_numbers) {
-      const reel = await queryOne('SELECT reel_number, status, quantity, item_code, box_number FROM reels WHERE reel_number = ?', [rn]);
+      const reel = found.get(rn);
       if (reel && !reelsToCheck.find(r => r.reel_number === reel.reel_number)) {
         reelsToCheck.push(reel);
       }

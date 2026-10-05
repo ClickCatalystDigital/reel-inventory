@@ -8,6 +8,10 @@
   "compatibility_flags": ["nodejs_compat"],
   "observability": { "enabled": true, "traces": { "enabled": true } },
 
+  // Run the Worker next to the Turso database (aws ap-south-1): each request makes several
+  // sequential queries, so cutting the Worker<->DB distance matters more than the user<->Worker one.
+  "placement": { "region": "aws:ap-south-1" },
+
   // Static Next.js export. The Worker runs first for everything except /_next/* so it can
   // enforce login + role page rules (worker.mjs); /_next/* is public hashed JS/CSS.
   "assets": {
