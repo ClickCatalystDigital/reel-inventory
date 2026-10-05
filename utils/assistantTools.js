@@ -7,6 +7,7 @@
 const { queryAll, queryOne, readBatch, istDateString, istDayBounds } = require('../db/schema');
 const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
+const ST = require('./assistantStats');
 
 const n = (x) => Number(x || 0).toLocaleString('en-IN');
 const plural = (k, w) => `${n(k)} ${w}${Number(k) === 1 ? '' : 's'}`;
@@ -192,7 +193,7 @@ const TOOLS = [
   },
   {
     key: 'daily_report', label: 'Daily report', entity: null, period: true,
-    about: 'The daily activity numbers for one day (inward, outward, transfers, pending approvals), "today\'s numbers", "what happened yesterday", "daily report for 2 Oct".',
+    about: 'The activity of one day or store (inward, outward, transfers, pending approvals): "today\'s numbers", "what happened yesterday", "what has Gelco Stores done today", "what did LS Tech Stores do on 2 Oct", "daily report".',
     keywords: ['daily report', 'today', 'yesterday', 'what happened', 'summary of the day'],
     async run(c) {
       const day = c.period && c.period.from ? c.period.from : istDateString();
@@ -208,74 +209,201 @@ const TOOLS = [
     },
   },
   {
-    key: 'pending_requests', label: 'Approval requests', entity: null,
-    about: 'Requests from staff waiting for approval, or approved/rejected ones, "any approvals waiting", "what did sahil submit", "rejected requests".',
-    keywords: ['approval', 'approvals', 'pending request', 'requests', 'waiting for approval', 'rejected'],
+    key: 'pending_requests', label: 'Approval requests', entity: 'user', required: false, period: true,
+    about: 'Staff requests for approval (inward, outward, transfer): waiting, or already approved/rejected, optionally by one person and in a period, "any approvals waiting", "what did sahil submit", "what did pranav approve yesterday", "rejected requests this month".',
+    keywords: ['approval', 'approvals', 'pending request', 'requests', 'waiting for approval', 'rejected', 'approved'],
     async run(c) {
-      const q = c.question.toLowerCase(); const status = /\brejected\b/.test(q) ? 'rejected' : /\bapproved\b/.test(q) ? 'approved' : 'pending';
-      const rows = await queryAll('SELECT id, type, created_by, created_at, payload FROM requests WHERE status = ? ORDER BY created_at DESC LIMIT ?', [status, CAP]);
-      const out = rows.map((r) => {
-        let p = {}; try { p = JSON.parse(r.payload); } catch { /* keep empty */ }
-        const what = r.type === 'inward' ? `${p.num_reels || '?'} reels of ${p.item_code}` : r.type === 'outward' ? `${(p.reel_numbers || [p.reel_number]).filter(Boolean).length} reel(s) to ${p.customer_name || '?'}` : `${p.kind || ''} ${p.number || ''} → ${E.STORE_NAME[p.to_store] || p.to_store || ''}`;
-        return { id: r.id, type: r.type, by: r.created_by, what, at: String(r.created_at).slice(0, 16) };
+      const q = c.question.toLowerCase(); const status = /\brejected\b/.test(q) ? 'rejected' : /\bapproved?\b|\bapproving\b/.test(q) ? 'approved' : 'pending';
+      const who = c.users && c.users.length ? c.users : null;
+      const reviewer = status !== 'pending' && /approv|reject|review/.test(q); // "what did pranav approve" -> the reviewer, "what did sahil submit" -> the requester
+      const p = c.period && c.period.from ? c.period : null; const b = bounds(p);
+      const whoCol = reviewer ? 'reviewed_by' : 'created_by', timeCol = status === 'pending' ? 'created_at' : 'reviewed_at';
+      const where = `status = ?${who ? ` AND ${whoCol} IN (${who.map(() => '?').join(',')})` : ''}${b ? ` AND ${timeCol} BETWEEN ? AND ?` : ''}`;
+      const args = [status, ...(who || []), ...(b ? [b.from, b.to] : [])];
+      const [cnt, list] = await readBatch([
+        [`SELECT COUNT(*) AS n FROM requests WHERE ${where}`, args],
+        [`SELECT id, type, created_by, reviewed_by, created_at, reviewed_at, payload FROM requests WHERE ${where} ORDER BY COALESCE(${timeCol}, created_at) DESC LIMIT ?`, [...args, CAP]],
+      ]);
+      const out = list.rows.map((r) => {
+        let pl = {}; try { pl = JSON.parse(r.payload); } catch { /* keep empty */ }
+        const what = r.type === 'inward' ? `${pl.num_reels || '?'} reels of ${pl.item_code}` : r.type === 'outward' ? `${(pl.reel_numbers || [pl.reel_number]).filter(Boolean).length} reel(s) to ${pl.customer_name || '?'}` : `${pl.kind || ''} ${pl.number || ''} → ${E.STORE_NAME[pl.to_store] || pl.to_store || ''}`;
+        return { id: r.id, type: r.type, by: r.created_by, reviewed_by: r.reviewed_by || '—', what, at: String(status === 'pending' ? r.created_at : r.reviewed_at || r.created_at).slice(0, 16) };
       });
-      return table({ title: `Requests — ${status}`, summary: out.length ? `${plural(out.length, status + ' request')}.` : `No ${status} requests.`, columns: [col('id', '#', 'int'), col('type', 'Type'), col('by', 'By'), col('what', 'What'), col('at', 'When', 'date')], rows: out, link: { path: '/requests', label: 'Open Requests' } });
+      const total = Number(cnt.rows[0].n);
+      return table({ title: `Requests — ${status}${who ? ` — ${who.join(', ')}` : ''}${p ? ` — ${p.label}` : ''}`, summary: total ? `${plural(total, status + ' request')}${who ? (reviewer ? ` reviewed by ${who.join(', ')}` : ` from ${who.join(', ')}`) : ''}.` : `No ${status} requests${who ? ` for ${who.join(', ')}` : ''}${p ? ` in ${p.label}` : ''}.`,
+        columns: [col('id', '#', 'int'), col('type', 'Type'), col('by', 'Submitted by'), col('reviewed_by', 'Reviewed by'), col('what', 'What'), col('at', 'When', 'date')], rows: out, total, truncated: total > out.length,
+        note: 'Only approvals/rejections of staff requests are recorded per person — who received or shipped stock directly is not.', link: { path: '/requests', label: 'Open Requests' } });
     },
   },
   {
     key: 'purchase_orders', label: 'Purchase orders', entity: 'po', required: false,
-    about: 'Customer purchase orders: by status (draft, confirmed, dispatched, cancelled), for a customer, or one PO by number with its lines and how much has shipped, "which POs are confirmed but not dispatched", "status of PO P0055838".',
-    keywords: ['purchase order', 'purchase orders', 'po status', 'confirmed po', 'dispatched po', 'open po'],
+    about: 'Customer purchase orders: by status (draft, confirmed, dispatched, cancelled), for a customer, their value (quantity × unit price on the PO lines), or one PO by number with its lines and how much has shipped, "which POs are confirmed but not dispatched", "status of PO P0055838", "how much are the Gelco POs worth".',
+    keywords: ['purchase order', 'purchase orders', 'po status', 'confirmed po', 'dispatched po', 'open po', 'po value', 'worth'],
     async run(c) {
       if (c.po) {
         const [items, shipped] = await readBatch([
-          ['SELECT item_code, quantity_ordered FROM crm_po_items WHERE po_id = ?', [c.po.id]],
+          ['SELECT item_code, quantity_ordered, unit_price FROM crm_po_items WHERE po_id = ?', [c.po.id]],
           ['SELECT r.item_code, SUM(o.quantity_shipped) AS qty FROM outwards o JOIN reels r ON r.reel_number = o.reel_number WHERE o.po_id = ? GROUP BY r.item_code', [c.po.id]],
         ]);
         const sh = new Map(shipped.rows.map((r) => [r.item_code, Number(r.qty)]));
-        const rows = items.rows.map((i) => ({ item_code: i.item_code || '(unmatched line)', ordered: Number(i.quantity_ordered) || 0, shipped: sh.get(i.item_code) || 0 }));
-        return table({ title: `PO ${c.po.po_number}`, summary: `${c.po.po_number} — ${c.po.status}${c.po.company ? ` — ${c.po.company}` : ''}; ${plural(rows.length, 'line')}.`, columns: [col('item_code', 'Item code'), col('ordered', 'Ordered', 'int'), col('shipped', 'Shipped', 'int')], rows, note: 'Shipped = outwards tied to this PO.' });
+        const rows = items.rows.map((i) => ({ item_code: i.item_code || '(unmatched line)', ordered: Number(i.quantity_ordered) || 0, shipped: sh.get(i.item_code) || 0, price: i.unit_price === null ? '—' : String(i.unit_price), value: Math.round((Number(i.quantity_ordered) || 0) * Number(i.unit_price || 0)) }));
+        const tv = rows.reduce((a, r) => a + r.value, 0);
+        return table({ title: `PO ${c.po.po_number}`, summary: `${c.po.po_number} — ${c.po.status}${c.po.company ? ` — ${c.po.company}` : ''}; ${plural(rows.length, 'line')}; value ${n(tv)}.`, columns: [col('item_code', 'Item code'), col('ordered', 'Ordered', 'int'), col('shipped', 'Shipped', 'int'), col('price', 'Unit price', 'int'), col('value', 'Value', 'int')], rows,
+          note: 'Shipped = outwards tied to this PO. Value = ordered quantity × unit price on the PO line (the PO does not record a currency).' });
       }
       const q = c.question.toLowerCase(); const status = ['draft', 'confirmed', 'dispatched', 'cancelled'].find((s) => q.includes(s)) || (/\bopen\b|\bnot dispatched\b|\bpending\b/.test(q) ? 'confirmed' : null);
       const cust = c.customer ? ` AND co.name IN (${c.customer.variants.map(() => '?').join(',')})` : '';
-      const rows = await queryAll(`SELECT p.po_number, p.status, co.name AS company, p.order_date, p.expected_dispatch_date, (SELECT COUNT(*) FROM crm_po_items i WHERE i.po_id = p.id) AS lines
+      const rows = await queryAll(`SELECT p.po_number, p.status, co.name AS company, p.order_date, p.expected_dispatch_date, (SELECT COUNT(*) FROM crm_po_items i WHERE i.po_id = p.id) AS lines,
+          (SELECT COALESCE(SUM(i.quantity_ordered * COALESCE(i.unit_price, 0)), 0) FROM crm_po_items i WHERE i.po_id = p.id) AS value
         FROM crm_purchase_orders p LEFT JOIN crm_companies co ON co.id = p.company_id WHERE 1=1${status ? ' AND p.status = ?' : ''}${cust} ORDER BY p.id DESC LIMIT ?`, [...(status ? [status] : []), ...(c.customer ? c.customer.variants : []), CAP]);
       const counts = await queryAll('SELECT status, COUNT(*) AS n FROM crm_purchase_orders GROUP BY status');
-      return table({ title: `Purchase orders${status ? ` — ${status}` : ''}`, summary: `${plural(rows.length, 'PO')} shown. All POs: ${counts.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`,
-        columns: [col('po_number', 'PO'), col('status', 'Status'), col('company', 'Customer'), col('order_date', 'Ordered', 'date'), col('expected_dispatch_date', 'Dispatch by', 'date'), col('lines', 'Lines', 'int')],
-        rows: rows.map((r) => ({ ...r, lines: Number(r.lines), order_date: r.order_date || '—', expected_dispatch_date: r.expected_dispatch_date || '—', company: r.company || '—' })), link: { path: '/outward', label: 'Open Outward' } });
+      const tv = rows.reduce((a, r) => a + Number(r.value), 0);
+      return table({ title: `Purchase orders${status ? ` — ${status}` : ''}`, summary: `${plural(rows.length, 'PO')} shown, together worth ${n(Math.round(tv))}. All POs: ${counts.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`,
+        columns: [col('po_number', 'PO'), col('status', 'Status'), col('company', 'Customer'), col('order_date', 'Ordered', 'date'), col('expected_dispatch_date', 'Dispatch by', 'date'), col('lines', 'Lines', 'int'), col('value', 'Value', 'int')],
+        rows: rows.map((r) => ({ ...r, lines: Number(r.lines), value: Math.round(Number(r.value)), order_date: r.order_date || '—', expected_dispatch_date: r.expected_dispatch_date || '—', company: r.company || '—' })),
+        note: 'Value = ordered quantity × unit price on the PO lines (no currency is recorded). Shipments themselves carry no prices.', link: { path: '/outward', label: 'Open Outward' } });
     },
   },
   {
-    key: 'tasks', label: 'Tasks', entity: 'user', required: false,
-    about: 'Follow-up tasks: overdue or open tasks, for a person or for everyone, "what is overdue", "what is on zakir\'s plate", "my tasks".',
-    keywords: ['task', 'tasks', 'overdue', 'follow up', 'follow-up', 'to do', 'plate'],
+    key: 'tasks', label: 'Tasks', entity: ['user', 'client'], required: false, period: true,
+    about: 'Follow-up tasks and call reminders: open, overdue, due in a period, or completed — for a person, for one named client/company, or for everyone, "what is overdue", "tasks zakir has this week", "next follow-up with Sansui", "what did we complete last week", "my tasks".',
+    keywords: ['task', 'tasks', 'overdue', 'follow up', 'follow-up', 'to do', 'plate', 'reminder', 'schedule', 'next call'],
     async run(c) {
-      const today = istDateString(); const who = c.users && c.users.length ? c.users : null;
-      const whereWho = who ? ` AND t.assigned_to IN (${who.map(() => '?').join(',')})` : '';
-      const [cnt, list] = await readBatch([
-        [`SELECT COALESCE(t.assigned_to, '(unassigned)') AS who, COUNT(*) AS n, SUM(t.due_date < ?) AS overdue FROM crm_tasks t WHERE t.status = 'open'${whereWho} GROUP BY who ORDER BY n DESC`, [today, ...(who || [])]],
-        [`SELECT t.title, t.due_date, COALESCE(t.assigned_to, '(unassigned)') AS who, c.poc_name FROM crm_tasks t LEFT JOIN crm_contacts c ON c.id = t.contact_id WHERE t.status = 'open'${whereWho} ORDER BY t.due_date ASC LIMIT ?`, [...(who || []), 15]],
+      const today = istDateString(); const q = c.question.toLowerCase();
+      const who = c.users && c.users.length ? c.users : null; const ids = c.client ? c.client.ids : null;
+      const status = /\b(done|completed|finished|closed)\b/.test(q) ? 'done' : /\b(overdue|late|missed|behind)\b/.test(q) ? 'overdue' : 'open';
+      const nextOnly = status === 'open' && /\b(next|upcoming|coming)\b/.test(q);
+      const p = c.period && c.period.from ? c.period : null; const b = bounds(p);
+      const where = ['t.status = ?']; const args = [status === 'done' ? 'done' : 'open'];
+      if (who) { where.push(`t.assigned_to IN (${who.map(() => '?').join(',')})`); args.push(...who); }
+      if (ids) { where.push(`t.contact_id IN (${ids.map(() => '?').join(',')})`); args.push(...ids); }
+      if (status === 'overdue') { where.push('t.due_date < ?'); args.push(today); }
+      else if (nextOnly) { where.push('t.due_date >= ?'); args.push(today); }
+      if (p) { if (status === 'done') { where.push('t.completed_at BETWEEN ? AND ?'); args.push(b.from, b.to); } else { where.push('t.due_date BETWEEN ? AND ?'); args.push(p.from, p.to); } }
+      const W = where.join(' AND ');
+      const order = status === 'done' ? 't.completed_at DESC' : 't.due_date ASC';
+      const base = ['t.status = ?', ...(who ? [`t.assigned_to IN (${who.map(() => '?').join(',')})`] : []), ...(ids ? [`t.contact_id IN (${ids.map(() => '?').join(',')})`] : [])].join(' AND ');
+      const baseArgs = ['open', ...(who || []), ...(ids || [])];
+      const [cnt, list, earlier] = await readBatch([
+        [`SELECT COALESCE(t.assigned_to, '(unassigned)') AS who, COUNT(*) AS n, SUM(t.due_date < ?) AS overdue FROM crm_tasks t WHERE ${W} GROUP BY who ORDER BY n DESC`, [today, ...args]],
+        [`SELECT t.title, t.due_date, t.completed_at, COALESCE(t.assigned_to, '(unassigned)') AS who, c.poc_name FROM crm_tasks t LEFT JOIN crm_contacts c ON c.id = t.contact_id WHERE ${W} ORDER BY ${order} LIMIT ?`, [...args, nextOnly ? 5 : 15]],
+        // open tasks that were already due before this window — shown as a count so "this week" doesn't hide the backlog
+        [`SELECT COUNT(*) AS n FROM crm_tasks t WHERE ${base} AND t.due_date < ?`, [...baseArgs, p ? p.from : today]],
       ]);
-      const total = cnt.rows.reduce((a, r) => a + Number(r.n), 0), over = cnt.rows.reduce((a, r) => a + Number(r.overdue), 0);
-      return table({ title: `Open tasks${who ? ` — ${who.join(', ')}` : ''}`, summary: `${plural(total, 'open task')} · ${over} overdue.${!who && cnt.rows.length ? ` By person: ${cnt.rows.map((r) => `${r.who} ${n(r.n)}`).join(', ')}.` : ''}`,
-        columns: [col('due_date', 'Due', 'date'), col('who', 'Assigned'), col('title', 'Task')], rows: list.rows.map((r) => ({ due_date: r.due_date, who: r.who, title: r.poc_name ? `${r.poc_name} — ${r.title}` : r.title })), note: 'Oldest due first (15 shown).', link: { path: '/', label: 'Open Home' } });
+      const total = cnt.rows.reduce((a, r) => a + Number(r.n), 0), over = cnt.rows.reduce((a, r) => a + Number(r.overdue), 0), backlog = Number(earlier.rows[0].n);
+      const label = ids ? c.client.label : who ? who.join(', ') : 'everyone';
+      const first = list.rows[0];
+      let summary;
+      if (nextOnly) summary = first ? `Next follow-up${ids ? ` with ${c.client.label}` : ''}: ${E.fmtD(first.due_date)} — ${first.title} (${first.who}).` : `No upcoming follow-up${ids ? ` with ${c.client.label}` : ''} is scheduled${backlog ? `, but ${plural(backlog, 'task')} ${backlog === 1 ? 'is' : 'are'} overdue` : ''}.`;
+      else if (status === 'done') summary = `${plural(total, 'task')} completed${p ? ` in ${p.label}` : ''}.`;
+      else summary = `${plural(total, status === 'overdue' ? 'overdue task' : 'open task')}${p && status !== 'overdue' ? ` due in ${p.label}` : ''}${status === 'open' && !p ? ` · ${over} overdue` : ''}${p && status === 'open' && backlog ? ` · plus ${n(backlog)} still overdue from before` : ''}.${!who && !ids && cnt.rows.length > 1 ? ` By person: ${cnt.rows.map((r) => `${r.who} ${n(r.n)}`).join(', ')}.` : ''}`;
+      return table({ title: `${status === 'done' ? 'Completed' : status === 'overdue' ? 'Overdue' : 'Open'} tasks — ${label}`, summary,
+        columns: [col('due_date', status === 'done' ? 'Completed' : 'Due', 'date'), col('who', 'Assigned'), col('title', 'Task')],
+        rows: list.rows.map((r) => ({ due_date: String(status === 'done' ? r.completed_at : r.due_date).slice(0, 10), who: r.who, title: r.poc_name ? `${r.poc_name} — ${r.title}` : r.title })), total, truncated: total > list.rows.length,
+        note: status === 'done' ? 'Most recently completed first.' : 'Earliest due first.', link: { path: '/', label: 'Open Home' } });
     },
   },
   {
-    key: 'clients_pipeline', label: 'Clients pipeline', entity: null,
-    about: 'The CRM contacts/clients: how many at each stage (new, contacted, qualified, customer, lost), the high-severity watch list, "how many leads", "who is on the watch list", "clients by stage".',
-    keywords: ['clients', 'leads', 'pipeline', 'watch list', 'severity', 'contacts', 'conversion'],
+    key: 'clients_pipeline', label: 'Clients pipeline', entity: 'client', required: false,
+    about: 'The CRM contacts/clients: counts per stage (new, contacted, qualified, customer, lost), the high-severity watch list, or the list of clients that were never contacted / not contacted for N days, "how many leads", "who is on the watch list", "which clients have we not contacted", "clients not contacted in 30 days".',
+    keywords: ['clients', 'leads', 'pipeline', 'watch list', 'severity', 'contacts', 'conversion', 'not contacted', 'gone cold'],
     async run(c) {
       const q = c.question.toLowerCase(); const high = /\bhigh\b|watch|severity 3|critical/.test(q);
-      const [stages, list] = await readBatch([
+      const stageWord = (/\bqualified\b/.test(q) && 'qualified') || (/\blost\b/.test(q) && 'lost') || (/\bcontacted\b/.test(q) && !/\bnot\b|haven'?t|never|n't/.test(q) && 'contacted') || (/\bnew (clients?|leads?|contacts?)\b/.test(q) && 'new') || null;
+      const notContacted = /\bnot (been )?(contacted|called|spoken|followed)|haven'?t (been )?(contacted|called|spoken|followed)|never (been )?(contacted|called)|untouched|gone (cold|quiet)|neglected|stale/.test(q);
+      const dm = /(\d+)\s*(day|week|month)/.exec(q); const days = dm ? Number(dm[1]) * (dm[2] === 'week' ? 7 : dm[2] === 'month' ? 30 : 1) : null;
+      const ids = c.client ? c.client.ids : null;
+      const [stages, all] = await readBatch([
         ['SELECT status, COUNT(*) AS n FROM crm_contacts GROUP BY status', []],
-        [`SELECT c.poc_name, co.name AS company, c.status, c.severity FROM crm_contacts c LEFT JOIN crm_companies co ON co.id = c.company_id${high ? ' WHERE c.severity = 3' : ''} ORDER BY c.severity DESC, c.poc_name LIMIT 15`, []],
+        [`SELECT c.id, c.poc_name, co.name AS company, c.status, c.severity, (SELECT MAX(created_at) FROM crm_notes n WHERE n.contact_id = c.id) AS last_note,
+            (SELECT MAX(completed_at) FROM crm_tasks t WHERE t.contact_id = c.id AND t.status = 'done') AS last_done, (SELECT COUNT(*) FROM crm_tasks t WHERE t.contact_id = c.id AND t.status = 'open') AS open_tasks
+          FROM crm_contacts c LEFT JOIN crm_companies co ON co.id = c.company_id ORDER BY c.severity DESC, c.poc_name`, []],
       ]);
+      const today = istDateString();
+      let rows = all.rows.map((r) => { const last = [r.last_note, r.last_done].filter(Boolean).sort().pop(); return { ...r, last: last ? String(last).slice(0, 10) : null }; });
+      if (ids) rows = rows.filter((r) => ids.includes(r.id));
+      let rule = '';
+      if (high) { rows = rows.filter((r) => r.severity === 3); rule = ' (high severity)'; }
+      if (stageWord) { rows = rows.filter((r) => r.status === stageWord); rule = ` (stage: ${stageWord})`; }
+      if (notContacted) {
+        if (days) { rows = rows.filter((r) => r.status !== 'lost' && (!r.last || ST.daysBetween(r.last, today) > days)); rule = ` (no logged call or completed task for ${days}+ days)`; }
+        else { rows = rows.filter((r) => !r.last && r.status !== 'lost'); rule = ' (no call note and no completed follow-up ever logged)'; }
+      }
       const total = stages.rows.reduce((a, r) => a + Number(r.n), 0);
-      return table({ title: high ? 'High-severity clients' : 'Clients pipeline', summary: `${plural(total, 'contact')}: ${stages.rows.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`,
-        columns: [col('poc_name', 'Contact'), col('company', 'Company'), col('status', 'Status'), col('severity', 'Severity')], rows: list.rows.map((r) => ({ poc_name: r.poc_name, company: r.company || '—', status: r.status, severity: ['', 'Low', 'Medium', 'High'][r.severity] || r.severity })),
-        note: 'Names, companies and stages only (no emails or phone numbers).', link: { path: '/clients', label: 'Open Clients' } });
+      const filtered = !!(ids || high || stageWord || notContacted);
+      const stageSummary = `${plural(total, 'contact')}: ${stages.rows.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`;
+      return table({ title: ids ? `Client — ${c.client.label}` : filtered ? `Clients${rule}` : 'Clients pipeline', summary: filtered ? `${plural(rows.length, 'contact')}${rule}.` : stageSummary,
+        columns: [col('poc_name', 'Contact'), col('company', 'Company'), col('status', 'Status'), col('severity', 'Severity'), col('last', 'Last touch', 'date'), col('open_tasks', 'Open tasks', 'int')],
+        rows: rows.slice(0, CAP).map((r) => ({ poc_name: r.poc_name, company: r.company || '—', status: r.status, severity: ['', 'Low', 'Medium', 'High'][r.severity] || r.severity, last: r.last || 'never', open_tasks: Number(r.open_tasks) })), total: rows.length, truncated: rows.length > CAP,
+        note: 'Names, companies, stages and dates only (no emails or phone numbers). Last touch = latest call note or completed follow-up.', link: { path: '/clients', label: 'Open Clients' } });
+    },
+  },
+  {
+    key: 'client_notes', label: 'Client notes & call history', entity: 'client', required: true,
+    about: 'The call notes and recent follow-up history logged for ONE named client or company, "show me notes on Rotomotive", "what did we discuss with Sansui", "last call with Gelco".',
+    keywords: ['notes', 'discussed', 'last call', 'call history', 'spoke'],
+    async run(c) {
+      const ids = c.client.ids; const ph = ids.map(() => '?').join(',');
+      const [notes, done] = await readBatch([
+        [`SELECT n.body, n.created_by, n.created_at, c.poc_name FROM crm_notes n JOIN crm_contacts c ON c.id = n.contact_id WHERE n.contact_id IN (${ph}) ORDER BY n.created_at DESC LIMIT 10`, ids],
+        [`SELECT t.title, t.completed_at, t.assigned_to, c.poc_name FROM crm_tasks t JOIN crm_contacts c ON c.id = t.contact_id WHERE t.contact_id IN (${ph}) AND t.status = 'done' ORDER BY t.completed_at DESC LIMIT 5`, ids],
+      ]);
+      const rows = [
+        ...notes.rows.map((r) => ({ when: String(r.created_at).slice(0, 10), kind: 'Note', by: r.created_by || '—', text: `${c.client.ids.length > 1 ? `${r.poc_name}: ` : ''}${r.body}` })),
+        ...done.rows.map((r) => ({ when: String(r.completed_at).slice(0, 10), kind: 'Done', by: r.assigned_to || '—', text: r.title })),
+      ].sort((a, b) => b.when.localeCompare(a.when));
+      return table({ title: `Notes — ${c.client.label}`, summary: notes.rows.length ? `${plural(notes.rows.length, 'note')} logged; latest ${notes.rows[0].created_at.slice(0, 10)} by ${notes.rows[0].created_by || 'unknown'}.` : `No call notes are logged for ${c.client.label}.`,
+        columns: [col('when', 'When', 'date'), col('kind', 'Type'), col('by', 'By'), col('text', 'Note')], rows, link: { path: '/clients', label: 'Open Clients' } });
+    },
+  },
+  {
+    key: 'stock_cover', label: 'Days of stock cover', entity: 'item', required: false,
+    about: 'How long current stock will last at the recent shipping rate (days of cover and an estimated run-out date), for ONE item or ranked across items, "will BLDC CARD run out soon", "which items will run out in 30 days", "how long will our stock last".',
+    keywords: ['run out', 'last how long', 'days of stock', 'cover', 'runway', 'how long will', 'stock last', 'reorder soon'],
+    async run(c) {
+      const today = istDateString();
+      const r = await ST.stockCover({ store: c.store, itemCode: c.item ? c.item.code : null, today });
+      const fmt = (x) => (x < 10 ? x.toFixed(1) : String(Math.round(x)));
+      const low = r.rows.filter((x) => x.orders > 0 && x.orders < 3).length;
+      const note = `Estimate: stock ÷ average pieces shipped per day over the last ${r.days} days of shipments (history starts ${r.history} days ago). Shipments are lumpy, so treat it as a rough guide${c.item ? '' : '; items with fewer than 3 orders in the window are low-confidence'}.`;
+      if (c.item) {
+        const x = r.rows.find((y) => y.item_code === c.item.code);
+        const store = c.store && c.store !== 'all' ? ` at ${E.STORE_NAME[c.store]}` : '';
+        if (!x) return table({ title: `Stock cover — ${c.item.code}`, summary: `No stock of ${c.item.code}${store} and no shipments in the last ${r.days} days.`, columns: [], rows: [], note });
+        const summary = x.stock === 0 ? `${c.item.code} is out of stock${store}.`
+          : x.cover_days === null ? `${n(x.stock)} pcs of ${c.item.code} in stock${store}, but nothing shipped in the last ${r.days} days — no run-out estimate possible.`
+          : `${n(x.stock)} pcs in stock${store}; at the recent rate (${fmt(x.per_day)} pcs/day from ${plural(x.orders, 'order')}) it lasts about ${n(Math.round(x.cover_days))} days — around ${E.fmtD(x.runout)}.${x.orders < 3 ? ' Few orders, so low confidence.' : ''}`;
+        return table({ title: `Stock cover — ${c.item.code}`, summary, columns: [col('item_code', 'Item code'), col('stock', 'In stock', 'int'), col('shipped', `Shipped (${r.days}d)`, 'int'), col('orders', 'Orders', 'int'), col('per_day', 'Pcs/day', 'int'), col('cover', 'Days of cover', 'int')],
+          rows: [{ item_code: x.item_code, stock: x.stock, shipped: x.shipped, orders: x.orders, per_day: fmt(x.per_day), cover: x.cover_days === null ? '—' : Math.round(x.cover_days) }], note, link: { path: '/reports/alerts', label: 'Open Dead & Low Stock' } });
+      }
+      const soon = r.rows.filter((x) => x.cover_days !== null && x.cover_days <= 90).sort((a, b) => a.cover_days - b.cover_days);
+      const within30 = soon.filter((x) => x.stock > 0 && x.cover_days <= 30).length, already = soon.filter((x) => x.stock === 0).length;
+      const shown = soon.slice(0, CAP);
+      const desc = shown.length ? new Map((await queryAll(`SELECT item_code, description FROM items WHERE item_code IN (${shown.map(() => '?').join(',')})`, shown.map((x) => x.item_code))).map((d) => [d.item_code, d.description])) : new Map();
+      return table({ title: `Items likely to run out — ${E.STORE_NAME[c.store || 'all']}`, summary: soon.length ? `${plural(within30, 'item')} would run out within 30 days at recent rates; ${plural(soon.length - already, 'item')} within 90 days${already ? `; ${plural(already, 'item')} that shipped recently ${already === 1 ? 'is' : 'are'} already out of stock` : ''}.` : 'No item is projected to run out within 90 days at recent shipping rates.',
+        columns: [col('item_code', 'Item code'), col('description', 'Description'), col('stock', 'In stock', 'int'), col('per_day', 'Pcs/day', 'int'), col('cover', 'Days of cover', 'int'), col('runout', 'Runs out ~', 'date')],
+        rows: shown.map((x) => ({ item_code: x.item_code, description: desc.get(x.item_code) || '', stock: x.stock, per_day: fmt(x.per_day), cover: Math.round(x.cover_days), runout: x.runout })), total: soon.length, truncated: soon.length > CAP,
+        note: `${note}${low ? ` ${low} item${low === 1 ? '' : 's'} had fewer than 3 orders.` : ''}`, link: { path: '/reports/alerts', label: 'Open Dead & Low Stock' } });
+    },
+  },
+  {
+    key: 'customer_activity', label: 'Customer ordering pattern', entity: 'customer', required: false,
+    about: 'Which customers have gone quiet or stopped ordering compared with their own usual reorder rhythm, or when one customer last ordered and how often, "which customers stopped ordering", "who has not ordered lately", "how often does Gelco order".',
+    keywords: ['stopped ordering', 'not ordered', 'gone quiet', 'inactive', 'lapsed', 'churn', 'how often', 'reorder', 'quiet'],
+    async run(c) {
+      const today = istDateString();
+      let rows = await ST.customerRhythm({ today });
+      const quietOnly = /stop|quiet|lapse|inactive|not ordered|haven'?t ordered|no order|gone|churn|lost|dormant/.test(c.question.toLowerCase()) && !c.customer;
+      if (c.customer) rows = rows.filter((r) => r.key === c.customer.key);
+      const quiet = rows.filter((r) => r.status.startsWith('quiet'));
+      if (quietOnly) rows = quiet;
+      const map = (r) => ({ customer: r.customer, orders: r.orders, last_order: r.last_order, days_since: r.days_since, usual_gap: r.usual_gap === null ? '—' : Math.round(r.usual_gap), status: r.status });
+      let summary;
+      if (c.customer) { const r = rows[0]; summary = r ? `${r.customer}: ${plural(r.orders, 'order day')}, last on ${E.fmtD(r.last_order)} (${plural(r.days_since, 'day')} ago)${r.usual_gap !== null ? `; they usually reorder every ~${Math.round(r.usual_gap)} days → ${r.status}` : '; too few orders to know a pattern'}.` : `No shipments to ${c.customer.label} yet.`; }
+      else summary = quietOnly ? (rows.length ? `${plural(rows.length, 'customer')} look quiet — no order for more than twice their usual gap.` : 'No customer looks quiet right now.') : `${plural(quiet.length, 'customer')} look quiet out of ${rows.length}.`;
+      return table({ title: c.customer ? `Ordering pattern — ${c.customer.label}` : quietOnly ? 'Customers gone quiet' : 'Customer ordering pattern', summary,
+        columns: [col('customer', 'Customer'), col('orders', 'Order days', 'int'), col('last_order', 'Last order', 'date'), col('days_since', 'Days since', 'int'), col('usual_gap', 'Usual gap (days)', 'int'), col('status', 'Status')], rows: rows.slice(0, CAP).map(map), total: rows.length, truncated: rows.length > CAP,
+        note: 'Usual gap = median days between a customer\'s order days (needs 3+ order days). Quiet = no order for more than twice that gap (min 21 days); with fewer orders only 45+ days of silence is flagged. Shipment history starts in April 2026. Internal Gelco Stores movements are excluded.', link: { path: '/notifications', label: 'Open Notifications' } });
     },
   },
 ];

@@ -15,6 +15,7 @@ export interface Reply {
   link?: ReplyLink | null;
   chips?: ReplyOption[];
   options?: ReplyOption[];
+  tool?: string;
   toolLabel?: string;
   summary?: string;
   params?: { label: string; value: string }[];

@@ -4,6 +4,7 @@
 const { queryOne, readBatch, istDateString, nowIST } = require('../db/schema');
 const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
+const ST = require('./assistantStats');
 
 const n = (x) => Number(x || 0).toLocaleString('en-IN');
 const plural = (k, w) => `${n(k)} ${w}${Number(k) === 1 ? '' : 's'}`;
@@ -16,12 +17,17 @@ async function briefing() {
   const day = part === 'morning' ? E.add(today, -1) : today;
   const dayLabel = part === 'morning' ? 'Yesterday' : 'Today';
 
-  const [d, [overdue, watch]] = await Promise.all([
+  // statistics are a bonus: if one fails, the briefing still shows everything else
+  const safe = (p) => p.catch(() => null);
+  const [d, [overdue, watch], anomaly, rhythm, cover] = await Promise.all([
     getDailyReportData('all', day),
     readBatch([
       ["SELECT COUNT(*) AS n, COALESCE(SUM(due_date < ?), 0) AS overdue FROM crm_tasks WHERE status = 'open'", [today]],
       ['SELECT COUNT(*) AS n FROM crm_contacts WHERE severity = 3', []],
     ]),
+    safe(ST.weekdayAnomaly(day)),
+    safe(ST.customerRhythm({ today })),
+    safe(ST.stockCover({ store: 'all', today })),
   ]);
   const inReels = d.inward.reduce((a, r) => a + Number(r.reel_count), 0);
   const outReels = d.outward.reduce((a, r) => a + Number(r.reel_count), 0);
@@ -38,9 +44,19 @@ async function briefing() {
     { label: 'Low-stock items', value: n(lowN), tone: lowN ? 'warn' : null, link: '/reports/alerts' },
     ...(watchN ? [{ label: 'High-severity clients', value: n(watchN), tone: 'warn', link: '/clients' }] : []),
   ];
+  const weekday = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][new Date(`${day}T00:00:00Z`).getUTCDay()];
+  // a half-finished day can't be "unusually low", so only flag high volume for today-so-far
+  if (anomaly && (anomaly.kind === 'high' || part === 'morning')) {
+    items.splice(2, 0, { label: `${dayLabel}'s shipping vs a usual ${weekday}`, value: anomaly.kind === 'high' ? `${anomaly.ratio.toFixed(1)}× usual` : `only ${Math.round(anomaly.ratio * 100)}% of usual`, tone: 'warn', link: '/reports/daily' });
+  }
+  const quiet = (rhythm || []).filter((r) => r.status.startsWith('quiet')).length;
+  const runOut = cover ? cover.rows.filter((x) => x.cover_days !== null && x.stock > 0 && x.cover_days <= 30 && x.orders >= 3).length : 0;
+  if (quiet) items.push({ label: 'Customers gone quiet', value: n(quiet), tone: 'warn', link: '/notifications' });
+  if (runOut) items.push({ label: 'Items to run out within 30 days', value: n(runOut), tone: 'warn', link: '/reports/alerts' });
   const bits = [`${plural(inReels, 'reel')} in, ${plural(outReels, 'reel')} out`];
   if (d.pendingApprovals) bits.push(`${plural(d.pendingApprovals, 'approval')} waiting`);
   if (od) bits.push(`${plural(od, 'task')} overdue`);
+  if (anomaly && anomaly.kind === 'high') bits.push('shipping unusually high');
   return { part, day, dayLabel, headline: bits.join(' · '), items, deadStock: deadN };
 }
 

@@ -59,6 +59,21 @@ const CASES = [
   ['and in September?', { type: 'table', tool: 'outward_by_customer', has: ['Customer=Gelco Electronics Pvt. Ltd.', 'Period=September 2026'] }, 'what did we ship to Gelco in August'],
   ['compare shipments this month with last month', { type: 'table', tool: 'outward_by_customer', says: /vs September 2026/ }],
   ['inward in September versus August', { type: 'table', tool: 'inward_history', says: /September 2026 vs August 2026/ }],
+  // --- coverage gaps found by the 2026-10-06 probe ---
+  ['what has Gelco Stores done today', { type: 'table', tool: 'daily_report', has: ['Store=Gelco Stores'] }],
+  ['what tasks does zakir have this week', { type: 'table', tool: 'tasks', has: ['Person=zakir', 'Period=This week'] }],
+  ['when is the next follow up with Sansui', { type: 'table', tool: 'tasks', has: ['Client=SANSUI ELECTRONICS'] }],
+  ['which clients have we not contacted', { type: 'table', tool: 'clients_pipeline', says: /never logged|no call note/ }],
+  ['which customers stopped ordering', { type: 'table', tool: 'customer_activity', says: /quiet/ }],
+  ['how often does Gelco Electronics order', { type: 'table', tool: 'customer_activity', has: [] }],
+  ['will 0603103KB500 run out soon', { type: 'table', tool: 'stock_cover', has: ['Item=0603103KB500'] }],
+  ['which items will run out in the next 30 days', { type: 'table', tool: 'stock_cover' }],
+  ['what did pranav approve yesterday', { type: 'table', tool: 'pending_requests', has: ['Person=pranav', 'Period=Yesterday (5 Oct 2026)'] }],
+  ['show me the notes on Rotomotive', { type: 'table', tool: 'client_notes', has: ['Client=Rotomotive Powerdrives India LTD'] }],
+  ['how much are the confirmed POs worth', { type: 'table', tool: 'purchase_orders', says: /worth/ }],
+  ['how much revenue did we make from Gelco shipments', { type: 'text', says: /don't carry prices/ }],
+  ['who inwarded REEL-15665', { type: 'text', says: /doesn't record which staff/ }],
+  ['what should I order next month', { type: 'text', says: /can't give recommendations/ }],
   ['low stock and pending approvals', { type: 'table', tool: 'low_stock', second: 'pending_requests' }],
 ];
 
@@ -82,7 +97,7 @@ const CASES = [
       for (const h of exp.has || []) if (!params.includes(h)) errs.push(`missing ${h} (have ${params.join(', ') || 'none'})`);
       if (exp.title && !(rep.title || '').includes(exp.title)) errs.push(`title "${rep.title}" lacks "${exp.title}"`);
       if (exp.second && !(rep.cards || []).some((c) => c.tool === exp.second)) errs.push(`no second card ${exp.second}`);
-      if (exp.says && exp.type === 'table' && !exp.says.test(`${rep.title} ${rep.summary}`)) errs.push(`summary "${(rep.summary || '').slice(0, 60)}" doesn't match ${exp.says}`);
+      if (exp.says && exp.type === 'table' && !exp.says.test(`${rep.title} ${rep.summary} ${rep.note || ''}`)) errs.push(`summary "${(rep.summary || '').slice(0, 60)}" doesn't match ${exp.says}`);
       else if (exp.says && exp.type !== 'table' && !exp.says.test(rep.text || '')) errs.push(`text "${(rep.text || '').slice(0, 60)}" doesn't match ${exp.says}`);
       if (errs.length) { fail++; bad.push(`  ✗ ${q}\n      ${errs.join('; ')}\n      trace: ${(r.body.meta?.trace || []).join(' | ')}`); } else pass++;
     }

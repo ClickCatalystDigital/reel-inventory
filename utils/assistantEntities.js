@@ -97,6 +97,29 @@ async function itemCandidates(question) {
   return scored.sort((a, b) => b.score - a.score).slice(0, 6);
 }
 
+// ---------- CRM clients (contacts + their company) ----------
+// A question names a client by company or contact ("Sansui", "Rishabh", "Pragnesh"). Tokens are weighted by rarity so a word like
+// "electronics" (in many companies) counts for little. Returns one candidate per COMPANY (all of its contacts), best first.
+async function clientCandidates(question, skipWords = []) {
+  const skip = new Set(skipWords.map((w) => w.toLowerCase()));
+  const toks = [...new Set(distinctive(question))].filter((t) => t.length >= 3 && !skip.has(t));
+  if (!toks.length) return [];
+  const rows = await queryAll('SELECT c.id, c.poc_name, c.company_id, co.name AS company FROM crm_contacts c LEFT JOIN crm_companies co ON co.id = c.company_id');
+  const hay = rows.map((r) => ({ r, w: new Set(normalizeCustomer(`${r.poc_name} ${r.company || ''}`).split(' ').filter(Boolean)) }));
+  const N = rows.length || 1;
+  const match = (w, t) => w.has(t) || (t.length >= 4 && [...w].some((x) => x.length >= 4 && (x.startsWith(t) || t.startsWith(x))));
+  const idf = new Map(toks.map((t) => [t, Math.log(N / (hay.filter((h) => match(h.w, t)).length || N)) + 1]));
+  const byCo = new Map();
+  for (const h of hay) {
+    const score = toks.reduce((a, t) => a + (match(h.w, t) ? idf.get(t) : 0), 0);
+    if (!score) continue;
+    const key = h.r.company_id ? `c${h.r.company_id}` : `p${h.r.id}`;
+    let g = byCo.get(key); if (!g) byCo.set(key, (g = { key, label: h.r.company || h.r.poc_name, ids: [], score: 0, names: [] }));
+    g.ids.push(h.r.id); g.names.push(h.r.poc_name); g.score = Math.max(g.score, score);
+  }
+  return [...byCo.values()].sort((a, b) => b.score - a.score).slice(0, 5);
+}
+
 // ---------- POs / users / reel / box ----------
 const alnum = (s) => String(s || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
 async function poCandidates(question) {
@@ -211,6 +234,6 @@ async function customerKeyMap() {
 }
 
 module.exports = {
-  customerKeyMap, norm, words, distinctive, normalizeCustomer, loadCustomerGroups, customerCandidates, itemCandidates, poCandidates, userMentions, reelBox,
+  customerKeyMap, norm, words, distinctive, normalizeCustomer, loadCustomerGroups, customerCandidates, clientCandidates, itemCandidates, poCandidates, userMentions, reelBox,
   parseStore, STORE_NAME, parsePeriod, previousPeriod, periodFromPreset, fmtD, add, STOP,
 };

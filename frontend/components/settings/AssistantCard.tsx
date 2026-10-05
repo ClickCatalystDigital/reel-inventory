@@ -28,6 +28,40 @@ interface TestResult { ok?: boolean; answered?: string; ms?: number; cost?: numb
 const price = (v: number | null) => (v === null ? "varies" : v === 0 ? "free" : `$${v < 1 ? v.toFixed(3) : v.toFixed(2)}`);
 const LOW_CREDIT = 0.05;
 
+interface Miss { question: string; why: string; times: number; last: string }
+
+// The to-do list for improving the assistant: questions it could not answer, or that you thumbed down, in the last 30 days.
+function MissedQuestions() {
+  const [rows, setRows] = useState<Miss[] | null>(null);
+  const [open, setOpen] = useState(false);
+  function toggle() {
+    setOpen((o) => !o);
+    if (rows === null) api<Miss[]>("/api/assistant/misses").then(setRows).catch(() => setRows([]));
+  }
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <button type="button" onClick={toggle} className="flex w-full items-center justify-between text-left" aria-expanded={open}>
+        <span className="text-sm font-medium">Questions it couldn’t answer</span>
+        <ChevronsUpDown className="size-4 text-muted-foreground" />
+      </button>
+      {open && (rows === null ? <Skeleton className="h-16 w-full" /> : rows.length === 0 ? (
+        <p className="text-xs text-muted-foreground">None in the last 30 days.</p>
+      ) : (
+        <ul className="divide-y rounded-md border text-sm">
+          {rows.map((r) => (
+            <li key={`${r.question}-${r.why}`} className="flex items-start gap-3 px-3 py-2">
+              <span className="min-w-0 flex-1">{r.question}</span>
+              <Badge variant="secondary" className="shrink-0 font-normal">{r.why}</Badge>
+              <span className="w-14 shrink-0 text-right text-xs tabular-nums text-muted-foreground">{r.times}×</span>
+            </li>
+          ))}
+        </ul>
+      ))}
+      <p className="text-xs text-muted-foreground">Use this list to decide which look-ups to add next.</p>
+    </div>
+  );
+}
+
 // Searchable model list (there are hundreds of models, so a plain select is unusable).
 function ModelPicker({ models, value, onChange }: { models: Model[] | null; value: string; onChange: (id: string) => void }) {
   const [open, setOpen] = useState(false);
@@ -304,6 +338,8 @@ export function AssistantCard() {
           )}
         </div>
       </div>
+
+      <MissedQuestions />
 
       <Dialog open={consentOpen} onOpenChange={setConsentOpen}>
         <DialogContent className="sm:max-w-lg">

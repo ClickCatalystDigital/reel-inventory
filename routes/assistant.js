@@ -103,13 +103,32 @@ router.post('/chat', ah(async (req, res) => {
 // Time-aware briefing (deterministic; nothing is sent to OpenRouter).
 router.get('/briefing', ah(async (req, res) => res.json(await require('../utils/assistantBriefing').briefing())));
 
+// Thumbs up/down on an answer. Stored as a log row (kind 'feedback') — no new table. A thumbs-down also drops the question from "your usual".
+router.post('/feedback', ah(async (req, res) => {
+  const { question, tool, good } = req.body || {};
+  if (typeof question !== 'string' || !question.trim() || typeof good !== 'boolean') return res.status(400).json({ error: 'Bad request.' });
+  await require('../utils/assistant').logAsk(req.user.username, question.trim().slice(0, 600), 'feedback', typeof tool === 'string' ? tool.slice(0, 40) : null, good, 0, 0);
+  res.json({ ok: true });
+}));
+
+// Questions the assistant could not answer (unclear, no look-up, said "the data doesn't have that") or that were thumbed down — the to-do list for improving it.
+router.get('/misses', ah(async (req, res) => {
+  const { queryAll } = require('../db/schema');
+  const since = new Date(Date.now() + 5.5 * 3600e3 - 30 * 86400e3).toISOString().replace('T', ' ').slice(0, 19);
+  const rows = await queryAll(
+    `SELECT MIN(question) AS question, kind, COALESCE(tool, '') AS tool, COUNT(*) AS n, MAX(at) AS last_at FROM assistant_log
+     WHERE ok = 0 AND at >= ? AND (kind IN ('unclear', 'data', 'feedback')) GROUP BY LOWER(TRIM(question)), kind ORDER BY n DESC, last_at DESC LIMIT 30`, [since]);
+  res.json(rows.map((r) => ({ question: r.question, why: r.kind === 'feedback' ? 'thumbs down' : r.tool.startsWith('unsupported') ? `not in the data (${r.tool.slice(12)})` : r.kind === 'unclear' ? 'not understood' : 'no look-up matched', times: Number(r.n), last: String(r.last_at).slice(0, 10) })));
+}));
+
 // Starter chips: this admin's own most-asked questions (last 60 days, asked at least twice) first, then the defaults.
 router.get('/starters', ah(async (req, res) => {
   const { queryAll } = require('../db/schema');
   const rows = await queryAll(
     `SELECT MIN(question) AS q, COUNT(*) AS n FROM assistant_log WHERE asked_by = ? AND kind = 'data' AND tool IS NOT NULL AND ok = 1 AND at >= ?
+       AND LOWER(TRIM(question)) NOT IN (SELECT LOWER(TRIM(question)) FROM assistant_log WHERE asked_by = ? AND kind = 'feedback' AND ok = 0)
      GROUP BY LOWER(TRIM(question)) HAVING COUNT(*) >= 2 ORDER BY n DESC, MAX(at) DESC LIMIT 3`,
-    [req.user.username, new Date(Date.now() + 5.5 * 3600e3 - 60 * 86400e3).toISOString().replace('T', ' ').slice(0, 19)]
+    [req.user.username, new Date(Date.now() + 5.5 * 3600e3 - 60 * 86400e3).toISOString().replace('T', ' ').slice(0, 19), req.user.username]
   );
   res.json({ usual: rows.map((r) => r.q), defaults: require('../utils/assistantChat').STARTERS });
 }));

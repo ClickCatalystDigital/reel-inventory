@@ -22,6 +22,25 @@ const KINDS = {
 const PERIODS = { today: 'Today', yesterday: 'Yesterday', this_week: 'This week', last_week: 'Last week', this_month: 'This month', last_month: 'Last month', last_30_days: 'The last 30 days', this_year: 'This year', all_time: 'All time, overall, ever', none: 'No period is mentioned' };
 const STORES = { all: 'All stores. Also use this whenever no store is literally named', primary: 'LS Tech Stores — only when the question names LS Tech Stores / the main store / the primary store', secondary: 'Gelco Stores — only when the question names Gelco Stores / the secondary store. A CUSTOMER called Gelco Electronics is NOT a store' };
 
+// Jev's answers for a question are remembered for an hour (per Worker instance): asking the same thing again skips the Jev call —
+// faster and free — while the data look-up still runs fresh, so numbers are never stale. Best effort: a cold instance just asks Jev.
+const JEV_CACHE = new Map();
+const JEV_TTL = 3600e3, JEV_MAX = 300;
+function cacheGet(k) { const e = JEV_CACHE.get(k); if (e && Date.now() - e.t < JEV_TTL) return e.v; JEV_CACHE.delete(k); return null; }
+function cacheSet(k, v) { if (JEV_CACHE.size >= JEV_MAX) JEV_CACHE.delete(JEV_CACHE.keys().next().value); JEV_CACHE.set(k, { t: Date.now(), v }); }
+
+const UNSUPPORTED = {
+  none: 'No — what it asks for could be found in stock, shipment, purchase-order, task or client records',
+  money: 'Money amounts for SHIPMENTS or stock: selling price, revenue, margin, profit, cost (NOT purchase-order values, which exist)',
+  who_did: 'Who personally received, shipped, scanned or entered a particular stock movement, or what a person did all day (stock movements do not record which staff member did them)',
+  advice: 'Advice, a recommendation or an opinion, such as "what should I order", "will sales grow", "is this customer reliable" (NOT how long stock will last, NOT customers who stopped ordering)',
+};
+const UNSUPPORTED_REPLY = {
+  money: ["Shipments and stock don't carry prices, so I can't give revenue or cost for them. Purchase-order lines do have unit prices — I can tell you what POs are worth.", ['How much are the confirmed POs worth?', 'What did we ship to Gelco Electronics in September?']],
+  who_did: ["The app doesn't record which staff member received or shipped stock. It does record who submitted and who approved or rejected requests, and who made transfers.", ['What did pranav approve this month?', 'Any approvals waiting?']],
+  advice: ["I only report what the data shows — I can't give recommendations or forecasts. I can show how long stock will last at the recent shipping rate, and which customers have gone quiet.", ['Which items will run out in 30 days?', 'Which customers stopped ordering?']],
+};
+
 const STARTERS = ['How many reels of BLDC CARD do we have?', 'What did we ship to Gelco Electronics in September?', "What's low on stock?", 'Which POs are confirmed but not dispatched?'];
 
 // {key: p} sorted by probability, from a Jev choice answer
@@ -63,21 +82,26 @@ async function resolveContext(c) {
   if (typeof c.itemCode === 'string') { const r = await queryOne("SELECT item_code, description FROM items WHERE item_code = ? AND status != 'Deleted'", [c.itemCode.slice(0, 120)]); if (r) out.item = { code: r.item_code, label: r.description }; }
   if (typeof c.customerKey === 'string') out.customer = (await E.loadCustomerGroups()).find((g) => g.key === c.customerKey) || null;
   if (typeof c.poNumber === 'string') out.po = (await E.poCandidates(c.poNumber.slice(0, 60)))[0] || null;
+  if (Array.isArray(c.clientIds) && c.clientIds.length) {
+    const ids = c.clientIds.filter((x) => Number.isInteger(x)).slice(0, 20);
+    if (ids.length) { const rows = await queryAll(`SELECT c.id, co.name AS company, c.poc_name FROM crm_contacts c LEFT JOIN crm_companies co ON co.id = c.company_id WHERE c.id IN (${ids.map(() => '?').join(',')})`, ids); if (rows.length) out.client = { ids: rows.map((r) => r.id), label: rows[0].company || rows[0].poc_name }; }
+  }
   if (Array.isArray(c.users)) { const all = (await queryAll('SELECT username FROM users')).map((u) => u.username); out.users = c.users.filter((u) => all.includes(u)).slice(0, 3); if (!out.users.length) out.users = null; }
   if (typeof c.reel === 'string' && /^REEL-\d{4,6}$/.test(c.reel)) out.reel = c.reel;
   if (typeof c.box === 'string' && /^BOX-\d{3,5}$/.test(c.box)) out.box = c.box;
   return out;
 }
-const contextOf = (toolKey, ctx) => ({ tool: toolKey, itemCode: ctx.item?.code || null, customerKey: ctx.customer?.key || null, poNumber: ctx.po?.po_number || null, users: ctx.users || null, store: ctx.store, period: ctx.period || null, reel: ctx.reel || null, box: ctx.box || null });
+const contextOf = (toolKey, ctx) => ({ tool: toolKey, itemCode: ctx.item?.code || null, customerKey: ctx.customer?.key || null, poNumber: ctx.po?.po_number || null, clientIds: ctx.client?.ids || null, users: ctx.users || null, store: ctx.store, period: ctx.period || null, reel: ctx.reel || null, box: ctx.box || null });
 
 function paramsFor(toolKey, tool, ctx) {
   const params = [];
   if (ctx.item) params.push({ label: 'Item', value: ctx.item.code });
   if (ctx.customer) params.push({ label: 'Customer', value: ctx.customer.label });
   if (ctx.po) params.push({ label: 'PO', value: ctx.po.po_number });
+  if (ctx.client) params.push({ label: 'Client', value: ctx.client.label });
   if (ctx.users) params.push({ label: 'Person', value: ctx.users.join(', ') });
   if (ctx.reel || ctx.box) params.push({ label: ctx.reel ? 'Reel' : 'Box', value: ctx.reel || ctx.box });
-  if (['stock_for_item', 'stock_overview', 'low_stock', 'dead_stock', 'inward_history', 'outward_by_customer', 'stock_transfers', 'daily_report'].includes(toolKey)) params.push({ label: 'Store', value: E.STORE_NAME[ctx.store] });
+  if (['stock_for_item', 'stock_overview', 'low_stock', 'dead_stock', 'stock_cover', 'inward_history', 'outward_by_customer', 'stock_transfers', 'daily_report'].includes(toolKey)) params.push({ label: 'Store', value: E.STORE_NAME[ctx.store] });
   if (tool.period && ctx.period) params.push({ label: 'Period', value: ctx.period.label });
   return params;
 }
@@ -146,6 +170,7 @@ async function turn({ user, messages, path, dry, context }) {
   const second = { ...toolCriteria, none: 'No second look-up is needed — one look-up answers the whole question' };
   questions.second_tool = { type: 'choice', instructions: "Does the latest question ALSO ask for a second, different look-up besides its main one (for example 'stock AND transfers of BLDC CARD', 'overdue tasks and pending approvals')? If so, which one?", criteria: second };
   questions.compare = { type: 'noul', instructions: "Does the latest question ask to compare two time periods or how something changed between them (for example 'September vs August', 'compared to last month', 'is it up or down')?", criteria: { true: 'It compares two periods or asks about a change over time.', false: 'It asks about a single period or no period.' } };
+  questions.unsupported = { type: 'choice', instructions: 'Does the latest question ask for something LS TECH\'s records do not contain?', criteria: UNSUPPORTED };
   if (pool.length) {
     const sc = {}; pool.forEach((g, i) => { sc[`s${i}`] = `${g.label}: ${g.text.slice(0, 160)}`; }); sc.none = 'None of these sections is about what the question asks';
     questions.section = { type: 'choice', instructions: 'Which section of the app guide answers the latest question?', criteria: sc };
@@ -153,8 +178,13 @@ async function turn({ user, messages, path, dry, context }) {
   let route = null, jev = null;
   try {
     const d = new Date(`${today}T00:00:00Z`);
-    const r = await A.jevDecide(key, { latest_question: question, previous_question: previous, today: `${today} (${DAYS[d.getUTCDay()]})`, screen_the_user_is_on: String(path || '').slice(0, 100) }, questions);
-    cost += r.cost; jev = r.answers;
+    const ck = JSON.stringify([question.toLowerCase(), previous, !!context, today]);
+    const hit = cacheGet(ck);
+    if (hit) { jev = hit; trace.push('jev: remembered answer (no Jev call)'); }
+    else {
+      const r = await A.jevDecide(key, { latest_question: question, previous_question: previous, today: `${today} (${DAYS[d.getUTCDay()]})`, screen_the_user_is_on: String(path || '').slice(0, 100) }, questions);
+      cost += r.cost; jev = r.answers; cacheSet(ck, jev);
+    }
     const k = top(jev.kind), s = top(jev.section);
     // "offtopic" is only trusted at 90%+; a clearly matching guide section turns an awkward question into how-to
     let kind = k.key || 'unclear';
@@ -188,9 +218,16 @@ async function turn({ user, messages, path, dry, context }) {
   const link = (path) => (path ? { path, label: `Open ${SCREEN_LABEL[path] || path}` } : null);
   const kind = route.kind;
 
+  // Say plainly what the data cannot answer instead of answering a neighbouring question.
+  // Jev decides; one phrase is also pinned in code because it is never answerable and Jev wavers near its threshold.
+  const un = /\bwho\b[^?]*\b(inwarded|outwarded|scanned|entered|keyed|logged)\b/i.test(question) ? { key: 'who_did', p: 1 } : jev ? top(jev.unsupported) : { key: 'none', p: 0 };
+  if (['data', 'unclear'].includes(kind) && un.key && un.key !== 'none' && un.p >= 0.8 && UNSUPPORTED_REPLY[un.key] && route.tool !== 'purchase_orders') {
+    trace.push(`unsupported: ${un.key} (${Math.round(un.p * 100)}%)`);
+    return done(text(UNSUPPORTED_REPLY[un.key][0], { chips: chips(UNSUPPORTED_REPLY[un.key][1]) }), kind, `unsupported:${un.key}`, false);
+  }
   if (kind === 'smalltalk') return done(text("Hi! I can look things up in your LS TECH data — stock, shipments, POs, tasks, clients — and explain how the app works. Try one of these:", { chips: chips(STARTERS) }), kind, null);
   if (kind === 'offtopic') return done(text('I only help with LS TECH: inventory, shipments, purchase orders, tasks, clients and how this app works. Ask me something about those.', { chips: chips(STARTERS) }), kind, null);
-  if (kind === 'unclear') return done(text("I'm not sure what you'd like to know. Could you say it with an item, customer or date? For example:", { chips: chips(STARTERS) }), kind, null);
+  if (kind === 'unclear') return done(text("I'm not sure what you'd like to know. Could you say it with an item, customer or date? For example:", { chips: chips(STARTERS) }), kind, null, false);
 
   if (kind === 'action') {
     // only suggest a screen when Jev is confident which one — a keyword guess ("delete" -> Catalog) would mislead
@@ -219,7 +256,7 @@ async function turn({ user, messages, path, dry, context }) {
   const rb = E.reelBox(question);
   if ((rb.reel || rb.box) && !toolKey) toolKey = 'trace';
   if (!toolKey || !BY_KEY[toolKey]) {
-    return done(text(`I couldn't match that to a look-up. I can look up: ${TOOLS.map((t) => t.label.toLowerCase()).join(', ')}.`, { chips: chips(STARTERS) }), kind, null);
+    return done(text(`I couldn't match that to a look-up. I can look up: ${TOOLS.map((t) => t.label.toLowerCase()).join(', ')}.`, { chips: chips(STARTERS) }), kind, null, false);
   }
 
   // A store filter applies only when the question talks about a store. Jev must not turn a customer name
@@ -241,57 +278,70 @@ async function turn({ user, messages, path, dry, context }) {
     return c;
   };
 
-  // Resolves the entity a look-up needs, runs it, returns { ctx, result } or { reply } when we must stop and ask.
+  // Resolves the entities a look-up needs (a look-up may need several: tasks = person + client), runs it, returns
+  // { ctx, result } or { reply } when we must stop and ask.
   const lookup = async (tk, { carry }) => {
     const tool = BY_KEY[tk];
     const ctx = base(tk);
     const askWhich = (what, cands, label) => ({ reply: { type: 'ask', text: `Which ${what} do you mean?`, options: cands.slice(0, 4).map((c) => ({ label: label(c), send: `${question} (${label(c)})` })) } });
-    if (tool.entity === 'trace') {
-      const r = E.reelBox(question);
-      const reel = r.reel || (carry && prior?.reel), box = r.reel ? null : (r.box || (carry && prior?.box));
-      if (!reel && !box) return { reply: text('Which reel or box? For example “where is REEL-15600”.') };
-      ctx.reel = reel || null; ctx.box = reel ? null : box;
-    } else if (tool.entity === 'item') {
-      const cands = await E.itemCandidates(question);
-      const [a, b] = cands;
-      const clear = a && (!b || a.score >= 1.6 * b.score);
-      if (clear) ctx.item = { code: a.code, label: a.label };
-      else if (!a && carry && prior?.item) ctx.item = prior.item;
-      else if (tool.required) {
-        if (!a) return { reply: text("Which item? Give me the item code or part of its description, for example “BLDC CARD” or “22pF disc cap”.") };
-        try {
-          const r = await chooseCandidate(key, question, 'item', cands, (c) => `${c.code} — ${c.label}`); cost += r.cost;
-          trace.push(`item pick: ${r.pick ? r.pick.code : 'none'} (${Math.round((r.p || 0) * 100)}%)`);
-          if (r.pick && r.p >= 0.6) ctx.item = { code: r.pick.code, label: r.pick.label };
-          else return askWhich('item', cands, (c) => c.code);
-        } catch (e) { return askWhich('item', cands, (c) => c.code); }
+    const kinds = [].concat(tool.entity || []);
+    // names of people are not clients: keep them out of the client match
+    const peopleWords = kinds.includes('client') ? (await queryAll('SELECT username FROM users')).map((u) => u.username) : [];
+    for (const e of kinds) {
+      if (e === 'trace') {
+        const r = E.reelBox(question);
+        const reel = r.reel || (carry && prior?.reel), box = r.reel ? null : (r.box || (carry && prior?.box));
+        if (!reel && !box) return { reply: text('Which reel or box? For example “where is REEL-15600”.') };
+        ctx.reel = reel || null; ctx.box = reel ? null : box;
+      } else if (e === 'item') {
+        const cands = await E.itemCandidates(question);
+        const [a, b] = cands;
+        const clear = a && (!b || a.score >= 1.6 * b.score);
+        if (clear) ctx.item = { code: a.code, label: a.label };
+        else if (!a && carry && prior?.item) ctx.item = prior.item;
+        else if (tool.required) {
+          if (!a) return { reply: text("Which item? Give me the item code or part of its description, for example “BLDC CARD” or “22pF disc cap”.") };
+          try {
+            const r = await chooseCandidate(key, question, 'item', cands, (c) => `${c.code} — ${c.label}`); cost += r.cost;
+            trace.push(`item pick: ${r.pick ? r.pick.code : 'none'} (${Math.round((r.p || 0) * 100)}%)`);
+            if (r.pick && r.p >= 0.6) ctx.item = { code: r.pick.code, label: r.pick.label };
+            else return askWhich('item', cands, (c) => c.code);
+          } catch (err) { return askWhich('item', cands, (c) => c.code); }
+        }
+      } else if (e === 'customer') {
+        const cands = await E.customerCandidates(question);
+        if (cands.length === 1) ctx.customer = cands[0];
+        else if (cands.length > 1) {
+          try {
+            const r = await chooseCandidate(key, question, 'customer or company', cands, (c) => `${c.label}${c.internal ? ' — OUR OWN internal Gelco Stores warehouse, not a customer' : ' — a customer'}`); cost += r.cost;
+            trace.push(`customer pick: ${r.pick ? r.pick.label : 'none'} (${Math.round((r.p || 0) * 100)}%)`);
+            if (r.pick && r.p >= 0.6) ctx.customer = r.pick; else return askWhich('customer', cands, (c) => c.label);
+          } catch (err) { return askWhich('customer', cands, (c) => c.label); }
+        } else if (carry && prior?.customer) ctx.customer = prior.customer;
+      } else if (e === 'client') {
+        const cands = await E.clientCandidates(question, peopleWords);
+        const [a, b] = cands;
+        if (a && (!b || b.score < 0.85 * a.score)) ctx.client = { ids: a.ids, label: a.label };
+        else if (a && b) return askWhich('client', cands.filter((x) => x.score >= 0.85 * a.score), (c) => c.label);
+        else if (carry && prior?.client) ctx.client = prior.client;
+        else if (tool.required) return { reply: text('Which client or company? For example “notes on Rotomotive”.') };
+      } else if (e === 'po') {
+        const cands = await E.poCandidates(question);
+        if (cands.length === 1) ctx.po = cands[0];
+        else if (cands.length > 1) return askWhich('PO', cands, (c) => c.po_number);
+        else {
+          const cust = await E.customerCandidates(question);
+          if (cust.length === 1 && !cust[0].internal) ctx.customer = cust[0];
+          else if (carry && prior?.po) ctx.po = prior.po;
+        }
+      } else if (e === 'user') {
+        const u = await E.userMentions(question, user);
+        if (u.length) ctx.users = u; else if (carry && prior?.users) ctx.users = prior.users;
       }
-    } else if (tool.entity === 'customer') {
-      const cands = await E.customerCandidates(question);
-      if (cands.length === 1) ctx.customer = cands[0];
-      else if (cands.length > 1) {
-        try {
-          const r = await chooseCandidate(key, question, 'customer or company', cands, (c) => `${c.label}${c.internal ? ' — OUR OWN internal Gelco Stores warehouse, not a customer' : ' — a customer'}`); cost += r.cost;
-          trace.push(`customer pick: ${r.pick ? r.pick.label : 'none'} (${Math.round((r.p || 0) * 100)}%)`);
-          if (r.pick && r.p >= 0.6) ctx.customer = r.pick; else return askWhich('customer', cands, (c) => c.label);
-        } catch (e) { return askWhich('customer', cands, (c) => c.label); }
-      } else if (carry && prior?.customer) ctx.customer = prior.customer;
-    } else if (tool.entity === 'po') {
-      const cands = await E.poCandidates(question);
-      if (cands.length === 1) ctx.po = cands[0];
-      else if (cands.length > 1) return askWhich('PO', cands, (c) => c.po_number);
-      else {
-        const cust = await E.customerCandidates(question);
-        if (cust.length === 1 && !cust[0].internal) ctx.customer = cust[0];
-        else if (carry && prior?.po) ctx.po = prior.po;
-      }
-    } else if (tool.entity === 'user') {
-      const u = await E.userMentions(question, user);
-      if (u.length) ctx.users = u; else if (carry && prior?.users) ctx.users = prior.users;
     }
     let result;
-    try { result = await tool.run(ctx); } catch (e) {
-      trace.push(`tool error: ${tk}: ${e.message}`);
+    try { result = await tool.run(ctx); } catch (err) {
+      trace.push(`tool error: ${tk}: ${err.message}`);
       return { reply: text('I could not read that data just now. Please try again in a moment.'), failed: true };
     }
     return { ctx, result };
@@ -306,13 +356,15 @@ async function turn({ user, messages, path, dry, context }) {
   // ---- compare two periods: run the same look-up for the period right before, merge the rows ----
   let card = null;
   if (jev && (jev.compare?.noul ?? 0) >= 0.75 && tool.period) {
-    if (!ctx.period) ctx.period = E.periodFromPreset('this_month', today);
-    const prev = E.previousPeriod(ctx.period, { fullMonth: /\b(last|previous|prior) month\b/i.test(question) });
+    const cur = ctx.period || E.periodFromPreset('this_month', today);
+    const prev = E.previousPeriod(cur, { fullMonth: /\b(last|previous|prior) month\b/i.test(question) });
     if (prev) {
       try {
+        const base0 = ctx.period ? result : await tool.run({ ...ctx, period: cur });
         const other = await tool.run({ ...ctx, period: prev });
-        card = compareCard(toolKey, tool, result, other, ctx, prev);
-        trace.push(`compare: ${ctx.period.label} vs ${prev.label} ${card ? 'ok' : 'unsupported'}`);
+        card = compareCard(toolKey, tool, base0, other, { ...ctx, period: cur }, prev);
+        if (card && !ctx.period) ctx.period = cur;
+        trace.push(`compare: ${cur.label} vs ${prev.label} ${card ? 'ok' : 'unsupported'}`);
       } catch (e) { trace.push(`compare failed: ${e.message}`); }
     }
   }
@@ -348,7 +400,8 @@ async function turn({ user, messages, path, dry, context }) {
   const st = jev ? top(jev.second_tool) : { key: null, p: 0 };
   if (st.key && st.key !== 'none' && st.key !== toolKey && st.p >= 0.75 && BY_KEY[st.key]) {
     const t2 = BY_KEY[st.key];
-    const needs = t2.required && ((t2.entity === 'item' && !ctx.item) || (t2.entity === 'customer' && !ctx.customer) || (t2.entity === 'po' && !ctx.po));
+    const kinds2 = [].concat(t2.entity || []);
+    const needs = t2.required && ((kinds2.includes('item') && !ctx.item) || (kinds2.includes('customer') && !ctx.customer) || (kinds2.includes('po') && !ctx.po) || (kinds2.includes('client') && !ctx.client) || (kinds2.includes('trace') && !ctx.reel && !ctx.box));
     if (!needs) {
       // reuse what the first look-up resolved (item/customer/PO/people) so the two answers are about the same thing
       try {

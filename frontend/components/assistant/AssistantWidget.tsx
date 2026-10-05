@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUp, ArrowUpRight, ChevronDown, RotateCcw, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ChevronDown, RotateCcw, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { capitalize } from "@/lib/crm";
@@ -17,6 +17,7 @@ interface Msg {
   content?: string; // user text, or a plain-text rendering of the reply (sent back as history)
   reply?: Reply;
   error?: { text: string; link?: string; linkLabel?: string };
+  fb?: boolean; // thumbs given: true = good, false = bad
 }
 
 const DEFAULT_STARTERS = ["How many reels of BLDC CARD do we have?", "What did we ship to Gelco Electronics in September?", "What's low on stock?", "Which POs are confirmed but not dispatched?"];
@@ -163,6 +164,13 @@ export function AssistantWidget() {
     [msgs, text, busy, pathname]
   );
 
+  // Thumbs on an answer: logged server-side (no new table); a thumbs-down also removes the question from "your usual" and lands in
+  // Settings → LS AI → "Questions it couldn't answer".
+  const rate = useCallback((id: number, question: string, tool: string | undefined, good: boolean) => {
+    setMsgs((m) => m.map((x) => (x.id === id ? { ...x, fb: good } : x)));
+    fetch("/api/assistant/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, tool, good }) }).catch(() => {});
+  }, []);
+
   const reset = () => { setMsgs([]); contextRef.current = null; };
 
   if (!isAdmin) return null;
@@ -300,7 +308,21 @@ export function AssistantWidget() {
                     ))}
                   </div>
                 ) : m.reply?.type === "table" ? (
-                  <ResultCard reply={m.reply} onNavigate={closeOnPhone} />
+                  <>
+                    <ResultCard reply={m.reply} onNavigate={closeOnPhone} />
+                    <div className="flex items-center justify-end gap-0.5 text-muted-foreground">
+                      {m.fb === undefined ? <span className="mr-1 text-[10px]">Was this right?</span> : <span className="mr-1 text-[10px]">Thanks</span>}
+                      {([true, false] as const).map((good) => {
+                        const Icon = good ? ThumbsUp : ThumbsDown;
+                        const q = [...msgs.slice(0, idx)].reverse().find((x) => x.role === "user")?.content ?? "";
+                        return (
+                          <button key={String(good)} type="button" disabled={m.fb !== undefined} onClick={() => rate(m.id, q, m.reply?.tool, good)} aria-label={good ? "Good answer" : "Wrong answer"} className={cn("grid size-6 place-items-center rounded-md transition-colors hover:bg-muted hover:text-foreground disabled:cursor-default disabled:hover:bg-transparent", m.fb === good && "text-foreground")}>
+                            <Icon className="size-3.5" />
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </>
                 ) : m.reply ? (
                   <>
                     <div className="rounded-xl bg-muted px-3.5 py-2.5 text-[13.5px] leading-relaxed">
