@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { queryAll, queryOne, execute } = require('../db/schema');
+const { queryAll, queryOne, execute, readBatch } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
 const r2 = require('../utils/r2');
 
@@ -104,12 +104,10 @@ async function tursoUsage() {
       'SELECT m.tbl_name AS name, SUM(d.pgsize) AS bytes FROM dbstat d JOIN sqlite_master m ON m.name = d.name GROUP BY m.tbl_name'
     );
     const total = (await queryOne('SELECT SUM(pgsize) AS bytes FROM dbstat')).bytes || 0;
-    const items = await Promise.all(sizes.map(async (t) => ({
-      name: t.name,
-      category: tableCategory(t.name),
-      bytes: t.bytes,
-      rows: (await queryOne(`SELECT COUNT(*) AS c FROM "${t.name.replace(/"/g, '""')}"`)).c,
-    })));
+    // One batched round trip for every row count. (A Promise.all of ~25 separate COUNT queries exceeds the Turso client's
+    // 20-query limiter; the overflow then waits on promises owned by another request, which Workers cancels as "hung".)
+    const counts = await readBatch(sizes.map((t) => [`SELECT COUNT(*) AS c FROM "${t.name.replace(/"/g, '""')}"`, []]));
+    const items = sizes.map((t, i) => ({ name: t.name, category: tableCategory(t.name), bytes: t.bytes, rows: counts[i].rows[0].c }));
     const rest = total - items.reduce((s, t) => s + t.bytes, 0);
     if (rest > 0) items.push({ name: 'sqlite_schema', category: 'Other', bytes: rest, rows: null });
     items.sort((a, b) => b.bytes - a.bytes);

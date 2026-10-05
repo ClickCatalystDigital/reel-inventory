@@ -10,7 +10,9 @@ let db = null;
 function connect() {
   if (!db) {
     if (!process.env.TURSO_URL) throw new Error('TURSO_URL is not set');
-    db = createClient({ url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN });
+    // concurrency: the client's default limiter (20) is shared by every request in the isolate; once it queues, a request ends up waiting on a
+    // promise owned by another request, which Workers cancels as "hung". Raised so it never queues (Workers throttles connections itself).
+    db = createClient({ url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN, concurrency: 200 });
   }
   return db;
 }

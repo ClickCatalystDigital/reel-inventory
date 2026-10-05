@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StorageCard } from "@/components/settings/StorageCard";
 import { AssistantCard } from "@/components/settings/AssistantCard";
+import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
 import { ChipMark } from "@/components/assistant/ChipMark";
 import { useAuth } from "@/lib/auth";
@@ -106,15 +107,21 @@ export default function SettingsPage() {
         <p className="text-sm text-muted-foreground">Storage, the LS AI assistant, and the people who use the app</p>
       </div>
 
-      <div className="flex flex-col gap-4 md:flex-row md:items-start">
-        <SettingsNav tabs={tabs} active={active} onSelect={selectTab} />
+      <Tabs value={active} onValueChange={selectTab} orientation="vertical" className="flex-col gap-4 md:flex-row md:items-start">
+        <SettingsNav tabs={tabs} />
 
-        <div className="min-w-0 flex-1 space-y-4">
-          {active === "storage" && <StorageCard />}
+        <div className="min-w-0 flex-1">
+          <TabsContent value="storage" className="space-y-4 outline-none">
+            <StorageCard />
+          </TabsContent>
 
-          {active === "ai" && user?.role === "admin" && <AssistantCard />}
+          {user?.role === "admin" && (
+            <TabsContent value="ai" className="space-y-4 outline-none">
+              <AssistantCard />
+            </TabsContent>
+          )}
 
-          {active === "humans" && (
+          <TabsContent value="humans" className="space-y-4 outline-none">
             <>
               <Card className="p-5">
                 <div className="flex flex-wrap items-center gap-2">
@@ -148,9 +155,9 @@ export default function SettingsPage() {
                 </>
               )}
             </>
-          )}
+          </TabsContent>
         </div>
-      </div>
+      </Tabs>
     </div>
   );
 }
