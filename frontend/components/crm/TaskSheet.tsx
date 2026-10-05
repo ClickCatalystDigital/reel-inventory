@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, ExternalLink, Mail, Phone, RotateCcw, Trash2 } from "lucide-react";
+import { Check, CheckCircle2, ExternalLink, Mail, Phone, RotateCcw, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -301,7 +301,7 @@ export function TaskSheet({ taskId, onClose, onChanged, isApprover, assignees }:
                     <span className="text-xs text-muted-foreground">Awaiting approval by an admin or manager</span>
                   )
                 ) : invoice ? (
-                  <span className="text-sm text-muted-foreground">{invoice.status === "pushed" ? "✓ Pushed to Tally" : `Status: ${invoice.status}`}</span>
+                  <span className="text-sm text-muted-foreground">{invoice.status === "pushed" ? (<span className="inline-flex items-center gap-1"><Check className="size-4" /> Pushed to Tally</span>) : `Status: ${invoice.status}`}</span>
                 ) : null
               ) : (
                 <>

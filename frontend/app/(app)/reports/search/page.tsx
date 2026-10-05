@@ -220,7 +220,7 @@ export default function SearchTracePage() {
                   />
                 ),
               },
-              { label: "Reel", render: (r) => <strong>{r.reel_number}</strong> },
+              { label: "Reel", render: (r) => <strong className="font-mono">{r.reel_number}</strong> },
               { label: "Item", render: (r) => r.item_code },
               { label: "Qty", render: (r) => formatQty(r.quantity) },
               { label: "Status", render: (r) => <StatusBadge status={r.status} /> },

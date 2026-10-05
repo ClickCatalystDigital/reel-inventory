@@ -416,8 +416,8 @@ export default function InwardPage() {
                 />
               ),
             },
-            { label: "Reel", render: (r) => <strong>{r.reel_number}</strong> },
-            { label: "Box", render: (r) => r.box_number || "—" },
+            { label: "Reel", render: (r) => <strong className="font-mono">{r.reel_number}</strong> },
+            { label: "Box", render: (r) => <span className="font-mono">{r.box_number || "—"}</span> },
             { label: "Item", render: (r) => r.item_code },
             { label: "Qty", render: (r) => formatQty(r.quantity) },
             { label: "Status", render: (r) => <StatusBadge status={r.status} /> },

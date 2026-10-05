@@ -154,7 +154,7 @@ export default function CatalogPage() {
           data={items}
           getRowKey={(i) => i.item_code}
           columns={[
-            { label: "Item Code", render: (i) => <strong>{i.item_code}</strong> },
+            { label: "Item Code", render: (i) => <strong className="font-mono">{i.item_code}</strong> },
             { label: "Description", render: (i) => i.description },
             { label: "SPQ", render: (i) => formatQty(i.default_spq) },
             { label: "Added", render: (i) => formatDate(i.created_at) },

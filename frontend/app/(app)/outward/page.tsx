@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Camera, CameraOff, PenLine } from "lucide-react";
+import { Camera, CameraOff, Check, PenLine } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime, nowISTString } from "@/lib/format";
@@ -711,8 +711,8 @@ export default function OutwardPage() {
           onPageChange={(page, size) => loadRecentOutwards(page, size)}
           getRowKey={(o) => o.id}
           columns={[
-            { label: "Reel", render: (o) => <strong>{o.reel_number}</strong> },
-            { label: "Box", render: (o) => o.box_number || "—" },
+            { label: "Reel", render: (o) => <strong className="font-mono">{o.reel_number}</strong> },
+            { label: "Box", render: (o) => <span className="font-mono">{o.box_number || "—"}</span> },
             { label: "Item", render: (o) => o.item_code },
             { label: "Customer", render: (o) => o.customer_name },
             { label: "Invoice", render: (o) => o.invoice_number },
@@ -806,7 +806,7 @@ function POValidationPanel({ po, issues }: { po: PO; issues: Issue[] }) {
   }
   if (issues.length === 0) {
     return (
-      <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs font-bold text-success">✓ Cart matches PO {po.po_number}</div>
+      <div className="rounded-md border border-success/30 bg-success/10 px-3 py-2 text-xs font-bold text-success"><Check className="mr-1 inline size-3.5" />Cart matches PO {po.po_number}</div>
     );
   }
   return (

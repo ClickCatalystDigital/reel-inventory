@@ -1,5 +1,6 @@
 "use client";
 
+import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
@@ -223,7 +224,7 @@ function RequestCard({
       {isPending && (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" className="text-success" onClick={approve}>
-            ✓ Approve
+            <Check /> Approve
           </Button>
           <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
             ✏️ Edit &amp; Approve

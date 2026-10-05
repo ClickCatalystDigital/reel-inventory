@@ -576,7 +576,7 @@ export default function TransferPage() {
           data={transfers}
           getRowKey={(t) => t.id}
           columns={[
-            { label: "Reel/Box", render: (t) => <strong>{t.reel_number || t.box_number}</strong> },
+            { label: "Reel/Box", render: (t) => <strong className="font-mono">{t.reel_number || t.box_number}</strong> },
             {
               label: "Item",
               render: (t) =>
