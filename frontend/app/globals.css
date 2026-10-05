@@ -59,9 +59,9 @@
   --card-foreground: #1a1a18;
   --popover: #ffffff;
   --popover-foreground: #1a1a18;
-  --primary: #2563eb;
+  --primary: #1a1a18; /* ink, matches the nav bar and the LS AI bubble; charts keep their own blue */
   --primary-foreground: #ffffff;
-  --primary-hover: #1d4ed8;
+  --primary-hover: #34342f;
   --secondary: #f0f0ea;
   --secondary-foreground: #1a1a18;
   --muted: #f0f0ea;
@@ -79,7 +79,7 @@
   --danger-bg: #fef2f2;
   --border: #e0e0d8;
   --input: #e0e0d8;
-  --ring: #2563eb;
+  --ring: #1a1a18;
   --radius: 6px;
   /* Nav chrome bar stays dark in BOTH themes (legacy .nav / .bottom-nav are
      not token-driven — they're overridden separately in [data-theme=dark]) —
@@ -89,15 +89,21 @@
   --shadow: 0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04);
   --sidebar: #ffffff;
   --sidebar-foreground: #1a1a18;
-  --sidebar-primary: #2563eb;
+  --sidebar-primary: #1a1a18;
   --sidebar-primary-foreground: #ffffff;
   --sidebar-accent: #f0f0ea;
   --sidebar-accent-foreground: #1a1a18;
   --sidebar-border: #e0e0d8;
-  --sidebar-ring: #2563eb;
+  --sidebar-ring: #1a1a18;
 }
 
 [data-theme="dark"] {
+  --primary: #f0f0ec;
+  --primary-foreground: #1a1a18;
+  --primary-hover: #d8d8d2;
+  --ring: #f0f0ec;
+  --sidebar-primary: #f0f0ec;
+  --sidebar-ring: #f0f0ec;
   --background: #0f0f0e;
   --foreground: #f0f0ec;
   --card: #1a1a18;
