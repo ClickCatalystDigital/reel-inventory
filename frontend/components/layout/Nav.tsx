@@ -23,7 +23,7 @@ export function Nav() {
     <nav className="sticky top-0 z-40 bg-[var(--nav-bg)] text-white">
       <div className="flex h-14 items-center justify-between gap-4 px-4">
         <Link href="/" className="shrink-0 font-bold tracking-wide">
-          LS INV MGT
+          LS TECH
         </Link>
 
         <div className="hidden h-5 w-px shrink-0 bg-white/15 md:block" />
@@ -43,32 +43,27 @@ export function Nav() {
           ))}
         </div>
 
-        <div className="hidden items-center gap-2 md:flex">
-          {showStore && <StoreSelector />}
+        {/* One right-hand cluster at every width (bells used to be mounted twice and, on mobile, sat in
+            their own row): store filter on desktop only, bells + cog always. */}
+        <div className="flex items-center gap-1 md:gap-2">
+          {showStore && (
+            <div className="hidden md:block">
+              <StoreSelector />
+            </div>
+          )}
           <ApprovalsBell />
           <NotificationsBell />
-        </div>
-
-        <CogMenu />
-      </div>
-
-      {/* Mobile-only: the store selector and bells above are md:flex-only and
-          otherwise have nowhere to live on small screens — CogMenu's dropdown
-          only ever carried Settings/Pending Requests/theme/logout, so store
-          context and approval/notification counts were completely unreachable
-          on mobile. Reuses the exact same components as the desktop row above,
-          just relocated to their own strip — no desktop markup touched.
-          Store selector takes the flexible width (bigger tap target, and it's
-          the control people actually reach for) with a touch-sized bell group
-          pinned to the right, instead of cramming all three into a tight
-          right-aligned cluster with dead space on the left. */}
-      <div className="flex items-center gap-2 border-t border-white/10 px-4 py-2 md:hidden">
-        {showStore ? <StoreSelector className="w-full flex-1 py-2 text-sm" /> : <div className="flex-1" />}
-        <div className="flex shrink-0 items-center gap-1">
-          <ApprovalsBell />
-          <NotificationsBell />
+          <CogMenu />
         </div>
       </div>
+
+      {/* Mobile-only strip, and only where the store view-filter applies: the filter has no room in the
+          top bar, so it gets its own full-width row. CRM pages (Home, Clients) have no strip at all. */}
+      {showStore && (
+        <div className="border-t border-white/10 px-4 py-2 md:hidden">
+          <StoreSelector className="w-full py-2 text-sm" />
+        </div>
+      )}
     </nav>
   );
 }

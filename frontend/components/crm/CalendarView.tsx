@@ -93,7 +93,7 @@ export function CalendarView({ today, refreshKey, jumpTo, onOpenTask, onOpenDay,
         onKeyDown={(e) => e.key === "Enter" && onOpenDay(iso)}
         className={cn(
           "cursor-pointer space-y-1 rounded-lg border bg-card p-1.5 transition-colors hover:bg-muted/40",
-          week ? "min-h-[200px]" : "min-h-[92px]",
+          week ? "min-h-[400px]" : "min-h-[92px]",
           muted && "bg-muted/30 text-muted-foreground",
           iso === today && "border-primary ring-1 ring-primary/40"
         )}
@@ -153,9 +153,9 @@ export function CalendarView({ today, refreshKey, jumpTo, onOpenTask, onOpenDay,
 
     if (view === "week") {
       return (
-        <div className="space-y-1.5">
+        <div className="flex flex-1 flex-col gap-1.5">
           {dow}
-          <div className="grid grid-cols-7 gap-1.5">{weekDays(anchor).map((iso) => cell(iso, true))}</div>
+          <div className="grid flex-1 grid-cols-7 gap-1.5">{weekDays(anchor).map((iso) => cell(iso, true))}</div>
         </div>
       );
     }
@@ -192,7 +192,7 @@ export function CalendarView({ today, refreshKey, jumpTo, onOpenTask, onOpenDay,
   }
 
   return (
-    <Card className="gap-0 p-0">
+    <Card className="h-full gap-0 p-0">
       <div className="flex flex-wrap items-center justify-between gap-2 border-b px-3 py-2.5">
         <div className="flex items-center gap-1">
           <Button variant="ghost" size="icon-sm" onClick={() => setOpen((o) => !o)} title={open ? "Collapse calendar" : "Expand calendar"}>
@@ -217,7 +217,7 @@ export function CalendarView({ today, refreshKey, jumpTo, onOpenTask, onOpenDay,
           </ToggleGroup>
         )}
       </div>
-      {open && <div className="p-3">{body()}</div>}
+      {open && <div className="flex flex-1 flex-col p-3">{body()}</div>}
     </Card>
   );
 }

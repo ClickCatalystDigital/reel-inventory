@@ -9,6 +9,8 @@ export interface DataTableColumn<T> {
   label: ReactNode;
   key?: string;
   render: (row: T) => ReactNode;
+  /** applied to both the header and body cells (e.g. "hidden md:table-cell" to drop a column on phones) */
+  className?: string;
 }
 
 interface DataTableProps<T> {
@@ -103,7 +105,7 @@ export function DataTable<T>({
           <TableHeader>
             <TableRow>
               {columns.map((c, i) => (
-                <TableHead key={c.key ?? i}>{c.label}</TableHead>
+                <TableHead key={c.key ?? i} className={c.className}>{c.label}</TableHead>
               ))}
             </TableRow>
           </TableHeader>
@@ -118,7 +120,7 @@ export function DataTable<T>({
               rows.map((row, i) => (
                 <TableRow key={getRowKey(row, i)}>
                   {columns.map((c, i) => (
-                    <TableCell key={c.key ?? i}>{c.render(row)}</TableCell>
+                    <TableCell key={c.key ?? i} className={c.className}>{c.render(row)}</TableCell>
                   ))}
                 </TableRow>
               ))

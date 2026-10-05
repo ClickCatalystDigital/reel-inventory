@@ -7,7 +7,7 @@ import { StoreProvider } from "@/lib/store-context";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Reel Inventory",
+  title: "LS Tech",
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

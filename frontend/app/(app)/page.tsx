@@ -14,7 +14,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { CalendarView } from "@/components/crm/CalendarView";
 import { DayDialog, type DayTarget } from "@/components/crm/DayDialog";
 import { TaskSheet } from "@/components/crm/TaskSheet";
-import { TaskSidebar } from "@/components/crm/TaskSidebar";
+import { TasksPanel, WatchListPanel } from "@/components/crm/TaskSidebar";
 
 const COLLAPSE_KEY = "sidebarCollapsed"; // same localStorage key the CRM used
 
@@ -123,9 +123,11 @@ export default function HomePage() {
         <p className="text-sm text-muted-foreground">Your follow-ups and upcoming touchpoints</p>
       </div>
 
-      <div className={cn("grid items-start gap-4", railed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]")}>
-        <div className="order-2 lg:order-1">
-          <TaskSidebar
+      {/* Desktop: Tasks (left, row 1) and the calendar (right, row 1) share a height, with the Watch list
+          underneath the tasks. Mobile order: calendar, tasks, watch list. */}
+      <div className={cn("grid gap-4", railed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]")}>
+        <div className="order-2 lg:order-none lg:col-start-1 lg:row-start-1">
+          <TasksPanel
             tasks={tasks}
             alerts={alerts}
             today={today}
@@ -138,10 +140,10 @@ export default function HomePage() {
             onOpenTask={setOpenTaskId}
             onDone={onDone}
             onAssign={onAssign}
-            onOpenClient={(id) => router.push(`/clients?open=${id}`)}
+            onOpenClient={(id: number) => router.push(`/clients?open=${id}`)}
           />
         </div>
-        <div className="order-1 min-w-0 lg:order-2">
+        <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">
           <CalendarView
             today={today}
             refreshKey={refreshKey}
@@ -150,6 +152,9 @@ export default function HomePage() {
             onOpenDay={(iso) => setDayTarget({ kind: "day", iso })}
             onOpenMonth={(y, m) => setDayTarget({ kind: "month", y, m })}
           />
+        </div>
+        <div className="order-3 lg:order-none lg:col-start-1 lg:row-start-2">
+          <WatchListPanel alerts={alerts} collapsed={railed} onOpenClient={(id: number) => router.push(`/clients?open=${id}`)} />
         </div>
       </div>
 

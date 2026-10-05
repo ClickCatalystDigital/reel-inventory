@@ -77,7 +77,7 @@ function TaskCard({ t, today, showAssignee, canAssign, assignees, onOpen, onDone
   );
 }
 
-export function TaskSidebar(p: Props) {
+export function TasksPanel(p: Props) {
   const count = p.tasks?.length ?? 0;
   const hasToday = !!p.tasks?.some((t) => t.due_date === p.today);
   const alertCount = p.alerts?.length ?? 0;
@@ -85,7 +85,7 @@ export function TaskSidebar(p: Props) {
   // Collapsed rail (desktop only): counts at a glance + expand button.
   if (p.collapsed) {
     return (
-      <Card className="hidden w-14 flex-col items-center gap-3 p-2 py-3 lg:flex">
+      <Card className="hidden h-full w-14 flex-col items-center gap-3 p-2 py-3 lg:flex">
         <Button variant="ghost" size="icon-sm" onClick={p.onToggleCollapsed} title="Expand">
           <ChevronsRight />
         </Button>
@@ -105,9 +105,8 @@ export function TaskSidebar(p: Props) {
   }
 
   return (
-    <div className="space-y-4">
-      <Card className="gap-0 p-0">
-        <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
+    <Card className="h-full gap-0 p-0">
+      <div className="flex items-center justify-between gap-2 border-b px-3 py-2.5">
           <div className="flex items-center gap-2">
             <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Tasks</h2>
             <span className="rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">{count}</span>
@@ -131,7 +130,7 @@ export function TaskSidebar(p: Props) {
             </Button>
           </div>
         </div>
-        <div className="max-h-[420px] space-y-2 overflow-y-auto p-3 lg:max-h-[calc(100vh-22rem)]">
+        <div className="max-h-[420px] min-h-0 flex-1 space-y-2 overflow-y-auto p-3 lg:max-h-[440px]">
           {p.tasks === null ? (
             <>
               <Skeleton className="h-20 w-full" />
@@ -156,7 +155,13 @@ export function TaskSidebar(p: Props) {
           )}
         </div>
       </Card>
+  );
+}
 
+export function WatchListPanel(p: Pick<Props, "alerts" | "collapsed" | "onOpenClient">) {
+  const alertCount = p.alerts?.length ?? 0;
+  if (p.collapsed) return null;
+  return (
       <Card className="gap-0 p-0">
         <div className="flex items-center gap-2 border-b px-3 py-2.5">
           <h2 className="text-xs font-semibold uppercase tracking-wide text-destructive">Watch list</h2>
@@ -187,6 +192,5 @@ export function TaskSidebar(p: Props) {
           )}
         </div>
       </Card>
-    </div>
   );
 }

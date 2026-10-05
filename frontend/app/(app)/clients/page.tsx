@@ -78,6 +78,12 @@ export default function ClientsPage() {
     });
   }, [clients, filters]);
 
+  const statusCounts = useMemo(() => {
+    const m: Record<string, number> = {};
+    (clients ?? []).forEach((c) => { m[c.status] = (m[c.status] || 0) + 1; });
+    return m;
+  }, [clients]);
+
   const toggle = (id: number) =>
     setSelected((prev) => {
       const next = new Set(prev);
@@ -117,12 +123,30 @@ export default function ClientsPage() {
       label: <Checkbox checked={allSelected} onCheckedChange={() => setSelected(allSelected ? new Set() : new Set(filtered.map((c) => c.id)))} aria-label="Select all" />,
       render: (c) => <Checkbox checked={selected.has(c.id)} onCheckedChange={() => toggle(c.id)} aria-label={`Select ${c.poc_name}`} />,
     },
-    { key: "poc", label: "POC", render: (c) => <button type="button" onClick={() => setOpenId(c.id)} className="font-medium text-primary hover:underline">{c.poc_name}</button> },
-    { key: "company", label: "Company", render: (c) => c.company_name || "—" },
-    { key: "designation", label: "Designation", render: (c) => c.designation || "—" },
-    { key: "product", label: "Product", render: (c) => c.product_name || "—" },
+    {
+      key: "poc",
+      label: "POC",
+      render: (c) => (
+        <div className="min-w-0 max-w-[8.25rem] sm:max-w-none">
+          <button type="button" onClick={() => setOpenId(c.id)} className="block max-w-full truncate text-left font-medium text-primary hover:underline">{c.poc_name}</button>
+          {/* on phones the company and severity columns are hidden: severity becomes a coloured dot before the company */}
+          <span className="flex max-w-[8.25rem] items-center gap-1 truncate text-xs text-muted-foreground sm:hidden">
+            <span
+              className={`shrink-0 ${severityClass(c.severity || 1)}`}
+              title={`${SEVERITIES.find((s) => s.value === (c.severity || 1))?.label} severity`}
+            >
+              ●
+            </span>
+            <span className="truncate">{c.company_name || "—"}</span>
+          </span>
+        </div>
+      ),
+    },
+    { key: "company", label: "Company", className: "hidden sm:table-cell", render: (c) => c.company_name || "—" },
+    { key: "designation", label: "Designation", className: "hidden md:table-cell", render: (c) => c.designation || "—" },
+    { key: "product", label: "Product", className: "hidden md:table-cell", render: (c) => c.product_name || "—" },
     { key: "status", label: "Status", render: (c) => <Badge variant="outline" className={clientStatusClass(c.status)}>{c.status}</Badge> },
-    { key: "sev", label: "Severity", render: (c) => <span className={`text-sm font-medium ${severityClass(c.severity || 1)}`}>{SEVERITIES.find((s) => s.value === (c.severity || 1))?.label}</span> },
+    { key: "sev", label: "Severity", className: "hidden sm:table-cell", render: (c) => <span className={`text-sm font-medium ${severityClass(c.severity || 1)}`}>{SEVERITIES.find((s) => s.value === (c.severity || 1))?.label}</span> },
     { key: "del", label: "", render: (c) => <Button variant="ghost" size="icon-xs" onClick={() => removeOne(c)} title="Delete"><Trash2 className="text-destructive" /></Button> },
   ];
 
@@ -154,6 +178,8 @@ export default function ClientsPage() {
         onChange={setFilters}
         products={products}
         designations={designations}
+        statusCounts={statusCounts}
+        resultCount={filtered.length}
         open={panelOpen}
         onToggle={() => setPanelOpen((o) => !o)}
       />
