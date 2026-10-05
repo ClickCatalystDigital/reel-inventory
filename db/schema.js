@@ -248,7 +248,8 @@ async function queryOne(sql, params = []) {
 
 async function execute(sql, params = []) {
   const result = await connect().execute({ sql, args: params });
-  return { changes: result.rowsAffected };
+  // lastInsertRowid is a BigInt (breaks res.json) and undefined for non-inserts.
+  return { changes: result.rowsAffected, lastId: result.lastInsertRowid == null ? undefined : Number(result.lastInsertRowid) };
 }
 
 // Real transaction support — used only where genuine atomicity matters (currently

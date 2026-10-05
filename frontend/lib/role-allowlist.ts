@@ -5,7 +5,7 @@
 export const ROLE_PAGE_ALLOWLIST: Record<string, string[]> = {
   client: ["/stock"],
   gelco_worker: ["/outward"],
-  gelco_manager: ["/", "/outward", "/gelco-docs", "/stocks"],
+  gelco_manager: ["/catalog", "/outward", "/gelco-docs", "/stocks"],
 };
 
 export const APPROVER_ROLES = ["admin", "manager", "gelco_manager"];

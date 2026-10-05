@@ -1,10 +1,13 @@
-import { LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
+import { House, Users, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
 import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-allowlist";
 
-// The 5 primary links shown in both the desktop nav-links bar and the mobile
-// bottom-nav on every "full chrome" page.
+// The primary links shown in both the desktop nav-links bar and the mobile
+// bottom-nav on every "full chrome" page. Home and Clients are the CRM pages
+// (LS Tech employees only — the Gelco/client roles' allowlists exclude them).
 export const PRIMARY_NAV_LINKS = [
-  { href: "/", label: "Catalog", icon: LayoutGrid },
+  { href: "/", label: "Home", icon: House },
+  { href: "/clients", label: "Clients", icon: Users },
+  { href: "/catalog", label: "Catalog", icon: LayoutGrid },
   { href: "/inward", label: "Inward", icon: PackagePlus },
   { href: "/outward", label: "Outward", icon: PackageMinus },
   { href: "/transfer", label: "Transfer", icon: ArrowLeftRight },
@@ -32,3 +35,7 @@ export function getVisibleNavLinks(role: string | undefined) {
   if (role && (GELCO_STOCKS_ROLES as readonly string[]).includes(role)) links.push(STOCKS_LINK);
   return links;
 }
+
+// CRM pages: wider content area, and the store view-filter doesn't apply to them.
+export const CRM_PATHS = ["/", "/clients"];
+export const isCrmPath = (pathname: string) => CRM_PATHS.includes(pathname);

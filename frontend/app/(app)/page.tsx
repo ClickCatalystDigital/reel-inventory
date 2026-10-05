@@ -1,207 +1,172 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
+import { toast } from "sonner";
 import { api } from "@/lib/api";
-import { showToast } from "@/lib/toast";
-import { formatDate, formatQty } from "@/lib/format";
-import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Card } from "@/components/ui/card";
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataTable } from "@/components/data-table/DataTable";
+import { useAuth } from "@/lib/auth";
+import { completeTask } from "@/lib/crm-actions";
+import { capitalize, isApproverRole, type Alert, type Assignee, type Task } from "@/lib/crm";
+import { todayISTDateString } from "@/lib/format";
+import { useMediaQuery } from "@/hooks/use-media-query";
+import { cn } from "@/lib/utils";
+import { Skeleton } from "@/components/ui/skeleton";
+import { CalendarView } from "@/components/crm/CalendarView";
+import { DayDialog, type DayTarget } from "@/components/crm/DayDialog";
+import { TaskSheet } from "@/components/crm/TaskSheet";
+import { TaskSidebar } from "@/components/crm/TaskSidebar";
 
-interface Item {
-  item_code: string;
-  description: string;
-  default_spq: number;
-  created_at: string;
+const COLLAPSE_KEY = "sidebarCollapsed"; // same localStorage key the CRM used
+
+function greeting() {
+  const h = new Date().getHours();
+  return h < 12 ? "Good morning" : h < 17 ? "Good afternoon" : "Good evening";
 }
 
-export default function CatalogPage() {
-  const { selectedStore } = useSelectedStore();
-  const [items, setItems] = useState<Item[]>([]);
-  const [itemCode, setItemCode] = useState("");
-  const [description, setDescription] = useState("");
-  const [defaultSpq, setDefaultSpq] = useState("");
+// Home for LS Tech employees (ported from the CRM's dashboard): today's tasks + watch list on the
+// left, the Week/Month/Year task calendar on the right.
+export default function HomePage() {
+  const { user, isLoading } = useAuth();
+  const router = useRouter();
+  const isDesktop = useMediaQuery("(min-width: 1024px)");
+  const today = todayISTDateString();
+  const isApprover = isApproverRole(user?.role);
 
-  const [editing, setEditing] = useState<Item | null>(null);
-  const [editCode, setEditCode] = useState("");
-  const [editDesc, setEditDesc] = useState("");
-  const [editSpq, setEditSpq] = useState("");
+  const [scope, setScope] = useState<"mine" | "all">("mine");
+  const [tasks, setTasks] = useState<Task[] | null>(null);
+  const [alerts, setAlerts] = useState<Alert[] | null>(null);
+  const [assignees, setAssignees] = useState<Assignee[]>([]);
+  const [collapsed, setCollapsed] = useState(false);
+  const [openTaskId, setOpenTaskId] = useState<number | null>(null);
+  const [dayTarget, setDayTarget] = useState<DayTarget | null>(null);
+  const [refreshKey, setRefreshKey] = useState(0);
+  const [jumpTo, setJumpTo] = useState<{ y: number; m: number; n: number } | null>(null);
 
-  async function loadItems() {
+  const loadTasks = useCallback(async () => {
     try {
-      const sp = storeQueryParam(selectedStore);
-      const list = await api<Item[]>(`/api/items${sp ? "?" + sp : ""}`);
-      list.sort((a, b) => a.item_code.localeCompare(b.item_code));
-      setItems(list);
+      setTasks(await api<Task[]>(`/api/tasks/today?scope=${scope}`));
     } catch {
-      // api() already toasted
+      setTasks([]);
     }
-  }
+  }, [scope]);
+
+  // Task list changed (done/added/deleted/assigned/edited) → refresh the sidebar and the calendar.
+  const refreshAll = useCallback(() => {
+    loadTasks();
+    setRefreshKey((k) => k + 1);
+  }, [loadTasks]);
 
   useEffect(() => {
-    // Data fetch reacting to the store selector (and on mount) — a legitimate effect use.
+    // Read after mount (not in the initial state) so the static page and first client render match.
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    loadItems();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedStore]);
+    try { setCollapsed(localStorage.getItem(COLLAPSE_KEY) === "1"); } catch { /* storage blocked */ }
+  }, []);
 
-  async function addItem() {
-    const code = itemCode.trim();
-    const desc = description.trim();
-    if (!code || !desc || !defaultSpq) return showToast("All fields are required", "error");
+  useEffect(() => {
+    if (isLoading || !user) return;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    loadTasks();
+  }, [isLoading, user, loadTasks]);
+
+  useEffect(() => {
+    if (isLoading || !user) return;
+    api<Alert[]>("/api/clients/meta/severity-alerts").then(setAlerts).catch(() => setAlerts([]));
+    if (isApproverRole(user.role)) api<Assignee[]>("/api/tasks/assignable").then(setAssignees).catch(() => {});
+  }, [isLoading, user]);
+
+  const greeted = useRef(false);
+  useEffect(() => {
+    if (!user || greeted.current) return;
+    greeted.current = true;
+    toast(`${greeting()}, ${capitalize(user.username)}!`);
+  }, [user]);
+
+  function toggleCollapsed() {
+    setCollapsed((c) => {
+      try { localStorage.setItem(COLLAPSE_KEY, c ? "0" : "1"); } catch { /* storage blocked */ }
+      return !c;
+    });
+  }
+
+  async function onAssign(id: number, username: string | null) {
     try {
-      await api("/api/items", { method: "POST", body: { item_code: code, description: desc, default_spq: parseInt(defaultSpq) } });
-      showToast(`${code} added to catalog`);
-      setItemCode("");
-      setDescription("");
-      setDefaultSpq("");
-      loadItems();
+      await api(`/api/tasks/${id}/assign`, { method: "POST", body: { assigned_to: username } });
+      refreshAll();
     } catch {
       // api() already toasted
     }
   }
 
-  function onFormKeyDown(e: React.KeyboardEvent) {
-    if (e.key === "Enter") {
-      e.preventDefault();
-      addItem();
-    }
-  }
-
-  function openEdit(item: Item) {
-    setEditing(item);
-    setEditCode(item.item_code);
-    setEditDesc(item.description);
-    setEditSpq(String(item.default_spq));
-  }
-
-  async function saveEdit() {
-    if (!editing) return;
-    const code = editCode.trim();
-    const desc = editDesc.trim();
-    const spq = parseInt(editSpq);
-    if (!code || !desc || !spq) return showToast("All fields are required", "error");
+  async function onDone(id: number) {
     try {
-      await api(`/api/items/${encodeURIComponent(editing.item_code)}`, {
-        method: "PUT",
-        body: { item_code: code, description: desc, default_spq: spq },
-      });
-      setEditing(null);
-      showToast(`${code} updated`);
-      loadItems();
+      await completeTask(id, refreshAll);
     } catch {
       // api() already toasted
     }
   }
 
-  async function deleteItem(itemCode: string) {
-    if (!window.confirm(`Delete ${itemCode}? This cannot be undone.`)) return;
-    try {
-      // encodeURIComponent converts the slash into %2F so Express treats it as text!
-      await api(`/api/items/${encodeURIComponent(itemCode)}`, { method: "DELETE" });
-      showToast(`${itemCode} deleted`);
-      loadItems();
-    } catch {
-      // api() already toasted
-    }
+  if (isLoading || !user) {
+    return (
+      <div className="space-y-4">
+        <Skeleton className="h-8 w-56" />
+        <Skeleton className="h-96 w-full" />
+      </div>
+    );
   }
+
+  const railed = collapsed && isDesktop === true;
 
   return (
     <div className="space-y-4">
       <div>
-        <h1 className="text-xl font-bold">Master Catalog</h1>
-        <p className="text-sm text-muted-foreground">Add and manage your component library</p>
+        <h1 className="text-xl font-bold">Welcome, {capitalize(user.username)}</h1>
+        <p className="text-sm text-muted-foreground">Your follow-ups and upcoming touchpoints</p>
       </div>
 
-      <Card className="p-5" onKeyDown={onFormKeyDown}>
-        <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Add New Item</div>
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-[1fr_2fr_1fr]">
-          <div className="space-y-1.5">
-            <Label>Item Code</Label>
-            <Input placeholder="e.g. MLCC-100NF-0402" value={itemCode} onChange={(e) => setItemCode(e.target.value)} />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Description</Label>
-            <Input
-              placeholder="e.g. MLCC 100nF 0402 X7R 50V"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label>Default SPQ</Label>
-            <Input
-              type="number"
-              min={1}
-              placeholder="e.g. 4000"
-              value={defaultSpq}
-              onChange={(e) => setDefaultSpq(e.target.value)}
-            />
-          </div>
+      <div className={cn("grid items-start gap-4", railed ? "lg:grid-cols-[56px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]")}>
+        <div className="order-2 lg:order-1">
+          <TaskSidebar
+            tasks={tasks}
+            alerts={alerts}
+            today={today}
+            isApprover={isApprover}
+            scope={scope}
+            onScope={setScope}
+            assignees={assignees}
+            collapsed={railed}
+            onToggleCollapsed={toggleCollapsed}
+            onOpenTask={setOpenTaskId}
+            onDone={onDone}
+            onAssign={onAssign}
+            onOpenClient={(id) => router.push(`/clients?open=${id}`)}
+          />
         </div>
-        <Button className="mt-4 self-start" onClick={addItem}>
-          + Add Item
-        </Button>
-      </Card>
+        <div className="order-1 min-w-0 lg:order-2">
+          <CalendarView
+            today={today}
+            refreshKey={refreshKey}
+            jumpTo={jumpTo}
+            onOpenTask={setOpenTaskId}
+            onOpenDay={(iso) => setDayTarget({ kind: "day", iso })}
+            onOpenMonth={(y, m) => setDayTarget({ kind: "month", y, m })}
+          />
+        </div>
+      </div>
 
-      <Card className="p-5">
-        <DataTable
-          title="All Items"
-          data={items}
-          getRowKey={(i) => i.item_code}
-          columns={[
-            { label: "Item Code", render: (i) => <strong>{i.item_code}</strong> },
-            { label: "Description", render: (i) => i.description },
-            { label: "SPQ", render: (i) => formatQty(i.default_spq) },
-            { label: "Added", render: (i) => formatDate(i.created_at) },
-            {
-              label: "",
-              render: (i) => (
-                <div className="flex gap-1.5">
-                  <Button size="sm" variant="outline" onClick={() => openEdit(i)}>
-                    Edit
-                  </Button>
-                  <Button size="sm" variant="destructive" onClick={() => deleteItem(i.item_code)}>
-                    Delete
-                  </Button>
-                </div>
-              ),
-            },
-          ]}
-        />
-      </Card>
-
-      <Dialog open={!!editing} onOpenChange={(open) => !open && setEditing(null)}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Edit Item</DialogTitle>
-          </DialogHeader>
-          <div className="space-y-3">
-            <div className="space-y-1.5">
-              <Label>Item Code</Label>
-              <Input value={editCode} onChange={(e) => setEditCode(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Description</Label>
-              <Input value={editDesc} onChange={(e) => setEditDesc(e.target.value)} />
-            </div>
-            <div className="space-y-1.5">
-              <Label>Default SPQ</Label>
-              <Input type="number" min={1} value={editSpq} onChange={(e) => setEditSpq(e.target.value)} />
-            </div>
-          </div>
-          <DialogFooter>
-            <Button variant="ghost" onClick={() => setEditing(null)}>
-              Cancel
-            </Button>
-            <Button onClick={saveEdit}>Save</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <TaskSheet
+        taskId={openTaskId}
+        onClose={() => setOpenTaskId(null)}
+        onChanged={refreshAll}
+        isApprover={isApprover}
+        assignees={assignees}
+      />
+      <DayDialog
+        target={dayTarget}
+        onClose={() => setDayTarget(null)}
+        onOpenTask={setOpenTaskId}
+        onChanged={refreshAll}
+        onJumpToMonth={(y, m) => setJumpTo({ y, m, n: Date.now() })}
+      />
     </div>
   );
 }

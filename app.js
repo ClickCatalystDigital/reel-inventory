@@ -3,7 +3,7 @@ const express = require('express');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
 const { queryOne, queryAll } = require('./db/schema');
-const { sign, userFromHeaders, CLIENT_API_ALLOWLIST } = require('./utils/auth');
+const { sign, userFromHeaders, CLIENT_API_ALLOWLIST, STAFF_ROLES } = require('./utils/auth');
 
 const app = express();
 
@@ -47,6 +47,12 @@ app.use((req, res, next) => {
   next();
 });
 
+// CRM APIs are for LS Tech employees only (Gelco roles aren't covered by the client guard above).
+app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices'], (req, res, next) => {
+  if (!STAFF_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Not authorized' });
+  next();
+});
+
 app.use('/api/items', require('./routes/items'));
 app.use('/api/inward', require('./routes/inward'));
 app.use('/api/outward', require('./routes/outward'));
@@ -59,6 +65,10 @@ app.use('/api/labels', (req, res, next) => require('./utils/pdf')(req, res, next
 app.use('/api/transfer', require('./routes/transfer'));
 app.use('/api/daily-gate', require('./routes/daily-gate'));
 app.use('/api/gelco-docs', require('./routes/gelco-docs'));
+app.use('/api/clients', require('./routes/clients'));
+app.use('/api/tasks', require('./routes/crm-tasks'));
+app.use('/api/products', require('./routes/crm-products'));
+app.use('/api/invoices', require('./routes/invoices'));
 
 // Lightweight auth info endpoint for frontend role-aware UI
 app.get('/api/auth/me', (req, res) => {

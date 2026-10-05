@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/lib/auth";
-import { getVisibleNavLinks } from "@/lib/nav-links";
+import { getVisibleNavLinks, isCrmPath } from "@/lib/nav-links";
 import { StoreSelector } from "./StoreSelector";
 import { ApprovalsBell, NotificationsBell } from "./NavBells";
 import { CogMenu } from "./CogMenu";
@@ -16,6 +16,8 @@ import { CogMenu } from "./CogMenu";
 export function Nav() {
   const pathname = usePathname();
   const { user } = useAuth();
+  // The store view-filter is meaningless on the CRM pages (Home, Clients).
+  const showStore = !isCrmPath(pathname);
 
   return (
     <nav className="sticky top-0 z-40 bg-[var(--nav-bg)] text-white">
@@ -42,7 +44,7 @@ export function Nav() {
         </div>
 
         <div className="hidden items-center gap-2 md:flex">
-          <StoreSelector />
+          {showStore && <StoreSelector />}
           <ApprovalsBell />
           <NotificationsBell />
         </div>
@@ -61,7 +63,7 @@ export function Nav() {
           pinned to the right, instead of cramming all three into a tight
           right-aligned cluster with dead space on the left. */}
       <div className="flex items-center gap-2 border-t border-white/10 px-4 py-2 md:hidden">
-        <StoreSelector className="w-full flex-1 py-2 text-sm" />
+        {showStore ? <StoreSelector className="w-full flex-1 py-2 text-sm" /> : <div className="flex-1" />}
         <div className="flex shrink-0 items-center gap-1">
           <ApprovalsBell />
           <NotificationsBell />
