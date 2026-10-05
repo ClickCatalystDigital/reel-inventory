@@ -6,7 +6,7 @@ Local-intranet inventory management system for electronic component reels ("LS T
 
 ## 1. Tech stack
 
-- **Runtime**: Node.js >= 20.9 (raised from >=18 — Next.js 16 requires it; `package.json`'s `engines` and a root `.node-version` both pin it, since a Render deploy running Node 18 previously failed silently on the frontend half), plain CommonJS, no bundler/build step.
+- **Runtime**: Node.js >= 22 (Wrangler 4 needs it; Cloudflare Workers Builds reads `.node-version`. Was >=20.9 for Next.js 16, >=18 before; `package.json`'s `engines` and a root `.node-version` both pin it, since a Render deploy running Node 18 previously failed silently on the frontend half), plain CommonJS, no bundler/build step.
 - **Web framework**: Express 4.
 - **Templating**: none server-side. `server.js` used to `res.sendFile()` static HTML from `views/`; as of the Next.js migration (§6a) it instead reverse-proxies every page to a separate Next.js process. Either way, all dynamic behavior is client-side `fetch` against `/api/*` (no SSR data-fetching anywhere).
 - **Database**: SQLite via `@libsql/client` — local file `./inventory.db` by default, or Turso (managed libSQL cloud) when `TURSO_URL` is set.
