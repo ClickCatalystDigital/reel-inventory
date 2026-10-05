@@ -104,10 +104,10 @@ export function AssistantWidget() {
   }, [isAdmin]);
 
   // Briefing + "your usual" questions load the first time the panel opens, and again after a new conversation.
-  const loaded = useRef(false);
+  const loadedAt = useRef(0); // the briefing is time-aware, so reload it when the panel is opened after 10+ minutes
   useEffect(() => {
-    if (!open || !isAdmin || loaded.current) return;
-    loaded.current = true;
+    if (!open || !isAdmin || Date.now() - loadedAt.current < 600000) return;
+    loadedAt.current = Date.now();
     fetch("/api/assistant/briefing").then((r) => (r.ok ? r.json() : null)).then((b: Briefing | null) => {
       if (!b) return;
       setBriefing(b);
@@ -193,9 +193,9 @@ export function AssistantWidget() {
           onClick={() => { setTeaser(false); setOpen(true); }}
           aria-label="Open LS AI"
           title="LS AI"
-          className="group fixed bottom-[136px] right-4 z-40 grid size-14 place-items-center rounded-full bg-foreground text-background shadow-lg ring-1 ring-black/10 transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
+          className="lsai-orb fixed bottom-[136px] right-4 z-40 grid size-14 place-items-center rounded-full transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
         >
-          <ChipMark className="size-7" />
+          <ChipMark className="lsai-glitch size-7" />
         </button>
       </>
     );

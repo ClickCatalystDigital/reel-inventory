@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { Check, ChevronsUpDown, Loader2, Search, Sparkles } from "lucide-react";
+import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDateTime } from "@/lib/format";
@@ -15,6 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { ChipMark } from "@/components/assistant/ChipMark";
 
 interface Balance { bought: number; used: number; left: number }
 interface DataAccess { on: boolean; approver_name?: string; approver_role?: string; recorded_by?: string; at?: string }
@@ -209,7 +210,7 @@ export function AssistantCard() {
     <Card className="gap-5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="flex items-center gap-2 text-base font-semibold"><Sparkles className="size-4 text-primary" /> LS AI</h2>
+          <h2 className="flex items-center gap-2 text-base font-semibold"><span className="grid size-6 place-items-center rounded-md bg-foreground text-background"><ChipMark className="size-4" /></span> LS AI</h2>
           <p className="max-w-xl text-sm text-muted-foreground">
             An assistant for LS TECH inventory, clients and tasks. Admin only. It routes each question with a decision model and answers from fixed, read-only look-ups.
           </p>

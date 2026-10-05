@@ -94,7 +94,7 @@ const TOOLS = [
     },
   },
   {
-    key: 'inward_history', label: 'Stock received (inward)', entity: 'item', required: false, period: true,
+    key: 'inward_history', label: 'Stock received (inward)', entity: 'item', required: false, period: true, comparable: true,
     about: 'What was received into stock (inward) in a period, optionally for one item, "what came in last week", "inward of BC857B in September".',
     keywords: ['inward', 'received', 'came in', 'receiving', 'inwarded'],
     async run(c) {
@@ -109,9 +109,9 @@ const TOOLS = [
     },
   },
   {
-    key: 'outward_by_customer', label: 'Shipments to customers', entity: 'customer', required: false, period: true,
+    key: 'outward_by_customer', label: 'Shipments to customers', entity: 'customer', required: false, period: true, comparable: true,
     about: 'What was shipped (outward) to customers in a period, per customer or for one named customer, "what did we ship to Gelco Electronics in September", "top customers this year", "last shipment to Sansui".',
-    keywords: ['shipped', 'shipments', 'outward', 'sold', 'sent to', 'customer', 'dispatched to', 'delivered'],
+    keywords: ['shipped', 'shipments', 'outward', 'sold', 'sent to', 'customer', 'dispatched to', 'delivered', 'ship to', 'did we ship', 'we ship'],
     async run(c) {
       const p = c.period || { from: null, to: null, label: 'All time' }; const b = bounds(p); const st = storeSql(c.store, 'o.store_code');
       const args = [...(b ? [b.from, b.to] : []), ...st.args];
@@ -176,7 +176,7 @@ const TOOLS = [
     },
   },
   {
-    key: 'stock_transfers', label: 'Stock transfers between stores', entity: 'item', required: false, period: true,
+    key: 'stock_transfers', label: 'Stock transfers between stores', entity: 'item', required: false, period: true, comparable: true,
     about: 'Stock moved between LS Tech Stores and Gelco Stores in a period, "what moved to Gelco Stores this month", "transfers yesterday".',
     keywords: ['transfer', 'transferred', 'moved to', 'moved from'],
     async run(c) {

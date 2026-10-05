@@ -78,7 +78,8 @@ async function chooseCandidate(key, question, kind, cands, describe) {
 async function resolveContext(c) {
   if (!c || typeof c !== 'object' || !BY_KEY[c.tool]) return null;
   const out = { tool: c.tool, store: ['all', 'primary', 'secondary'].includes(c.store) ? c.store : 'all', period: null };
-  if (c.period && (c.period.from === null || /^\d{4}-\d{2}-\d{2}$/.test(c.period.from || '')) && typeof c.period.label === 'string') out.period = { from: c.period.from, to: c.period.to, label: c.period.label.slice(0, 60) };
+  const isD = (x) => typeof x === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(x);
+  if (c.period && ((c.period.from === null && c.period.to === null) || (isD(c.period.from) && isD(c.period.to))) && typeof c.period.label === 'string') out.period = { from: c.period.from, to: c.period.to, label: c.period.label.slice(0, 60) };
   if (typeof c.itemCode === 'string') { const r = await queryOne("SELECT item_code, description FROM items WHERE item_code = ? AND status != 'Deleted'", [c.itemCode.slice(0, 120)]); if (r) out.item = { code: r.item_code, label: r.description }; }
   if (typeof c.customerKey === 'string') out.customer = (await E.loadCustomerGroups()).find((g) => g.key === c.customerKey) || null;
   if (typeof c.poNumber === 'string') out.po = (await E.poCandidates(c.poNumber.slice(0, 60)))[0] || null;
@@ -355,7 +356,7 @@ async function turn({ user, messages, path, dry, context }) {
 
   // ---- compare two periods: run the same look-up for the period right before, merge the rows ----
   let card = null;
-  if (jev && (jev.compare?.noul ?? 0) >= 0.75 && tool.period) {
+  if (jev && (jev.compare?.noul ?? 0) >= 0.75 && tool.comparable) {
     const cur = ctx.period || E.periodFromPreset('this_month', today);
     const prev = E.previousPeriod(cur, { fullMonth: /\b(last|previous|prior) month\b/i.test(question) });
     if (prev) {

@@ -147,3 +147,28 @@
     font-variant-numeric: tabular-nums;
   }
 }
+
+/* LS AI launcher: a slightly domed ink orb (soft top highlight, darker underside, layered drop shadow) with a rare, brief RGB-split glitch
+   on the chip mark. The glitch runs ~0.5 s every 7 s, faster on hover, and is off for reduced-motion users. */
+.lsai-orb {
+  background: radial-gradient(circle at 32% 24%, #4a4a45 0%, #1a1a18 62%);
+  color: #fff;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -3px 5px rgba(0, 0, 0, 0.45), 0 8px 16px -4px rgba(0, 0, 0, 0.4), 0 2px 4px rgba(0, 0, 0, 0.25);
+}
+[data-theme="dark"] .lsai-orb {
+  background: radial-gradient(circle at 32% 24%, #ffffff 0%, #d2d2cc 65%);
+  color: #1a1a18;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -3px 5px rgba(0, 0, 0, 0.2), 0 8px 16px -4px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
+}
+@keyframes lsai-glitch {
+  0%, 91%, 100% { transform: none; filter: none; }
+  92% { transform: translate(-1.5px, 0); filter: drop-shadow(1.5px 0 #ff2d55) drop-shadow(-1.5px 0 #22d3ee); }
+  94% { transform: translate(1.5px, -1px); filter: drop-shadow(-1.5px 0 #ff2d55) drop-shadow(1.5px 0 #22d3ee); }
+  96% { transform: translate(-1px, 1px); filter: drop-shadow(1px 0 #ff2d55) drop-shadow(-1px 0 #22d3ee); }
+  98% { transform: translate(1px, 0); filter: drop-shadow(-1px 0 #ff2d55) drop-shadow(1px 0 #22d3ee); }
+}
+.lsai-glitch { animation: lsai-glitch 7s steps(1, end) infinite; }
+.lsai-orb:hover .lsai-glitch { animation-duration: 0.7s; }
+@media (prefers-reduced-motion: reduce) {
+  .lsai-glitch, .lsai-orb:hover .lsai-glitch { animation: none; }
+}
