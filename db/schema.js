@@ -191,6 +191,29 @@ async function initDB() {
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
+  // LS AI (admin assistant): settings key/value, per-day question counter, question + settings audit log.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL DEFAULT '',
+    updated_by TEXT,
+    updated_at TEXT
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS assistant_usage (
+    day TEXT PRIMARY KEY,
+    count INTEGER NOT NULL DEFAULT 0
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS assistant_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    asked_by TEXT,
+    at TEXT,
+    question TEXT,
+    kind TEXT,
+    tool TEXT,
+    ok INTEGER,
+    ms INTEGER,
+    cost REAL
+  )`);
+
   // Lookups that used to scan whole tables on every call (item membership/stock summary per item,
   // outward history per reel, box contents, the 30s pending-requests poll).
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_item_store_status ON reels(item_code, store_code, status)`);
@@ -301,6 +324,12 @@ async function healCounters() {
   `);
 }
 
+// Read-only variant of batch(): several SELECTs in one round trip, rejected by the DB if any statement writes.
+async function readBatch(statements) {
+  if (!statements.length) return [];
+  return connect().batch(statements.map(([sql, args = []]) => ({ sql, args })), 'read');
+}
+
 // Many statements, ONE round trip, all-or-nothing. Each is [sql, args]. Workers allow few
 // subrequests per request, and every execute() is one, so loops of queries must go through here.
 async function batch(statements) {
@@ -346,4 +375,4 @@ function istDayBounds(dateStr) {
   return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };
+module.exports = { initDB, queryAll, queryOne, execute, withTransaction, batch, readBatch, reserveNumbers, healCounters, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };

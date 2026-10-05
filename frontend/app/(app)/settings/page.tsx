@@ -10,6 +10,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StorageCard } from "@/components/settings/StorageCard";
+import { AssistantCard } from "@/components/settings/AssistantCard";
+import { useAuth } from "@/lib/auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
@@ -31,6 +33,7 @@ interface AppUser {
 }
 
 export default function SettingsPage() {
+  const { user } = useAuth();
   const { selectedStore } = useSelectedStore();
   const [users, setUsers] = useState<AppUser[] | null>(null);
   const [newUsername, setNewUsername] = useState("");
@@ -84,6 +87,9 @@ export default function SettingsPage() {
       </div>
 
       <StorageCard />
+
+      {/* LS AI settings: admin only (the server enforces this too) */}
+      {user?.role === "admin" && <AssistantCard />}
 
       <Card className="p-5">
         <div className="flex flex-wrap items-center gap-2">

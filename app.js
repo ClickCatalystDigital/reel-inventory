@@ -53,6 +53,12 @@ app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices'], (req, 
   next();
 });
 
+// LS AI is admin-only (not manager): the key, credit and (later) business data are the owner's.
+app.use('/api/assistant', (req, res, next) => {
+  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
+  next();
+});
+
 app.use('/api/items', require('./routes/items'));
 app.use('/api/inward', require('./routes/inward'));
 app.use('/api/outward', require('./routes/outward'));
@@ -69,6 +75,7 @@ app.use('/api/clients', require('./routes/clients'));
 app.use('/api/tasks', require('./routes/crm-tasks'));
 app.use('/api/products', require('./routes/crm-products'));
 app.use('/api/invoices', require('./routes/invoices'));
+app.use('/api/assistant', require('./routes/assistant'));
 
 // Lightweight auth info endpoint for frontend role-aware UI
 app.get('/api/auth/me', (req, res) => {

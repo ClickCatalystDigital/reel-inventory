@@ -291,10 +291,25 @@ Favicon route added to `MIGRATED_PAGE_PATHS` (was 404ing for unrestricted roles)
 - UI differences from the CRM: shadcn look (not monospace), store dropdown hidden on `/` and `/clients`, content width `max-w-6xl` on those two pages (`components/layout/PageShell.tsx`), metrics refresh after add/edit, invoice-review tasks have no plain "Done" button (they close via approve/reject), no "Open in Docs" link until Docs is merged.
 - **Next phases (not started):** Docs/invoice AI pipeline (upload, OpenRouter extraction, Telegram webhook — needs `ctx.waitUntil`/Queues, R2 binding), Finance/Tally pages (the Python Tally agent stays on the office PC), PO management UI (ls_crm's `routes/po.js` is a superset of this repo's — replace, don't duplicate), products settings.
 
+## 6c. LS AI assistant — Part 1: Settings → Assistant (added 2026-10-06)
+
+Admin-only assistant modelled on SB Ops' OPS AI; **Part 1 (settings) is built, Part 2 (the chat bubble + look-ups) is not**. Plan: Jev (OpenRouter decision model `typesafe/jev-1.13`, `POST /api/alpha/decisions` — choice / noul / score questions over a string-or-JSON `state`, ~$0.00002 per call) routes each question to fixed read-only look-ups; code does the maths; a writing model is optional.
+
+- **Access:** `adminOnly` guard in `app.js` (`role === 'admin'` exactly — managers are blocked) on `/api/assistant/*`; the Settings card also only renders for admin.
+- **Tables** (this app's own, created in `initDB()`): `app_settings(key, value, updated_by, updated_at)`, `assistant_usage(day, count)`, `assistant_log` (questions + settings-change audit; never keys or rows).
+- **Key storage:** `utils/secrets.js` — WebCrypto AES-256-GCM, stored `base64(iv12|ciphertext+tag)`, key = Worker secret **`SETTINGS_ENC_KEY`** (32 random bytes base64; set with `wrangler secret put`, also in `.dev.vars`). Fails closed. The OpenRouter key is write-only: the API returns `hasKey` + last 4 only.
+- **`utils/assistant.js`:** settings, `getBalance` (`/api/v1/credits`), `listModels` (`/api/v1/models`, cached 1 h per isolate), `jevDecide` (15 s timeout), `openRouterError` (402/401/429 → friendly messages), atomic daily cap (`INSERT … ON CONFLICT … WHERE count < ? RETURNING`), audit. `OPENROUTER_BASE` env var exists only so tests can point at a local stub.
+- **`routes/assistant.js`:** `GET/PUT /settings` (`{key|model|mode}`, `{dataAccess}`, `{cap}`), `GET /models`, `POST /test` (credits + one Jev decision).
+- **UI:** `components/settings/AssistantCard.tsx` — key input, live credit strip (red ≤ $0.05), Test connection, searchable model picker with pricing, answer mode (`show` default = tables only, no writing model · `write`), daily limit (default 100), data-access consent dialog (who approved / role / recorded_by / when; off by default).
+- **Consent semantics:** off → only the question text and look-up descriptions may go to OpenRouter; on → also candidate names/codes (entity resolution) and, in `write` mode only, result rows.
+- `db/schema.js` also exports `readBatch()` (several SELECTs in one round trip, `'read'` mode).
+- **Tested** with a local stub OpenRouter (40 backend checks: role matrix, encryption round-trip/tamper/fail-closed, credit, error mapping, model list, cap atomicity under concurrency, consent, audit contains no secrets) plus browser checks; all test rows were removed from the live DB.
+- **Part 2 (not started):** floating chat bubble bottom-right (admin only), `POST /api/assistant/chat` (buffered JSON, no streaming), 13 read-only look-ups (items, stock per store, stock alerts, inward, outward by customer, reel/box trace, transfers, daily report, pending requests, POs, tasks, clients), entity resolution with customer-name normalisation (Gelco has ~10 spellings), `{dry:true}` eval endpoint, how-to guide. Gated on: a real OpenRouter key saved + a design review.
+
 ## 7. Config / environment
 
 `wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).
-Secrets (never in files that are committed): `TURSO_AUTH_TOKEN`, `SESSION_SECRET` — `wrangler secret put <NAME>` for the deployed Worker, `.dev.vars` (gitignored) for `wrangler dev`, `.env` for the `scripts/*.js` CLIs.
+Secrets (never in files that are committed): `TURSO_AUTH_TOKEN`, `SESSION_SECRET`, `SETTINGS_ENC_KEY` — `wrangler secret put <NAME>` for the deployed Worker, `.dev.vars` (gitignored) for `wrangler dev`, `.env` for the `scripts/*.js` CLIs.
 
 ## 8. Running locally / Deployment
 
