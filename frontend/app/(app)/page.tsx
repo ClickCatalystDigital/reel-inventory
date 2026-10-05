@@ -143,7 +143,7 @@ export default function HomePage() {
             onOpenClient={(id: number) => router.push(`/clients?open=${id}`)}
           />
         </div>
-        <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1">
+        <div className="order-1 min-w-0 lg:order-none lg:col-start-2 lg:row-start-1 lg:min-h-[calc(100dvh-25rem)]">
           <CalendarView
             today={today}
             refreshKey={refreshKey}

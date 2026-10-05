@@ -130,7 +130,7 @@ export function TasksPanel(p: Props) {
             </Button>
           </div>
         </div>
-        <div className="max-h-[420px] min-h-0 flex-1 space-y-2 overflow-y-auto p-3 lg:max-h-[440px]">
+        <div className="max-h-[420px] min-h-0 flex-1 space-y-2 overflow-y-auto p-3 lg:max-h-[calc(100dvh-28rem)]">
           {p.tasks === null ? (
             <>
               <Skeleton className="h-20 w-full" />

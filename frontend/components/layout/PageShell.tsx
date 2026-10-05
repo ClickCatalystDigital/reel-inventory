@@ -10,8 +10,8 @@ import { isCrmPath } from "@/lib/nav-links";
 export function PageShell({ children }: { children: React.ReactNode }) {
   const wide = isCrmPath(usePathname());
   return (
-    <main className={cn("mx-auto px-4 pt-6 pb-[88px] md:pb-6", wide ? "max-w-6xl" : "max-w-5xl")}>
-      {children}
+    <main className={cn("mx-auto flex w-full flex-1 flex-col px-4 pt-6 pb-[88px] md:pb-6", wide ? "max-w-6xl" : "max-w-5xl")}>
+      <div className="flex-1">{children}</div>
       <footer className="print:hidden">
         <div className="mt-10 border-t py-4 text-right text-[11px] text-muted-foreground/80">
           LS Tech — an{" "}
