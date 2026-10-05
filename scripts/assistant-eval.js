@@ -1,13 +1,18 @@
 // LS AI evaluation: runs a fixed set of questions through the real pipeline in DRY mode (no daily-cap use, no writing
 // model) with the REAL Jev model, and compares what it decided against what we expect. Costs a few cents.
 //   node scripts/assistant-eval.js            (needs OPEN_ROUTER_KEY in .env or a key saved in Settings, and SETTINGS_ENC_KEY in .dev.vars)
-// It temporarily switches "data access" on in app_settings and removes its own settings/log rows afterwards.
+// It never writes settings: the key and the data-access consent are overridden in-process (the shared database may hold the REAL key and
+// consent, which this script must not touch). It only removes its own assistant_log rows.
 require('dotenv').config();
 const fs = require('fs');
 if (!process.env.SETTINGS_ENC_KEY && fs.existsSync('.dev.vars')) process.env.SETTINGS_ENC_KEY = (fs.readFileSync('.dev.vars', 'utf8').match(/^SETTINGS_ENC_KEY=(.*)$/m) || [])[1];
 const A = require('../utils/assistant');
 const S = require('../db/schema');
 const { turn } = require('../utils/assistantChat');
+// in-process overrides: use OPEN_ROUTER_KEY from .env and pretend consent is on — nothing is written to app_settings
+A.getKey = async () => process.env.OPEN_ROUTER_KEY;
+const realSettings = A.getSettings;
+A.getSettings = async () => ({ ...(await realSettings()), dataAccess: { on: true } });
 
 // expect: reply type (table | text | ask), tool (for table), kind-ish text match (for text), params that must appear
 const CASES = [
@@ -79,7 +84,6 @@ const CASES = [
 
 (async () => {
   let pass = 0, fail = 0, cost = 0, ms = 0; const bad = [];
-  await A.setSettings('eval', [['assistant_data_access', JSON.stringify({ on: true, approver_name: 'eval', recorded_by: 'eval', at: new Date().toISOString() })]]);
   try {
     for (const [q, exp, prevQ] of CASES) {
       let msgs = [{ role: 'user', content: q }], context;
@@ -102,7 +106,6 @@ const CASES = [
       if (errs.length) { fail++; bad.push(`  ✗ ${q}\n      ${errs.join('; ')}\n      trace: ${(r.body.meta?.trace || []).join(' | ')}`); } else pass++;
     }
   } finally {
-    await S.execute("DELETE FROM app_settings WHERE key LIKE 'assistant_%'");
     await S.execute("DELETE FROM assistant_log WHERE asked_by = 'eval'");
   }
   if (bad.length) console.log(bad.join('\n'));

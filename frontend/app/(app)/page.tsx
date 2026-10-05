@@ -78,7 +78,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!user || greeted.current) return;
     greeted.current = true;
-    if (user.role === "admin") return; // the LS AI bubble greets the admin instead
+    if (["admin", "manager", "user"].includes(user.role)) return; // the LS AI bubble greets LS Tech staff instead
     toast(`${greeting()}, ${capitalize(user.username)}!`);
   }, [user]);
 

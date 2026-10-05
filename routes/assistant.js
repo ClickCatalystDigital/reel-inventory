@@ -1,4 +1,5 @@
-// routes/assistant.js — LS AI settings API (admin only; see the adminOnly guard in app.js).
+// routes/assistant.js — LS AI API. Settings/models/test/misses are admin-only; chat, briefing, starters and feedback are open to LS Tech staff
+// (admin/manager/user) — see the guard in app.js. Gelco roles and clients are blocked.
 // Part 1: settings, models, connection test. The chat endpoint is added in Part 2.
 const express = require('express');
 const router = express.Router();
@@ -96,12 +97,12 @@ router.post('/test', ah(async (req, res) => {
 // One chat turn. Admin only (guard in app.js). History lives in the browser; only the last messages are sent.
 router.post('/chat', ah(async (req, res) => {
   const { messages, path, dry, context } = req.body || {};
-  const out = await require('../utils/assistantChat').turn({ user: req.user.username, messages, path, dry: dry === true, context });
+  const out = await require('../utils/assistantChat').turn({ user: req.user.username, role: req.user.role, messages, path, dry: dry === true && req.user.role === 'admin', context });
   res.status(out.status).json(out.body);
 }));
 
 // Time-aware briefing (deterministic; nothing is sent to OpenRouter).
-router.get('/briefing', ah(async (req, res) => res.json(await require('../utils/assistantBriefing').briefing())));
+router.get('/briefing', ah(async (req, res) => res.json(await require('../utils/assistantBriefing').briefing({ role: req.user.role, user: req.user.username }))));
 
 // Thumbs up/down on an answer. Stored as a log row (kind 'feedback') — no new table. A thumbs-down also drops the question from "your usual".
 router.post('/feedback', ah(async (req, res) => {

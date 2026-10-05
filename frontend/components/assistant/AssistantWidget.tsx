@@ -49,7 +49,7 @@ function Thinking() {
   );
 }
 
-// LS AI: floating chat bubble (bottom-right) for the admin only. Answers come from fixed read-only look-ups;
+// LS AI: floating chat bubble (bottom-right) for LS Tech staff. Answers come from fixed read-only look-ups;
 // the conversation lives in this component (nothing is stored server-side except a one-line question log).
 export function AssistantWidget() {
   const { user } = useAuth();
@@ -69,7 +69,8 @@ export function AssistantWidget() {
   const idRef = useRef(1);
   const contextRef = useRef<Record<string, unknown> | null>(null); // what the last table answer was about, for follow-ups
 
-  const isAdmin = user?.role === "admin";
+  // LS Tech staff only (admin, manager, user). Gelco roles and clients never get the bubble; the server enforces it too.
+  const canUse = ["admin", "manager", "user"].includes(user?.role ?? "");
   const name = user ? capitalize(user.username) : "";
   const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
@@ -97,16 +98,16 @@ export function AssistantWidget() {
 
   // Greeting: once a day a small note appears beside the bubble (this replaces the old "Good morning" toast on Home).
   useEffect(() => {
-    if (!isAdmin || store.get("lsai_greeted") === todayKey()) return;
+    if (!canUse || store.get("lsai_greeted") === todayKey()) return;
     const on = setTimeout(() => { setTeaser(true); store.set("lsai_greeted", todayKey()); }, 1200);
     const off = setTimeout(() => setTeaser(false), 11000);
     return () => { clearTimeout(on); clearTimeout(off); };
-  }, [isAdmin]);
+  }, [canUse]);
 
   // Briefing + "your usual" questions load the first time the panel opens, and again after a new conversation.
   const loadedAt = useRef(0); // the briefing is time-aware, so reload it when the panel is opened after 10+ minutes
   useEffect(() => {
-    if (!open || !isAdmin || Date.now() - loadedAt.current < 600000) return;
+    if (!open || !canUse || Date.now() - loadedAt.current < 600000) return;
     loadedAt.current = Date.now();
     fetch("/api/assistant/briefing").then((r) => (r.ok ? r.json() : null)).then((b: Briefing | null) => {
       if (!b) return;
@@ -118,7 +119,7 @@ export function AssistantWidget() {
       setUsual(d.usual ?? []);
       if (d.defaults?.length) setDefaults(d.defaults);
     }).catch(() => {});
-  }, [open, isAdmin]);
+  }, [open, canUse]);
 
   function toggleBrief() {
     setBriefOpen((o) => {
@@ -173,7 +174,7 @@ export function AssistantWidget() {
 
   const reset = () => { setMsgs([]); contextRef.current = null; };
 
-  if (!isAdmin) return null;
+  if (!canUse) return null;
 
   if (!open) {
     return (

@@ -128,7 +128,8 @@ function compareCard(toolKey, tool, a, b, ctx, prev) {
 }
 
 // run one turn. Returns { status, body }.
-async function turn({ user, messages, path, dry, context }) {
+async function turn({ user, role = 'admin', messages, path, dry, context }) {
+  const isAdmin = role === 'admin', isStaff = role === 'user'; // 'user' = ordinary LS Tech employee: own tasks only, no approvals view
   const t0 = Date.now(); let cost = 0; const trace = [];
   const msgs = (Array.isArray(messages) ? messages : []).filter((m) => m && (m.role === 'user' || m.role === 'assistant') && typeof m.content === 'string' && m.content.trim());
   const last = msgs[msgs.length - 1];
@@ -138,12 +139,12 @@ async function turn({ user, messages, path, dry, context }) {
 
   const settings = await A.getSettings();
   const key = await A.getKey().catch(() => null);
-  if (!key) return { status: 400, body: { error: 'No OpenRouter key yet. Add one in Settings → LS AI.', link: '/settings', linkLabel: 'Open Settings' } };
+  if (!key) return { status: 400, body: isAdmin ? { error: 'No OpenRouter key yet. Add one in Settings → AI.', link: '/settings', linkLabel: 'Open Settings' } : { error: 'LS AI is not set up yet. Ask an admin to add the key in Settings → AI.' } };
 
   let usage = null;
   if (!dry) {
     usage = await A.useQuestion(settings.cap);
-    if (!usage.ok) return { status: 429, body: { error: `You have used today's ${settings.cap} questions. The limit resets at midnight IST.` } };
+    if (!usage.ok) return { status: 429, body: { error: `LS AI has used today's ${settings.cap} questions. The limit resets at midnight IST.` } };
   } else usage = { used: await A.usedToday(), cap: settings.cap };
 
   const today = istDateString();
@@ -154,7 +155,7 @@ async function turn({ user, messages, path, dry, context }) {
   };
   const upstreamError = (e) => {
     const up = e.upstream || { status: 502, error: e.message };
-    return { status: [401, 402, 429].includes(up.status) ? up.status : 502, body: { error: up.error, link: up.link, linkLabel: up.linkLabel } };
+    return { status: [401, 402, 429].includes(up.status) ? up.status : 502, body: isAdmin ? { error: up.error, link: up.link, linkLabel: up.linkLabel } : { error: [401, 402].includes(up.status) ? 'LS AI is unavailable right now. Please tell an admin.' : up.error } };
   };
 
   // ---- Jev call 1: what is this, which look-up, which store/period, which guide section ----
@@ -251,9 +252,10 @@ async function turn({ user, messages, path, dry, context }) {
 
   // ---- data ----
   if (!settings.dataAccess.on) {
-    return done(text('Data questions are switched off. An admin can turn on “Answers about live business data” in Settings → LS AI after recording the approval.', { link: { path: '/settings', label: 'Open Settings' } }), kind, null);
+    return done(text(isAdmin ? 'Data questions are switched off. You can turn on “Answers about live business data” in Settings → AI after recording the approval.' : 'Data questions are switched off. Ask an admin to turn them on in Settings → AI.', isAdmin ? { link: { path: '/settings', label: 'Open Settings' } } : {}), kind, null);
   }
   let toolKey = route.tool && route.tool !== 'none' ? route.tool : null;
+  if (isStaff && toolKey === 'pending_requests') return done(text('Approval requests are visible to managers and admins only.'), kind, toolKey);
   const rb = E.reelBox(question);
   if ((rb.reel || rb.box) && !toolKey) toolKey = 'trace';
   if (!toolKey || !BY_KEY[toolKey]) {
@@ -340,8 +342,11 @@ async function turn({ user, messages, path, dry, context }) {
         if (u.length) ctx.users = u; else if (carry && prior?.users) ctx.users = prior.users;
       }
     }
+    // ordinary staff only see their own tasks (same as Home's "Mine"), whoever the question names
+    const ownOnly = isStaff && tk === 'tasks';
+    if (ownOnly) ctx.users = [user];
     let result;
-    try { result = await tool.run(ctx); } catch (err) {
+    try { result = await tool.run(ctx); if (ownOnly) result.note = `Showing your own tasks only. ${result.note || ''}`.trim(); } catch (err) {
       trace.push(`tool error: ${tk}: ${err.message}`);
       return { reply: text('I could not read that data just now. Please try again in a moment.'), failed: true };
     }
@@ -399,14 +404,14 @@ async function turn({ user, messages, path, dry, context }) {
 
   // ---- second look-up: "stock AND transfers of X" — run it only when it needs nothing we don't already have ----
   const st = jev ? top(jev.second_tool) : { key: null, p: 0 };
-  if (st.key && st.key !== 'none' && st.key !== toolKey && st.p >= 0.75 && BY_KEY[st.key]) {
+  if (st.key && st.key !== 'none' && st.key !== toolKey && st.p >= 0.75 && BY_KEY[st.key] && !(isStaff && st.key === 'pending_requests')) {
     const t2 = BY_KEY[st.key];
     const kinds2 = [].concat(t2.entity || []);
     const needs = t2.required && ((kinds2.includes('item') && !ctx.item) || (kinds2.includes('customer') && !ctx.customer) || (kinds2.includes('po') && !ctx.po) || (kinds2.includes('client') && !ctx.client) || (kinds2.includes('trace') && !ctx.reel && !ctx.box));
     if (!needs) {
       // reuse what the first look-up resolved (item/customer/PO/people) so the two answers are about the same thing
       try {
-        const c2 = { ...ctx }; if (!t2.period) delete c2.period; else if (!c2.period) c2.period = explicitPeriod || null;
+        const c2 = { ...ctx }; if (isStaff && st.key === 'tasks') c2.users = [user]; if (!t2.period) delete c2.period; else if (!c2.period) c2.period = explicitPeriod || null;
         const r2 = await t2.run(c2);
         reply.cards = [{ type: 'table', tool: st.key, toolLabel: t2.label, params: paramsFor(st.key, t2, c2), ...r2 }];
         trace.push(`second: ${st.key} (${Math.round(st.p * 100)}%)`);

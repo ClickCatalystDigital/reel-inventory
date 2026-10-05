@@ -53,9 +53,12 @@ app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices'], (req, 
   next();
 });
 
-// LS AI is admin-only (not manager): the key, credit and (later) business data are the owner's.
+// LS AI: the chat (+ briefing, starters, thumbs) is open to LS Tech staff — admin, manager, user — and closed to Gelco roles and clients.
+// Everything that touches the OpenRouter key, credit, models, consent, cap or the misses list stays admin-only.
+const ASSISTANT_STAFF_PATHS = new Set(['/chat', '/briefing', '/starters', '/feedback']);
 app.use('/api/assistant', (req, res, next) => {
-  if (req.user.role !== 'admin') return res.status(403).json({ error: 'Not authorized' });
+  const ok = req.user.role === 'admin' || (STAFF_ROLES.includes(req.user.role) && ASSISTANT_STAFF_PATHS.has(req.path));
+  if (!ok) return res.status(403).json({ error: 'Not authorized' });
   next();
 });
 
