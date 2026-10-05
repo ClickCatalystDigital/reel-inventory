@@ -23,4 +23,14 @@ export interface Reply {
   total?: number;
   truncated?: boolean;
   note?: string | null;
+  context?: Record<string, unknown> | null; // sent back with the next question so "and last month?" works
+  cards?: Reply[]; // a second look-up answered in the same turn
+}
+
+export interface Briefing {
+  part: "morning" | "afternoon" | "evening";
+  day: string;
+  dayLabel: string;
+  headline: string;
+  items: { label: string; value: string; tone?: "warn" | null; link?: string }[];
 }

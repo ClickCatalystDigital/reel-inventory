@@ -53,14 +53,27 @@ const CASES = [
   ['what is the capital of France', { type: 'text', says: /only help with LS TECH/i }],
   ['write me a python script', { type: 'text', says: /only help with LS TECH/i }],
   ['hello', { type: 'text', says: /Hi!/ }],
+  // --- complex: follow-ups carry the subject, comparisons, two look-ups (3rd item = the question asked just before) ---
+  ['and last month?', { type: 'table', tool: 'inward_history', has: ['Period=Last month'] }, 'what came in this month'],
+  ['what about Gelco Stores?', { type: 'table', tool: 'low_stock', has: ['Store=Gelco Stores'] }, "what's running low?"],
+  ['and in September?', { type: 'table', tool: 'outward_by_customer', has: ['Customer=Gelco Electronics Pvt. Ltd.', 'Period=September 2026'] }, 'what did we ship to Gelco in August'],
+  ['compare shipments this month with last month', { type: 'table', tool: 'outward_by_customer', says: /vs September 2026/ }],
+  ['inward in September versus August', { type: 'table', tool: 'inward_history', says: /September 2026 vs August 2026/ }],
+  ['low stock and pending approvals', { type: 'table', tool: 'low_stock', second: 'pending_requests' }],
 ];
 
 (async () => {
   let pass = 0, fail = 0, cost = 0, ms = 0; const bad = [];
   await A.setSettings('eval', [['assistant_data_access', JSON.stringify({ on: true, approver_name: 'eval', recorded_by: 'eval', at: new Date().toISOString() })]]);
   try {
-    for (const [q, exp] of CASES) {
-      const r = await turn({ user: 'eval', messages: [{ role: 'user', content: q }], path: '/', dry: true });
+    for (const [q, exp, prevQ] of CASES) {
+      let msgs = [{ role: 'user', content: q }], context;
+      if (prevQ) {
+        const p = await turn({ user: 'eval', messages: [{ role: 'user', content: prevQ }], path: '/', dry: true }); cost += p.body.meta?.cost || 0;
+        context = p.body.reply?.context;
+        msgs = [{ role: 'user', content: prevQ }, { role: 'assistant', content: 'ok' }, { role: 'user', content: q }];
+      }
+      const r = await turn({ user: 'eval', messages: msgs, path: '/', dry: true, context });
       const rep = r.body.reply || {}; cost += r.body.meta?.cost || 0; ms += r.body.meta?.ms || 0;
       const params = (rep.params || []).map((p) => `${p.label}=${p.value}`);
       const errs = [];
@@ -68,7 +81,9 @@ const CASES = [
       if (exp.tool && rep.tool !== exp.tool) errs.push(`tool ${rep.tool} != ${exp.tool}`);
       for (const h of exp.has || []) if (!params.includes(h)) errs.push(`missing ${h} (have ${params.join(', ') || 'none'})`);
       if (exp.title && !(rep.title || '').includes(exp.title)) errs.push(`title "${rep.title}" lacks "${exp.title}"`);
-      if (exp.says && !exp.says.test(rep.text || '')) errs.push(`text "${(rep.text || '').slice(0, 60)}" doesn't match ${exp.says}`);
+      if (exp.second && !(rep.cards || []).some((c) => c.tool === exp.second)) errs.push(`no second card ${exp.second}`);
+      if (exp.says && exp.type === 'table' && !exp.says.test(`${rep.title} ${rep.summary}`)) errs.push(`summary "${(rep.summary || '').slice(0, 60)}" doesn't match ${exp.says}`);
+      else if (exp.says && exp.type !== 'table' && !exp.says.test(rep.text || '')) errs.push(`text "${(rep.text || '').slice(0, 60)}" doesn't match ${exp.says}`);
       if (errs.length) { fail++; bad.push(`  ✗ ${q}\n      ${errs.join('; ')}\n      trace: ${(r.body.meta?.trace || []).join(' | ')}`); } else pass++;
     }
   } finally {

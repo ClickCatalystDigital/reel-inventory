@@ -178,6 +178,25 @@ function parsePeriod(question, today = istDateString()) {
   return null;
 }
 
+// The period right before p: the previous calendar month when p is exactly one month (or month-to-date and fullMonth), month-to-date compares the same days of the month before, else the same number of days just before it.
+function previousPeriod(p, { fullMonth = false } = {}) {
+  if (!p || !p.from) return null;
+  const f = D(p.from), t = D(p.to);
+  const isMonth = f.getUTCDate() === 1 && iso(new Date(Date.UTC(f.getUTCFullYear(), f.getUTCMonth() + 1, 0))) === p.to;
+  const monthToDate = f.getUTCDate() === 1 && t.getUTCMonth() === f.getUTCMonth() && !isMonth;
+  if (isMonth || (monthToDate && fullMonth)) { const y = f.getUTCMonth() === 0 ? f.getUTCFullYear() - 1 : f.getUTCFullYear(), m = (f.getUTCMonth() + 11) % 12; return { ...monthRange(y, m), label: `${MONTH_NAMES[m]} ${y}` }; }
+  // month to date (1st .. today): compare the same days of the month before, so both sides are the same length
+  if (monthToDate) {
+    const y = f.getUTCMonth() === 0 ? f.getUTCFullYear() - 1 : f.getUTCFullYear(), m = (f.getUTCMonth() + 11) % 12;
+    const end = Math.min(t.getUTCDate(), new Date(Date.UTC(y, m + 1, 0)).getUTCDate());
+    const from = iso(new Date(Date.UTC(y, m, 1))), to = iso(new Date(Date.UTC(y, m, end)));
+    return { from, to, label: `${fmtD(from)} – ${fmtD(to)}` };
+  }
+  const days = Math.round((t - f) / 86400000) + 1;
+  const to = add(p.from, -1), from = add(p.from, -days);
+  return { from, to, label: `${fmtD(from)} – ${fmtD(to)}` };
+}
+
 // Jev's period choice (fallback when the question has no explicit period).
 function periodFromPreset(preset, today = istDateString()) {
   const map = { today: 'today', yesterday: 'yesterday', this_week: 'this week', last_week: 'last week', this_month: 'this month', last_month: 'last month', last_30_days: 'last 30 days', this_year: 'this year', all_time: 'all time' };
@@ -193,5 +212,5 @@ async function customerKeyMap() {
 
 module.exports = {
   customerKeyMap, norm, words, distinctive, normalizeCustomer, loadCustomerGroups, customerCandidates, itemCandidates, poCandidates, userMentions, reelBox,
-  parseStore, STORE_NAME, parsePeriod, periodFromPreset, fmtD, add, STOP,
+  parseStore, STORE_NAME, parsePeriod, previousPeriod, periodFromPreset, fmtD, add, STOP,
 };

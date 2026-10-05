@@ -95,11 +95,23 @@ router.post('/test', ah(async (req, res) => {
 
 // One chat turn. Admin only (guard in app.js). History lives in the browser; only the last messages are sent.
 router.post('/chat', ah(async (req, res) => {
-  const { messages, path, dry } = req.body || {};
-  const out = await require('../utils/assistantChat').turn({ user: req.user.username, messages, path, dry: dry === true });
+  const { messages, path, dry, context } = req.body || {};
+  const out = await require('../utils/assistantChat').turn({ user: req.user.username, messages, path, dry: dry === true, context });
   res.status(out.status).json(out.body);
 }));
 
-router.get('/starters', (req, res) => res.json(require('../utils/assistantChat').STARTERS));
+// Time-aware briefing (deterministic; nothing is sent to OpenRouter).
+router.get('/briefing', ah(async (req, res) => res.json(await require('../utils/assistantBriefing').briefing())));
+
+// Starter chips: this admin's own most-asked questions (last 60 days, asked at least twice) first, then the defaults.
+router.get('/starters', ah(async (req, res) => {
+  const { queryAll } = require('../db/schema');
+  const rows = await queryAll(
+    `SELECT MIN(question) AS q, COUNT(*) AS n FROM assistant_log WHERE asked_by = ? AND kind = 'data' AND tool IS NOT NULL AND ok = 1 AND at >= ?
+     GROUP BY LOWER(TRIM(question)) HAVING COUNT(*) >= 2 ORDER BY n DESC, MAX(at) DESC LIMIT 3`,
+    [req.user.username, new Date(Date.now() + 5.5 * 3600e3 - 60 * 86400e3).toISOString().replace('T', ' ').slice(0, 19)]
+  );
+  res.json({ usual: rows.map((r) => r.q), defaults: require('../utils/assistantChat').STARTERS });
+}));
 
 module.exports = router;

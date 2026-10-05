@@ -35,7 +35,8 @@ export function ResultCard({ reply, onNavigate }: { reply: Reply; onNavigate?: (
   }
 
   return (
-    <div className="w-full overflow-hidden rounded-2xl rounded-tl-md border bg-card shadow-sm">
+    <div className="w-full space-y-2">
+    <div className="w-full overflow-hidden rounded-xl border bg-card">
       <div className="space-y-2.5 px-3.5 pt-3 pb-3">
         <div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">{reply.toolLabel}</p>
@@ -52,7 +53,7 @@ export function ResultCard({ reply, onNavigate }: { reply: Reply; onNavigate?: (
             ))}
           </div>
         )}
-        {reply.text && <p className="rounded-lg bg-primary/5 px-2.5 py-2 text-[13px] leading-relaxed">{reply.text}</p>}
+        {reply.text && <p className="rounded-lg bg-muted px-2.5 py-2 text-[13px] leading-relaxed">{reply.text}</p>}
       </div>
 
       {rows.length > 0 && (
@@ -97,12 +98,14 @@ export function ResultCard({ reply, onNavigate }: { reply: Reply; onNavigate?: (
             </button>
           )}
           {link && (
-            <Link href={link.path} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-primary transition-colors hover:bg-primary/10">
+            <Link href={link.path} onClick={onNavigate} className="inline-flex h-7 items-center gap-1 rounded-md px-2 text-[11px] font-medium text-foreground transition-colors hover:bg-muted">
               {link.label} <ArrowUpRight className="size-3" />
             </Link>
           )}
         </div>
       </div>
+    </div>
+    {reply.cards?.map((c, i) => <ResultCard key={i} reply={c} onNavigate={onNavigate} />)}
     </div>
   );
 }
