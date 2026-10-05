@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { UserPlus } from "lucide-react";
+import { Database, UserPlus, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
@@ -11,6 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StorageCard } from "@/components/settings/StorageCard";
 import { AssistantCard } from "@/components/settings/AssistantCard";
+import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
+import { ChipMark } from "@/components/assistant/ChipMark";
 import { useAuth } from "@/lib/auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -24,6 +26,10 @@ const ROLE_OPTIONS = [
   { value: "gelco_manager", label: "Gelco Manager" },
   { value: "gelco_worker", label: "Gelco Worker" },
 ];
+
+const TAB_STORAGE: SettingsTab = { key: "storage", label: "Storage", caption: "Database & files", icon: Database };
+const TAB_AI: SettingsTab = { key: "ai", label: "AI", caption: "LS AI assistant", icon: ChipMark as unknown as SettingsTab["icon"] };
+const TAB_HUMANS: SettingsTab = { key: "humans", label: "Humans", caption: "Users & access", icon: Users };
 
 interface AppUser {
   id: number;
@@ -40,6 +46,20 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [adding, setAdding] = useState(false);
+
+  // Sections: Storage | AI (admin only — the server enforces it too) | Humans. The active one lives in the URL hash so a refresh keeps it.
+  const tabs = user?.role === "admin" ? [TAB_STORAGE, TAB_AI, TAB_HUMANS] : [TAB_STORAGE, TAB_HUMANS];
+  const [tab, setTab] = useState("storage");
+  const active = tabs.some((t) => t.key === tab) ? tab : "storage";
+  useEffect(() => {
+    const h = window.location.hash.slice(1);
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- reading the hash is only possible after mount (static export)
+    if (h) setTab(h);
+  }, []);
+  function selectTab(k: string) {
+    setTab(k);
+    window.history.replaceState(null, "", `#${k}`);
+  }
 
   const lsUsers = users?.filter((u) => ["user", "manager", "admin"].includes(u.role)) ?? [];
   const clientUsers = users?.filter((u) => u.role === "client") ?? [];
@@ -83,56 +103,54 @@ export default function SettingsPage() {
     <div className="space-y-4">
       <div>
         <h1 className="text-xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Manage users and access levels</p>
+        <p className="text-sm text-muted-foreground">Storage, the LS AI assistant, and the people who use the app</p>
       </div>
 
-      <StorageCard />
+      <div className="flex flex-col gap-4 md:flex-row md:items-start">
+        <SettingsNav tabs={tabs} active={active} onSelect={selectTab} />
 
-      {/* LS AI settings: admin only (the server enforces this too) */}
-      {user?.role === "admin" && <AssistantCard />}
+        <div className="min-w-0 flex-1 space-y-4">
+          {active === "storage" && <StorageCard />}
 
-      <Card className="p-5">
-        <div className="flex flex-wrap items-center gap-2">
-          <Input
-            className="min-w-40 flex-1"
-            placeholder="Username"
-            value={newUsername}
-            onChange={(e) => setNewUsername(e.target.value)}
-          />
-          <Input
-            type="password"
-            className="min-w-40 flex-1"
-            placeholder="Password"
-            value={newPassword}
-            onChange={(e) => setNewPassword(e.target.value)}
-          />
-          <Select value={newRole} onValueChange={setNewRole}>
-            <SelectTrigger size="sm" className="w-44">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {ROLE_OPTIONS.map((r) => (
-                <SelectItem key={r.value} value={r.value}>
-                  {r.label}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-          <Button onClick={addUser} disabled={adding}>
-            <UserPlus /> Add User
-          </Button>
+          {active === "ai" && user?.role === "admin" && <AssistantCard />}
+
+          {active === "humans" && (
+            <>
+              <Card className="p-5">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Input className="min-w-40 flex-1" placeholder="Username" value={newUsername} onChange={(e) => setNewUsername(e.target.value)} />
+                  <Input type="password" className="min-w-40 flex-1" placeholder="Password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+                  <Select value={newRole} onValueChange={setNewRole}>
+                    <SelectTrigger size="sm" className="w-44">
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {ROLE_OPTIONS.map((r) => (
+                        <SelectItem key={r.value} value={r.value}>
+                          {r.label}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <Button onClick={addUser} disabled={adding}>
+                    <UserPlus /> Add User
+                  </Button>
+                </div>
+              </Card>
+
+              {users === null ? (
+                <Card className="p-5 text-center text-muted-foreground">Loading users...</Card>
+              ) : (
+                <>
+                  {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showLS && <UsersCard title="Clients" users={clientUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                </>
+              )}
+            </>
+          )}
         </div>
-      </Card>
-
-      {users === null ? (
-        <Card className="p-5 text-center text-muted-foreground">Loading users...</Card>
-      ) : (
-        <>
-          {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
-          {showLS && <UsersCard title="Clients" users={clientUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
-          {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
-        </>
-      )}
+      </div>
     </div>
   );
 }
