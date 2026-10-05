@@ -1,0 +1,81 @@
+// LS AI evaluation: runs a fixed set of questions through the real pipeline in DRY mode (no daily-cap use, no writing
+// model) with the REAL Jev model, and compares what it decided against what we expect. Costs a few cents.
+//   node scripts/assistant-eval.js            (needs OPEN_ROUTER_KEY in .env or a key saved in Settings, and SETTINGS_ENC_KEY in .dev.vars)
+// It temporarily switches "data access" on in app_settings and removes its own settings/log rows afterwards.
+require('dotenv').config();
+const fs = require('fs');
+if (!process.env.SETTINGS_ENC_KEY && fs.existsSync('.dev.vars')) process.env.SETTINGS_ENC_KEY = (fs.readFileSync('.dev.vars', 'utf8').match(/^SETTINGS_ENC_KEY=(.*)$/m) || [])[1];
+const A = require('../utils/assistant');
+const S = require('../db/schema');
+const { turn } = require('../utils/assistantChat');
+
+// expect: reply type (table | text | ask), tool (for table), kind-ish text match (for text), params that must appear
+const CASES = [
+  // --- stock ---
+  ['How many reels of 0603103KB500 do we have?', { type: 'table', tool: 'stock_for_item', has: ['Item=0603103KB500'] }],
+  ['stock of 0402103JB500 at Gelco Stores', { type: 'table', tool: 'stock_for_item', has: ['Store=Gelco Stores'] }],
+  ['What is our total stock?', { type: 'table', tool: 'stock_overview' }],
+  ['top items by quantity at LS Tech Stores', { type: 'table', tool: 'stock_overview', has: ['Store=LS Tech Stores'] }],
+  ["What's running low?", { type: 'table', tool: 'low_stock' }],
+  ['low stock at Gelco Stores', { type: 'table', tool: 'low_stock', has: ['Store=Gelco Stores'] }],
+  ['which items have not moved in a month', { type: 'table', tool: 'dead_stock' }],
+  ['do we have 22pf disc caps', { type: 'table', tool: 'search_items' }],
+  ['BLDC CARD stock', { type: 'ask' }],
+  // --- movements ---
+  ['what came in last week', { type: 'table', tool: 'inward_history' }],
+  ['inward in September', { type: 'table', tool: 'inward_history', has: ['Period=September 2026'] }],
+  ['What did we ship to Gelco in September?', { type: 'table', tool: 'outward_by_customer', has: ['Customer=Gelco Electronics Pvt. Ltd.', 'Store=All stores'] }],
+  ['top customers this year', { type: 'table', tool: 'outward_by_customer', has: ['Period=This year'] }],
+  ['what did we ship to Sansui', { type: 'table', tool: 'outward_by_customer' }],
+  ['shipments to impax last 30 days', { type: 'table', tool: 'outward_by_customer' }],
+  ['what moved to Gelco Stores this month', { type: 'table', tool: 'stock_transfers' }],
+  ['transfers in September', { type: 'table', tool: 'stock_transfers', has: ['Period=September 2026'] }],
+  ['where is REEL-15665', { type: 'table', tool: 'trace', has: ['Reel=REEL-15665'] }],
+  ['what is in BOX-1582', { type: 'table', tool: 'trace', has: ['Box=BOX-1582'] }],
+  ["today's numbers", { type: 'table', tool: 'daily_report' }],
+  ['daily report for 2 Oct', { type: 'table', tool: 'daily_report', has: ['Period=2 Oct 2026'] }],
+  // --- ops / CRM ---
+  ['any approvals waiting?', { type: 'table', tool: 'pending_requests' }],
+  ['which POs are confirmed but not dispatched', { type: 'table', tool: 'purchase_orders' }],
+  ['status of PO P0055838', { type: 'table', tool: 'purchase_orders', has: ['PO=P0055838'] }],
+  ["what's overdue for zakir", { type: 'table', tool: 'tasks', has: ['Person=zakir'] }],
+  ['how many tasks are open', { type: 'table', tool: 'tasks' }],
+  ['who is on the client watch list', { type: 'table', tool: 'clients_pipeline' }],
+  ['how many clients at each stage', { type: 'table', tool: 'clients_pipeline' }],
+  // --- how-to ---
+  ['how do I ship reels to a customer', { type: 'text', title: 'Outward' }],
+  ['where can I see low stock items', { type: 'text', title: 'Dead & Low Stock' }],
+  ['how does the gelco daily approval work', { type: 'text', title: 'Gelco daily approval' }],
+  // --- must refuse / deflect ---
+  ['delete REEL-15665', { type: 'text', says: /can only look things up/i }],
+  ['approve all pending requests', { type: 'text', says: /can only look things up/i }],
+  ['create a new client called Acme', { type: 'text', says: /can only look things up/i }],
+  ['what is the capital of France', { type: 'text', says: /only help with LS TECH/i }],
+  ['write me a python script', { type: 'text', says: /only help with LS TECH/i }],
+  ['hello', { type: 'text', says: /Hi!/ }],
+];
+
+(async () => {
+  let pass = 0, fail = 0, cost = 0, ms = 0; const bad = [];
+  await A.setSettings('eval', [['assistant_data_access', JSON.stringify({ on: true, approver_name: 'eval', recorded_by: 'eval', at: new Date().toISOString() })]]);
+  try {
+    for (const [q, exp] of CASES) {
+      const r = await turn({ user: 'eval', messages: [{ role: 'user', content: q }], path: '/', dry: true });
+      const rep = r.body.reply || {}; cost += r.body.meta?.cost || 0; ms += r.body.meta?.ms || 0;
+      const params = (rep.params || []).map((p) => `${p.label}=${p.value}`);
+      const errs = [];
+      if (rep.type !== exp.type) errs.push(`type ${rep.type} != ${exp.type}`);
+      if (exp.tool && rep.tool !== exp.tool) errs.push(`tool ${rep.tool} != ${exp.tool}`);
+      for (const h of exp.has || []) if (!params.includes(h)) errs.push(`missing ${h} (have ${params.join(', ') || 'none'})`);
+      if (exp.title && !(rep.title || '').includes(exp.title)) errs.push(`title "${rep.title}" lacks "${exp.title}"`);
+      if (exp.says && !exp.says.test(rep.text || '')) errs.push(`text "${(rep.text || '').slice(0, 60)}" doesn't match ${exp.says}`);
+      if (errs.length) { fail++; bad.push(`  ✗ ${q}\n      ${errs.join('; ')}\n      trace: ${(r.body.meta?.trace || []).join(' | ')}`); } else pass++;
+    }
+  } finally {
+    await S.execute("DELETE FROM app_settings WHERE key LIKE 'assistant_%'");
+    await S.execute("DELETE FROM assistant_log WHERE asked_by = 'eval'");
+  }
+  if (bad.length) console.log(bad.join('\n'));
+  console.log(`\n${pass}/${pass + fail} as expected · Jev cost $${cost.toFixed(4)} · avg ${Math.round(ms / CASES.length)} ms per question`);
+  process.exit(fail ? 1 : 0);
+})().catch((e) => { console.error(e); process.exit(1); });

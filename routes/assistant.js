@@ -93,4 +93,13 @@ router.post('/test', ah(async (req, res) => {
   }
 }));
 
+// One chat turn. Admin only (guard in app.js). History lives in the browser; only the last messages are sent.
+router.post('/chat', ah(async (req, res) => {
+  const { messages, path, dry } = req.body || {};
+  const out = await require('../utils/assistantChat').turn({ user: req.user.username, messages, path, dry: dry === true });
+  res.status(out.status).json(out.body);
+}));
+
+router.get('/starters', (req, res) => res.json(require('../utils/assistantChat').STARTERS));
+
 module.exports = router;
