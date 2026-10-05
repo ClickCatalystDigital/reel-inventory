@@ -31,7 +31,7 @@ export default function LoginPage() {
       });
       const data = await res.json();
       if (res.ok) {
-        document.cookie = `token=${data.token}; path=/; max-age=${30 * 24 * 60 * 60}; SameSite=Strict`;
+        // The server sets the session cookie (HttpOnly) — nothing to store here.
         window.location.href = data.role === "client" ? "/stock" : "/";
       } else {
         setError(data.error || "Login failed");

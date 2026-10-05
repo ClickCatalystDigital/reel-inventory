@@ -1,11 +1,7 @@
-const { S3Client } = require('@aws-sdk/client-s3');
-
-// Shared Cloudflare R2 client (routes/gelco-docs.js uploads, routes/settings.js storage usage).
-module.exports = new S3Client({
-  region: 'auto',
-  endpoint: `https://${process.env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
-  credentials: {
-    accessKeyId: process.env.R2_ACCESS_KEY_ID,
-    secretAccessKey: process.env.R2_SECRET_ACCESS_KEY,
-  },
-});
+// R2 bucket binding (routes/gelco-docs.js uploads, routes/settings.js storage usage).
+// worker.mjs copies env.BUCKET onto globalThis — a binding, not request state — because
+// CommonJS modules here can't import 'cloudflare:workers' themselves.
+module.exports = () => {
+  if (!globalThis.R2_BUCKET) throw new Error('R2 bucket binding (BUCKET) is not configured');
+  return globalThis.R2_BUCKET;
+};

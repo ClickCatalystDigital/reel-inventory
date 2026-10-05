@@ -2,6 +2,8 @@
 
 Local-intranet inventory management system for electronic component reels ("LS Technology"). Tracks items → reels (physical stock units) → boxes (groups of reels), inward (receiving) and outward (shipping) movements, an approval workflow for non-admin staff, a purchase-order/mini-CRM module, a **Reports** section (formerly "Dashboard", renamed and split into a sidebar of sections — Stock Summary, Search & Trace, Analytics, Dead & Low Stock, and a new Daily Report with PDF export, see §4/§6a), and QR-coded label/packing-list PDF generation. Stock is now tracked per **store** — "LS Tech Stores" (primary) and "Gelco Stores" (secondary) — with a Stock Transfer feature to move reels/boxes between them (see the multi-store note in §2 and the new `routes/transfer.js` in §4). Two Gelco-specific roles (`gelco_manager`, `gelco_worker`) are permanently locked to Gelco Stores only, gated behind a daily "approve yesterday's outward summary" ritual (§3); there's also an admin/manager-only Notifications page (every outward event, date-filterable) and a "Docs" tab (`/gelco-docs`, labeled "Docs" in the nav) for uploading PO/Invoice PDFs to Cloudflare R2, with its list content filtered by the top-right store-view dropdown (§4, §6). Nav brand text is "LS INV MGT".
 
+> ⚠️ **Hosting changed: this now runs on Cloudflare Workers, not Render (§7/§8 are current; see "Deployment" in §8).** Where older sections below mention `server.js`, the Next.js reverse proxy / second Node process, `http-proxy-middleware`, Render keep-alive, `bcrypt`, the S3 SDK, or `R2_*` env vars, read them as superseded: `server.js` → `app.js` (Express API) + `worker.mjs` (Worker entry: login rate limit, page auth/role gating, then static assets or the API); the proxy → Workers Assets serving the static export of `frontend/` (`output: 'export'`); `bcrypt` → `bcryptjs`; S3 SDK → R2 binding (`BUCKET`); `@libsql/client` → its `/web` build (HTTP only, so no local `inventory.db` fallback — `TURSO_URL` is required). Docs PDFs now live in a **private** R2 bucket and are served via `GET /api/gelco-docs/file` (login + role required). The session cookie is now set by the server (`HttpOnly; Secure; SameSite=Strict`), `SESSION_SECRET` has no fallback, and `/api/login` is rate-limited (10/min/IP).
+
 ## 1. Tech stack
 
 - **Runtime**: Node.js >= 20.9 (raised from >=18 — Next.js 16 requires it; `package.json`'s `engines` and a root `.node-version` both pin it, since a Render deploy running Node 18 previously failed silently on the frontend half), plain CommonJS, no bundler/build step.
@@ -279,18 +281,14 @@ Favicon route added to `MIGRATED_PAGE_PATHS` (was 404ing for unrestricted roles)
 
 ## 7. Config / environment
 
-From `.env`: `TURSO_URL`, `TURSO_AUTH_TOKEN` (Turso cloud DB — if unset, falls back to local `./inventory.db`), `SESSION_SECRET` (JWT signing key).
-Optional, not in `.env`: `PORT` (default 3000), `RENDER_SERVICE_URL` (enables the 14-minute keep-alive self-ping).
-**New, required for the Gelco Docs tab** (`routes/gelco-docs.js`): `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME`, `R2_PUBLIC_DOMAIN_URL` — copied directly from the sibling `ls_crm` app's `.env` (same bucket, `ls-crm-storage`; see §4's `gelco-docs.js` note on the differing key prefix that keeps uploads from colliding). Without these set, `POST /api/gelco-docs/upload` fails with a clean `500` rather than crashing — confirmed safe to run the rest of the app without them configured.
+`wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).
+Secrets (never in files that are committed): `TURSO_AUTH_TOKEN`, `SESSION_SECRET` — `wrangler secret put <NAME>` for the deployed Worker, `.dev.vars` (gitignored) for `wrangler dev`, `.env` for the `scripts/*.js` CLIs.
 
-## 8. Running locally
+## 8. Running locally / Deployment
 
-1. `npm install`
-2. Ensure `.env` has `SESSION_SECRET` (and `TURSO_URL`/`TURSO_AUTH_TOKEN` for the cloud DB, or omit both to use local `inventory.db`).
-3. `npm start` (or `npm run dev` for auto-restart via Node's `--watch`).
-4. On startup, `initDB()` creates missing tables/columns and seeds default counters + default users if `users` is empty.
-5. **Run once after first seed**: `node scripts/hashpasswords.js`, so the default plaintext-seeded passwords become bcrypt hashes (otherwise those accounts can't log in). Alternatively, use `node scripts/adduser.js` to create hashed users interactively from the start.
-6. Visit `http://localhost:3000/login`. The server also logs LAN URLs for access from other devices on the same network.
+- **Local**: `npm install`, put `TURSO_URL`/`TURSO_AUTH_TOKEN`/`SESSION_SECRET` in `.dev.vars`, `npm run dev` (builds the frontend, runs `wrangler dev` on :8787). ⚠️ `wrangler dev` talks to whatever Turso DB `.dev.vars` points at, so use a scratch DB (or only reads) — R2 is simulated locally, the DB is not. `npm run dev:next` runs Next's own dev server and rewrites `/api/*` to :8787.
+- **Schema/seed**: `npm run db:init` (idempotent) — never run per request; the Worker doesn't call `initDB()`. `npm run backup` before any migration.
+- **Deploy**: `npm run deploy` (frontend build + `wrangler deploy`). Free-plan limits (10 ms CPU, 50 subrequests per request — every Turso query is one) are likely to break bcrypt login (~60 ms), bulk inward/outward and big label PDFs; the Workers Paid plan lifts them with no code change.
 
 ## 9. Known issues (not yet fixed)
 

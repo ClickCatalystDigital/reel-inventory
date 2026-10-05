@@ -4,12 +4,11 @@ const express = require('express');
 const router = express.Router();
 const multer = require('multer');
 const { queryAll, execute, queryOne, nowIST } = require('../db/schema');
-const { PutObjectCommand, DeleteObjectCommand } = require('@aws-sdk/client-s3');
 const ah = require('../utils/asyncHandler');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
-const r2Client = require('../utils/r2');
+const r2 = require('../utils/r2');
 
 function requireDocsAccess(req, res, next) {
   if (!['admin', 'manager', 'gelco_manager'].includes(req.user?.role)) {
@@ -39,25 +38,40 @@ router.get('/', ah(async (req, res) => {
   res.json(await queryAll(sql, params));
 }));
 
+// Files live in a private bucket and are only reachable through here (login + role checked above).
+const KEY_PREFIX = 'inventory-docs/';
+const fileUrl = (key) => `/api/gelco-docs/file?key=${encodeURIComponent(key)}`;
+
+router.get('/file', ah(async (req, res) => {
+  const key = String(req.query.key || '');
+  if (!key.startsWith(KEY_PREFIX)) return res.status(400).json({ error: 'Invalid key' });
+  const obj = await r2().get(key);
+  if (!obj) return res.status(404).json({ error: 'File not found' });
+  // attachment + nosniff: stored files must never render as a page on this origin.
+  res.set({
+    'Content-Type': obj.httpMetadata?.contentType || 'application/octet-stream',
+    'Content-Disposition': `attachment; filename="${key.split('/').pop().replace(/"/g, '')}"`,
+    'X-Content-Type-Options': 'nosniff',
+  });
+  res.end(Buffer.from(await obj.arrayBuffer()));
+}));
+
 router.post('/upload', upload.single('file'), ah(async (req, res) => {
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  if (req.file.mimetype !== 'application/pdf') return res.status(400).json({ error: 'Only PDF files are allowed' });
   const doc_type = req.body.doc_type;
   if (!VALID_DOC_TYPES.includes(doc_type)) {
     return res.status(400).json({ error: `doc_type must be one of: ${VALID_DOC_TYPES.join(', ')}` });
   }
 
   try {
-    const key = `inventory-docs/${Date.now()}-${req.file.originalname.replace(/\s+/g, '_')}`;
+    const key = `${KEY_PREFIX}${Date.now()}-${req.file.originalname.replace(/[^\w.-]+/g, '_')}`;
 
-    await r2Client.send(new PutObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: key,
-      Body: req.file.buffer,
-      ContentType: req.file.mimetype || 'application/pdf'
-    }));
+    await r2().put(key, req.file.buffer, {
+      httpMetadata: { contentType: 'application/pdf' }
+    });
 
-    const cleanDomain = (process.env.R2_PUBLIC_DOMAIN_URL || '').trim().replace(/^https?:\/\//i, '');
-    const file_url = `https://${cleanDomain}/${key}`;
+    const file_url = fileUrl(key);
 
     await execute(
       `INSERT INTO gelco_docs (doc_type, original_filename, file_url, uploaded_by, uploaded_at, store_code) VALUES (?, ?, ?, ?, ?, ?)`,
@@ -76,12 +90,8 @@ router.delete('/:id', ah(async (req, res) => {
   if (!doc) return res.status(404).json({ error: 'Document not found' });
 
   try {
-    const cleanDomain = (process.env.R2_PUBLIC_DOMAIN_URL || '').trim().replace(/^https?:\/\//i, '');
-    const key = doc.file_url.replace(`https://${cleanDomain}/`, '');
-    await r2Client.send(new DeleteObjectCommand({
-      Bucket: process.env.R2_BUCKET_NAME,
-      Key: key
-    }));
+    const key = new URL(doc.file_url, 'http://x').searchParams.get('key');
+    if (key?.startsWith(KEY_PREFIX)) await r2().delete(key);
   } catch (err) {
     console.error('Failed to purge doc from R2:', err.message);
   }

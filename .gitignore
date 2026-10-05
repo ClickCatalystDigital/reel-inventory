@@ -3,3 +3,6 @@ inventory.db
 *.pem
 .env
 backups/
+.dev.vars
+.wrangler/
+frontend/out/

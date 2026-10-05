@@ -2,11 +2,10 @@
 
 const express = require('express');
 const router = express.Router();
-const bcrypt = require('bcrypt');
+const bcrypt = require('bcryptjs');
 const { queryAll, queryOne, execute } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
-const { ListObjectsV2Command } = require('@aws-sdk/client-s3');
-const r2Client = require('../utils/r2');
+const r2 = require('../utils/r2');
 
 const ALLOWED_ROLES = ['admin', 'manager'];
 
@@ -122,26 +121,23 @@ async function tursoUsage() {
 }
 
 async function r2Usage() {
-  const bucket = process.env.R2_BUCKET_NAME;
-  if (!bucket || !process.env.R2_ACCOUNT_ID || !process.env.R2_ACCESS_KEY_ID || !process.env.R2_SECRET_ACCESS_KEY) {
-    return { configured: false };
-  }
+  if (!globalThis.R2_BUCKET) return { configured: false };
   try {
     // Bucket is shared with the ls_crm app; this app's own files live under inventory-docs/.
     const groups = {
       'inventory-docs/': { name: 'Inventory docs (this app)', category: 'Inventory docs', objects: 0, bytes: 0 },
       other: { name: 'CRM files (ls_crm)', category: 'CRM files', objects: 0, bytes: 0 },
     };
-    let token;
+    let cursor;
     do {
-      const out = await r2Client.send(new ListObjectsV2Command({ Bucket: bucket, ContinuationToken: token }));
-      for (const o of out.Contents || []) {
-        const g = o.Key.startsWith('inventory-docs/') ? groups['inventory-docs/'] : groups.other;
+      const out = await r2().list({ cursor });
+      for (const o of out.objects) {
+        const g = o.key.startsWith('inventory-docs/') ? groups['inventory-docs/'] : groups.other;
         g.objects += 1;
-        g.bytes += o.Size || 0;
+        g.bytes += o.size || 0;
       }
-      token = out.IsTruncated ? out.NextContinuationToken : undefined;
-    } while (token);
+      cursor = out.truncated ? out.cursor : undefined;
+    } while (cursor);
     const items = Object.values(groups);
     return { configured: true, total_bytes: items.reduce((s, g) => s + g.bytes, 0), items };
   } catch (e) {

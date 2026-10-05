@@ -7,6 +7,14 @@ const { queryAll, queryOne, istDateString, nowIST } = require('../db/schema');
 const ah = require('./asyncHandler');
 const { getDailyReportData } = require('./dailyReport');
 
+// Buffer then send, instead of doc.pipe(res): on Workers the piped response never drains and the
+// request hangs. PDFs here are a few MB at most.
+function sendPdf(doc, res) {
+  const chunks = [];
+  doc.on('data', (c) => chunks.push(c));
+  doc.on('end', () => res.end(Buffer.concat(chunks)));
+}
+
 const mm = (v) => v * 2.83465;
 
 const LABEL_W = mm(85);
@@ -49,7 +57,7 @@ router.post('/generate', ah(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=labels_${Date.now()}.pdf`);
-  doc.pipe(res);
+  sendPdf(doc, res);
 
   const qrY = (LABEL_H - QR_SIZE) / 2; // vertically center QR
 
@@ -160,7 +168,7 @@ router.post('/generate-box', ah(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=box_labels_${Date.now()}.pdf`);
-  doc.pipe(res);
+  sendPdf(doc, res);
 
   const qrY = (LABEL_H - QR_SIZE) / 2;
 
@@ -216,7 +224,7 @@ router.post('/packing-list', ah(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=packing_list_${invoice_number}_${Date.now()}.pdf`);
-  doc.pipe(res);
+  sendPdf(doc, res);
 
   // --- Group reels by item_code ---
   const grouped = {};
@@ -423,7 +431,7 @@ router.get('/daily-report', ah(async (req, res) => {
 
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=daily_report_${data.date}.pdf`);
-  doc.pipe(res);
+  sendPdf(doc, res);
 
   const COL_WIDTHS = {
     item: 150,
@@ -647,7 +655,7 @@ router.get('/transfer-report', ah(async (req, res) => {
   const rangeLabel = date_from || date_to ? `${date_from || 'start'}_to_${date_to || istDateString()}` : istDateString();
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename=transfer_report_${rangeLabel}.pdf`);
-  doc.pipe(res);
+  sendPdf(doc, res);
 
   // Same column layout as the Packing List: # | Item | Description | SPQ | Reels | Qty | Reel Numbers
   const COL_WIDTHS = { sn: 30, item: 110, desc: 200, spq: 55, reelQty: 80, totalQty: 85, reelNums: CONTENT_W - 30 - 110 - 200 - 55 - 80 - 85 };

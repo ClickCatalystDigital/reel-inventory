@@ -1,22 +1,26 @@
 // db/schema.js
-const { createClient } = require('@libsql/client');
+// Web (fetch-based) libSQL client: the default Node build ships a native module that
+// can't run on Cloudflare Workers. It talks to Turso over HTTP, so it can't open a local file.
+const { createClient } = require('@libsql/client/web');
+const bcrypt = require('bcryptjs');
 
 let db = null;
 
-async function initDB() {
-  // Use Turso if URL is set, otherwise fall back to local SQLite file
-  if (process.env.TURSO_URL) {
-    db = createClient({
-      url: process.env.TURSO_URL,
-      authToken: process.env.TURSO_AUTH_TOKEN
-    });
-    console.log('Connected to Turso (cloud)');
-  } else {
-    db = createClient({ url: 'file:./inventory.db' });
-    console.log('Connected to local SQLite');
+// Lazy so Worker requests can use it without anything having called initDB() first.
+function connect() {
+  if (!db) {
+    if (!process.env.TURSO_URL) throw new Error('TURSO_URL is not set');
+    db = createClient({ url: process.env.TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN });
   }
+  return db;
+}
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS items (
+// Schema creation + seeding. Idempotent, but run it by hand (npm run db:init), never per
+// Worker request: it fires ~40 queries and Workers cap subrequests per invocation.
+async function initDB() {
+  db = connect();
+
+  await connect().execute(`CREATE TABLE IF NOT EXISTS items (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     item_code TEXT UNIQUE NOT NULL,
     description TEXT NOT NULL,
@@ -27,12 +31,12 @@ async function initDB() {
 
   // Migration: add status column to existing databases that predate this change
   try {
-    await db.execute(`ALTER TABLE items ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
+    await connect().execute(`ALTER TABLE items ADD COLUMN status TEXT NOT NULL DEFAULT 'active'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS boxes (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS boxes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     box_number TEXT UNIQUE NOT NULL,
     item_code TEXT NOT NULL,
@@ -40,7 +44,7 @@ async function initDB() {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS reels (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS reels (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     reel_number TEXT UNIQUE NOT NULL,
     item_code TEXT NOT NULL,
@@ -51,7 +55,7 @@ async function initDB() {
     notes TEXT
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS outwards (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS outwards (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     reel_number TEXT NOT NULL,
     customer_name TEXT NOT NULL,
@@ -62,12 +66,12 @@ async function initDB() {
     notes TEXT
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS counters (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS counters (
     name TEXT PRIMARY KEY,
     value INTEGER NOT NULL DEFAULT 10000
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS requests (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS requests (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     type TEXT NOT NULL,
     status TEXT NOT NULL DEFAULT 'pending',
@@ -79,7 +83,7 @@ async function initDB() {
     payload TEXT NOT NULL
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS users (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password TEXT NOT NULL,
@@ -87,7 +91,7 @@ async function initDB() {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS stores (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS stores (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     code TEXT UNIQUE NOT NULL,
     name TEXT NOT NULL,
@@ -95,7 +99,7 @@ async function initDB() {
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS stock_transfers (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS stock_transfers (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     reel_number TEXT,
     box_number TEXT,
@@ -108,7 +112,7 @@ async function initDB() {
     status TEXT NOT NULL DEFAULT 'completed'
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS daily_gate_approvals (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS daily_gate_approvals (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     store_code TEXT NOT NULL,
     gate_date TEXT NOT NULL,
@@ -117,7 +121,7 @@ async function initDB() {
     UNIQUE(store_code, gate_date)
   )`);
 
-  await db.execute(`CREATE TABLE IF NOT EXISTS gelco_docs (
+  await connect().execute(`CREATE TABLE IF NOT EXISTS gelco_docs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     doc_type TEXT NOT NULL,
     original_filename TEXT NOT NULL,
@@ -128,34 +132,34 @@ async function initDB() {
 
   // Migration: add store_code to existing tables — same best-effort ALTER pattern as items.status
   try {
-    await db.execute(`ALTER TABLE reels ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+    await connect().execute(`ALTER TABLE reels ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
   try {
-    await db.execute(`ALTER TABLE boxes ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+    await connect().execute(`ALTER TABLE boxes ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
   try {
-    await db.execute(`ALTER TABLE outwards ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
+    await connect().execute(`ALTER TABLE outwards ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
   try {
-    await db.execute(`ALTER TABLE gelco_docs ADD COLUMN store_code TEXT NOT NULL DEFAULT 'secondary'`);
+    await connect().execute(`ALTER TABLE gelco_docs ADD COLUMN store_code TEXT NOT NULL DEFAULT 'secondary'`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
   // routes/po.js's outward tie-in — outwards.company_id/po_id are genuinely owned by
   // this app (unlike crm_* below), just missing from this migration list until now.
   try {
-    await db.execute(`ALTER TABLE outwards ADD COLUMN company_id INTEGER`);
+    await connect().execute(`ALTER TABLE outwards ADD COLUMN company_id INTEGER`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
   try {
-    await db.execute(`ALTER TABLE outwards ADD COLUMN po_id INTEGER`);
+    await connect().execute(`ALTER TABLE outwards ADD COLUMN po_id INTEGER`);
   } catch (e) {
     // Column already exists — safe to ignore
   }
@@ -169,7 +173,7 @@ async function initDB() {
   // app owns. Instead: a loud startup warning if they're ever missing, so a PO-feature
   // 500 doesn't have to be debugged from scratch to discover why.
   const CRM_TABLES = ['crm_companies', 'crm_contacts', 'crm_purchase_orders', 'crm_po_items', 'crm_tasks'];
-  const crmCheck = await db.execute(
+  const crmCheck = await connect().execute(
     `SELECT name FROM sqlite_master WHERE type='table' AND name IN (${CRM_TABLES.map(() => '?').join(',')})`,
     CRM_TABLES
   );
@@ -183,42 +187,42 @@ async function initDB() {
     );
   }
 
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_outwards_date ON outwards(outward_date)`);
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
-  await db.execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_outwards_date ON outwards(outward_date)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
+  await connect().execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
 
   // Seed stores
-  const primaryStore = await db.execute("SELECT code FROM stores WHERE code = 'primary'");
+  const primaryStore = await connect().execute("SELECT code FROM stores WHERE code = 'primary'");
   if (!primaryStore.rows.length) {
-    await db.execute("INSERT INTO stores (code, name) VALUES ('primary', 'LS Tech Stores')");
+    await connect().execute("INSERT INTO stores (code, name) VALUES ('primary', 'LS Tech Stores')");
   }
-  const secondaryStore = await db.execute("SELECT code FROM stores WHERE code = 'secondary'");
+  const secondaryStore = await connect().execute("SELECT code FROM stores WHERE code = 'secondary'");
   if (!secondaryStore.rows.length) {
-    await db.execute("INSERT INTO stores (code, name) VALUES ('secondary', 'Gelco Stores')");
+    await connect().execute("INSERT INTO stores (code, name) VALUES ('secondary', 'Gelco Stores')");
   }
 
   // Seed counters
-  const reelCounter = await db.execute("SELECT value FROM counters WHERE name = 'reel'");
+  const reelCounter = await connect().execute("SELECT value FROM counters WHERE name = 'reel'");
   if (!reelCounter.rows.length) {
-    await db.execute("INSERT INTO counters (name, value) VALUES ('reel', 10000)");
+    await connect().execute("INSERT INTO counters (name, value) VALUES ('reel', 10000)");
   }
-  const boxCounter = await db.execute("SELECT value FROM counters WHERE name = 'box'");
+  const boxCounter = await connect().execute("SELECT value FROM counters WHERE name = 'box'");
   if (!boxCounter.rows.length) {
-    await db.execute("INSERT INTO counters (name, value) VALUES ('box', 1000)");
+    await connect().execute("INSERT INTO counters (name, value) VALUES ('box', 1000)");
   }
-  const invoiceCounter = await db.execute("SELECT value FROM counters WHERE name = 'invoice'");
+  const invoiceCounter = await connect().execute("SELECT value FROM counters WHERE name = 'invoice'");
   if (!invoiceCounter.rows.length) {
-    await db.execute("INSERT INTO counters (name, value) VALUES ('invoice', 9999)");
+    await connect().execute("INSERT INTO counters (name, value) VALUES ('invoice', 9999)");
   }
 
   // Seed default admin user if no users exist
-  const userCount = await db.execute("SELECT COUNT(*) as count FROM users");
+  const userCount = await connect().execute("SELECT COUNT(*) as count FROM users");
   if (userCount.rows[0].count === 0) {
-    await db.execute("INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')");
-    await db.execute("INSERT INTO users (username, password, role) VALUES ('pranav', 'lstech123', 'manager')");
-    await db.execute("INSERT INTO users (username, password, role) VALUES ('zakir', 'lstech123', 'user')");
-    await db.execute("INSERT INTO users (username, password, role) VALUES ('sahil', 'lstech123', 'user')");
+    await connect().execute("INSERT INTO users (username, password, role) VALUES ('admin', 'admin123', 'admin')");
+    await connect().execute("INSERT INTO users (username, password, role) VALUES ('pranav', 'lstech123', 'manager')");
+    await connect().execute("INSERT INTO users (username, password, role) VALUES ('zakir', 'lstech123', 'user')");
+    await connect().execute("INSERT INTO users (username, password, role) VALUES ('sahil', 'lstech123', 'user')");
     // console.log('Default users created: admin/admin123, pranav/lstech123');
   }
 
@@ -226,17 +230,17 @@ async function initDB() {
 }
 
 async function queryAll(sql, params = []) {
-  const result = await db.execute({ sql, args: params });
+  const result = await connect().execute({ sql, args: params });
   return result.rows;
 }
 
 async function queryOne(sql, params = []) {
-  const result = await db.execute({ sql, args: params });
+  const result = await connect().execute({ sql, args: params });
   return result.rows.length ? result.rows[0] : null;
 }
 
 async function execute(sql, params = []) {
-  const result = await db.execute({ sql, args: params });
+  const result = await connect().execute({ sql, args: params });
   return { changes: result.rowsAffected };
 }
 
@@ -248,7 +252,7 @@ async function execute(sql, params = []) {
 // matching execute()'s own calling convention so callers can share helper code
 // between transactional and non-transactional paths.
 async function withTransaction(fn) {
-  const tx = await db.transaction('write');
+  const tx = await connect().transaction('write');
   const txExecute = async (sql, params = []) => {
     const result = await tx.execute({ sql, args: params });
     return { changes: result.rowsAffected };
@@ -265,26 +269,26 @@ async function withTransaction(fn) {
 
 async function getNextReelNumber() {
   // Auto-heal: ensure counter is always ahead of actual max
-  await db.execute(`
+  await connect().execute(`
     UPDATE counters SET value = MAX(value, (
       SELECT COALESCE(MAX(CAST(REPLACE(reel_number, 'REEL-', '') AS INTEGER)), 10000)
       FROM reels
     )) WHERE name = 'reel'
   `);
-  await db.execute("UPDATE counters SET value = value + 1 WHERE name = 'reel'");
-  const result = await db.execute("SELECT value FROM counters WHERE name = 'reel'");
+  await connect().execute("UPDATE counters SET value = value + 1 WHERE name = 'reel'");
+  const result = await connect().execute("SELECT value FROM counters WHERE name = 'reel'");
   return `REEL-${result.rows[0].value}`;
 }
 
 async function getNextBoxNumber() {
-  await db.execute(`
+  await connect().execute(`
     UPDATE counters SET value = MAX(value, (
       SELECT COALESCE(MAX(CAST(REPLACE(box_number, 'BOX-', '') AS INTEGER)), 1000)
       FROM boxes
     )) WHERE name = 'box'
   `);
-  await db.execute("UPDATE counters SET value = value + 1 WHERE name = 'box'");
-  const result = await db.execute("SELECT value FROM counters WHERE name = 'box'");
+  await connect().execute("UPDATE counters SET value = value + 1 WHERE name = 'box'");
+  const result = await connect().execute("SELECT value FROM counters WHERE name = 'box'");
   return `BOX-${result.rows[0].value}`;
 }
 
@@ -294,16 +298,15 @@ async function getNextBoxNumber() {
 // outwards.invoice_number is free text (real customer invoices look like
 // "INV-2025-001"), so scanning it for a numeric max would be unreliable.
 async function getNextInvoiceNumber() {
-  await db.execute("UPDATE counters SET value = value + 1 WHERE name = 'invoice'");
-  const result = await db.execute("SELECT value FROM counters WHERE name = 'invoice'");
+  await connect().execute("UPDATE counters SET value = value + 1 WHERE name = 'invoice'");
+  const result = await connect().execute("SELECT value FROM counters WHERE name = 'invoice'");
   return String(result.rows[0].value);
 }
 
 // Helper for adding new users
 async function createUser(username, password, role = 'user') {
-  const bcrypt = require('bcrypt');
   const hash = await bcrypt.hash(password, 10);
-  await db.execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
+  await connect().execute('INSERT INTO users (username, password, role) VALUES (?, ?, ?)',
     [username, hash, role]);
 }
 

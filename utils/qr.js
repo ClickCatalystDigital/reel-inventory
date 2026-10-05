@@ -15,13 +15,15 @@ async function generateQRDataURL(text) {
   });
 }
 
-// Generate QR code as buffer (for PDF embedding)
+// Generate QR code as ArrayBuffer (for PDF embedding). Not a Node Buffer: the standalone
+// pdfkit build used on Workers bundles its own Buffer class and rejects ours.
 async function generateQRBuffer(text) {
-  return await QRCode.toBuffer(stripPrefix(text), {
+  const b = await QRCode.toBuffer(stripPrefix(text), {
     width: 200,
     margin: 1,
     type: 'png'
   });
+  return b.buffer.slice(b.byteOffset, b.byteOffset + b.byteLength);
 }
 
 module.exports = { generateQRDataURL, generateQRBuffer };
