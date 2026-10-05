@@ -148,8 +148,7 @@
   }
 }
 
-/* LS AI launcher: a slightly domed ink orb (soft top highlight, darker underside, layered drop shadow) with a rare, brief RGB-split glitch
-   on the chip mark. The glitch runs ~0.5 s every 7 s, faster on hover, and is off for reduced-motion users. */
+/* LS AI launcher: a slightly domed ink orb (soft top highlight, darker underside, layered drop shadow). */
 .lsai-orb {
   background: radial-gradient(circle at 32% 24%, #4a4a45 0%, #1a1a18 62%);
   color: #fff;
@@ -160,15 +159,14 @@
   color: #1a1a18;
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.9), inset 0 -3px 5px rgba(0, 0, 0, 0.2), 0 8px 16px -4px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.08);
 }
+/* the circle itself: every ~3.5 s a very small RGB-split shimmer with a 1px jitter. It uses the `translate` property so it never fights the hover scale. */
 @keyframes lsai-glitch {
-  0%, 91%, 100% { transform: none; filter: none; }
-  92% { transform: translate(-1.5px, 0); filter: drop-shadow(1.5px 0 #ff2d55) drop-shadow(-1.5px 0 #22d3ee); }
-  94% { transform: translate(1.5px, -1px); filter: drop-shadow(-1.5px 0 #ff2d55) drop-shadow(1.5px 0 #22d3ee); }
-  96% { transform: translate(-1px, 1px); filter: drop-shadow(1px 0 #ff2d55) drop-shadow(-1px 0 #22d3ee); }
-  98% { transform: translate(1px, 0); filter: drop-shadow(-1px 0 #ff2d55) drop-shadow(1px 0 #22d3ee); }
+  0%, 88%, 100% { translate: 0 0; filter: none; }
+  90% { translate: -1px 0; filter: drop-shadow(1px 0 rgba(255, 45, 85, 0.5)) drop-shadow(-1px 0 rgba(34, 211, 238, 0.5)); }
+  93% { translate: 1px 0; filter: drop-shadow(-1px 0 rgba(255, 45, 85, 0.5)) drop-shadow(1px 0 rgba(34, 211, 238, 0.5)); }
+  96% { translate: -0.5px 0; filter: drop-shadow(0.5px 0 rgba(255, 45, 85, 0.4)) drop-shadow(-0.5px 0 rgba(34, 211, 238, 0.4)); }
 }
-.lsai-glitch { animation: lsai-glitch 7s steps(1, end) infinite; }
-.lsai-orb:hover .lsai-glitch { animation-duration: 0.7s; }
+.lsai-orb { animation: lsai-glitch 3.5s steps(1, end) infinite; }
 @media (prefers-reduced-motion: reduce) {
-  .lsai-glitch, .lsai-orb:hover .lsai-glitch { animation: none; }
+  .lsai-orb { animation: none; }
 }

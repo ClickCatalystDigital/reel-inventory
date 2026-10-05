@@ -195,7 +195,7 @@ export function AssistantWidget() {
           title="LS AI"
           className="lsai-orb fixed bottom-[136px] right-4 z-40 grid size-14 place-items-center rounded-full transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
         >
-          <ChipMark className="lsai-glitch size-7" />
+          <ChipMark className="size-7" />
         </button>
       </>
     );
