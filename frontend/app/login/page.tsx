@@ -66,22 +66,6 @@ export default function LoginPage() {
         <div className="relative max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">LS Technologies</h1>
           <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions, tailored to every customer.</p>
-          <p className="mt-6 max-w-md text-[15px] leading-relaxed text-white/55">
-            We work alongside manufacturers, OEMs and industrial businesses, from sourcing and supply to production support, with flexible arrangements built around how each of them operates.
-          </p>
-
-          <ul className="mt-10 grid max-w-xl grid-cols-3 divide-x divide-white/10 border-y border-white/10">
-            {[
-              ["Sourcing & supply", "Dependable procurement for production needs."],
-              ["Production support", "Flexible help that fits each operation."],
-              ["Tailored programmes", "Arrangements shaped around the customer."],
-            ].map(([t, d]) => (
-              <li key={t} className="px-4 py-4 first:pl-0">
-                <p className="text-sm font-medium">{t}</p>
-                <p className="mt-1 text-xs leading-relaxed text-white/50">{d}</p>
-              </li>
-            ))}
-          </ul>
         </div>
 
         <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LS Technologies</p>
@@ -151,7 +135,7 @@ export default function LoginPage() {
             <p role="alert" className="min-h-5 text-center text-sm text-destructive">{error}</p>
           </form>
 
-          <p className="mt-10 text-center text-[11px] text-muted-foreground/70">LS Technologies — an ahromlabs.com product</p>
+          <p className="mt-10 text-center text-[11px] text-muted-foreground/70">LS Tech — an ahromlabs.com product</p>
         </div>
       </main>
     </div>
