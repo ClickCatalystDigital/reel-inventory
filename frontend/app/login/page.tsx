@@ -6,6 +6,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 
+// Phones only: a hairline grid in the page's own foreground colour (so it also works in dark mode). It sits behind the name and tagline only
+// and fades out completely before the Username field.
+const PHONE_GRID = {
+  backgroundImage:
+    "linear-gradient(color-mix(in srgb, var(--foreground) 5%, transparent) 1px, transparent 1px), linear-gradient(90deg, color-mix(in srgb, var(--foreground) 5%, transparent) 1px, transparent 1px)",
+  backgroundSize: "40px 40px",
+  maskImage: "linear-gradient(to bottom, black 20%, transparent 82%)",
+} as const;
+
 // Deliberately outside the (app) route group and doesn't use the shared api()
 // wrapper — this is the entry point before any auth exists.
 export default function LoginPage() {
@@ -45,7 +54,7 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="grid min-h-dvh md:grid-cols-[1.15fr_1fr]">
+    <div className="relative flex min-h-dvh flex-col overflow-hidden md:grid md:grid-cols-[1.15fr_1fr]">
       {/* Brand side. Deliberately generic: it says what kind of partner LS Technologies is, never who it serves or how. */}
       <aside className="relative hidden overflow-hidden bg-[#131312] text-white md:flex md:flex-col md:justify-end md:p-12 lg:p-16">
         <div
@@ -67,19 +76,24 @@ export default function LoginPage() {
         <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LS Technologies</p>
       </aside>
 
-      <main className="flex flex-col justify-center bg-background px-6 py-10 sm:px-12">
-        <div className="mx-auto w-full max-w-[360px]">
-          {/* Phones: the brand side collapses into a short header. */}
-          <div className="mb-8 md:hidden">
-            <span className="text-xl font-semibold tracking-tight">LS Technologies</span>
-            <p className="mt-2 text-sm text-muted-foreground">Electronics and industrial solutions. Built around your requirements.</p>
+      <main className="relative flex flex-1 flex-col md:bg-background px-6 pb-8 pt-20 sm:px-12 md:justify-center md:py-10">
+        <div className="mx-auto flex w-full max-w-[360px] flex-1 flex-col md:block md:flex-none">
+          {/* Phones: just the name and the line, large, above the form — no band, no card. */}
+          <div className="relative mb-12 md:hidden">
+            <div aria-hidden className="pointer-events-none absolute -bottom-12 -top-20 left-1/2 w-screen -translate-x-1/2" style={PHONE_GRID} />
+            <h1 className="relative text-[2.6rem] font-semibold leading-[1.02] tracking-[-0.03em]">LS Technologies</h1>
+            <p className="relative mt-4 text-[15px] leading-snug text-muted-foreground">
+              Electronics and industrial solutions.
+              <br />
+              Built around your requirements.
+            </p>
           </div>
 
-          <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
-          <p className="mt-1.5 text-sm text-muted-foreground">Use your account to continue to your workspace.</p>
+          <h2 className="hidden text-2xl font-semibold tracking-tight md:block">Sign in</h2>
+          <p className="mt-1.5 hidden text-sm text-muted-foreground md:block">Use your account to continue to your workspace.</p>
 
           <form
-            className="mt-8 space-y-4"
+            className="space-y-4 md:mt-8"
             onSubmit={(e) => {
               e.preventDefault();
               login();
@@ -123,12 +137,23 @@ export default function LoginPage() {
             </div>
 
             <Button type="submit" className="h-11 w-full text-[15px]" disabled={loading}>
-              {loading ? "Signing in…" : <>Sign in <ArrowRight /></>}
+              {loading ? (
+                <>
+                  <span className="md:hidden">Logging in…</span>
+                  <span className="hidden md:inline">Signing in…</span>
+                </>
+              ) : (
+                <>
+                  <span className="md:hidden">Login</span>
+                  <span className="hidden md:inline">Sign in</span>
+                  <ArrowRight className="hidden md:block" />
+                </>
+              )}
             </Button>
             <p role="alert" className="min-h-5 text-center text-sm text-destructive">{error}</p>
           </form>
 
-          <p className="mt-10 text-center text-[11px] text-muted-foreground/70">LS Tech — an ahromlabs.com product</p>
+          <p className="mt-auto pt-10 text-center text-[11px] text-muted-foreground/70 md:mt-10 md:pt-0">LS Tech — an ahromlabs.com product</p>
         </div>
       </main>
     </div>
