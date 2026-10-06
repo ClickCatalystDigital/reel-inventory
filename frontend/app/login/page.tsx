@@ -65,7 +65,7 @@ export default function LoginPage() {
 
         <div className="relative max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">LS Technologies</h1>
-          <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions, tailored to every customer.</p>
+          <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions,<br />tailored to every customer.</p>
         </div>
 
         <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LS Technologies</p>
