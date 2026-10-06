@@ -15,7 +15,14 @@ const json = (status, error) => Response.json({ error }, { status });
 
 export default {
   async fetch(request, env, ctx) {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
+
+    // www.<domain> is only an alias: send visitors (and any links) to the main address, keeping the path.
+    if (url.hostname.startsWith('www.')) {
+      url.hostname = url.hostname.slice(4);
+      return Response.redirect(url.toString(), 301);
+    }
 
     if (pathname.startsWith('/api/')) {
       // Cap password guessing before spending CPU on bcrypt.

@@ -9,7 +9,11 @@
   "observability": { "enabled": true, "traces": { "enabled": true } },
 
   // Custom domain (zone lstechnologies.in lives in this account). Cloudflare creates the DNS record + certificate on deploy.
-  "routes": [{ "pattern": "lstechnologies.in", "custom_domain": true }],
+  "routes": [
+    { "pattern": "lstechnologies.in", "custom_domain": true },
+    // alias only: worker.mjs 301-redirects www to the root address
+    { "pattern": "www.lstechnologies.in", "custom_domain": true }
+  ],
 
   // Run the Worker next to the Turso database (aws ap-south-1): each request makes several
   // sequential queries, so cutting the Worker<->DB distance matters more than the user<->Worker one.
