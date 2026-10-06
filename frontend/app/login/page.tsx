@@ -47,25 +47,21 @@ export default function LoginPage() {
   return (
     <div className="grid min-h-dvh md:grid-cols-[1.15fr_1fr]">
       {/* Brand side. Deliberately generic: it says what kind of partner LS Technologies is, never who it serves or how. */}
-      <aside className="relative hidden overflow-hidden bg-[#131312] text-white md:flex md:flex-col md:justify-between md:p-12 lg:p-16">
+      <aside className="relative hidden overflow-hidden bg-[#131312] text-white md:flex md:flex-col md:justify-end md:p-12 lg:p-16">
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-0 opacity-70"
+          className="pointer-events-none absolute inset-0"
           style={{
             backgroundImage:
-              "radial-gradient(60rem 36rem at 15% 105%, rgba(255,255,255,0.10), transparent 60%), linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)",
+              "radial-gradient(52rem 32rem at 0% 0%, rgba(255,255,255,0.11), transparent 62%), linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)",
             backgroundSize: "100% 100%, 44px 44px, 44px 44px",
-            maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.35), black 70%)",
+            maskImage: "linear-gradient(to bottom, black, rgba(0,0,0,0.15) 72%)",
           }}
         />
 
-        <div className="relative flex items-center gap-3">
-          <span className="grid size-9 place-items-center rounded-lg border border-white/20 bg-white/10 text-sm font-semibold tracking-tight">LS</span>
-        </div>
-
-        <div className="relative max-w-xl">
+        <div className="relative mb-16 max-w-xl">
           <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">LS Technologies</h1>
-          <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions,<br />tailored to every customer.</p>
+          <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions.<br />Built around your requirements.</p>
         </div>
 
         <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LS Technologies</p>
@@ -75,11 +71,8 @@ export default function LoginPage() {
         <div className="mx-auto w-full max-w-[360px]">
           {/* Phones: the brand side collapses into a short header. */}
           <div className="mb-8 md:hidden">
-            <div className="flex items-center gap-2.5">
-              <span className="grid size-8 place-items-center rounded-lg bg-foreground text-xs font-semibold text-background">LS</span>
-              <span className="text-lg font-semibold tracking-tight">LS Technologies</span>
-            </div>
-            <p className="mt-2 text-sm text-muted-foreground">Electronics and industrial solutions, tailored to every customer.</p>
+            <span className="text-xl font-semibold tracking-tight">LS Technologies</span>
+            <p className="mt-2 text-sm text-muted-foreground">Electronics and industrial solutions. Built around your requirements.</p>
           </div>
 
           <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
