@@ -1,7 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
-import { Card } from "@/components/ui/card";
+import { ArrowRight, Eye, EyeOff } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -13,6 +13,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  const [show, setShow] = useState(false);
   const passwordRef = useRef<HTMLInputElement>(null);
 
   async function login() {
@@ -44,43 +45,115 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-[380px] p-5">
-        <div className="mb-8 text-center">
-          <h1 className="text-lg font-bold tracking-tight">LS TECHNOLOGY</h1>
-          <p className="mt-1 text-xs text-muted-foreground">Inventory Management System</p>
+    <div className="grid min-h-dvh md:grid-cols-[1.15fr_1fr]">
+      {/* Brand side. Deliberately generic: it says what kind of partner LS Technologies is, never who it serves or how. */}
+      <aside className="relative hidden overflow-hidden bg-[#131312] text-white md:flex md:flex-col md:justify-between md:p-12 lg:p-16">
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-0 opacity-70"
+          style={{
+            backgroundImage:
+              "radial-gradient(60rem 36rem at 15% 105%, rgba(255,255,255,0.10), transparent 60%), linear-gradient(rgba(255,255,255,0.045) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.045) 1px, transparent 1px)",
+            backgroundSize: "100% 100%, 44px 44px, 44px 44px",
+            maskImage: "linear-gradient(to bottom, rgba(0,0,0,0.35), black 70%)",
+          }}
+        />
+
+        <div className="relative flex items-center gap-3">
+          <span className="grid size-9 place-items-center rounded-lg border border-white/20 bg-white/10 text-sm font-semibold tracking-tight">LS</span>
         </div>
-        <Card className="p-5">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Login</div>
-          <div className="space-y-3">
+
+        <div className="relative max-w-xl">
+          <h1 className="text-5xl font-semibold leading-[1.05] tracking-tight lg:text-6xl">LS Technologies</h1>
+          <p className="mt-5 text-xl leading-snug text-white/75 lg:text-2xl">Electronics and industrial solutions, tailored to every customer.</p>
+          <p className="mt-6 max-w-md text-[15px] leading-relaxed text-white/55">
+            We work alongside manufacturers, OEMs and industrial businesses, from sourcing and supply to production support, with flexible arrangements built around how each of them operates.
+          </p>
+
+          <ul className="mt-10 grid max-w-xl grid-cols-3 divide-x divide-white/10 border-y border-white/10">
+            {[
+              ["Sourcing & supply", "Dependable procurement for production needs."],
+              ["Production support", "Flexible help that fits each operation."],
+              ["Tailored programmes", "Arrangements shaped around the customer."],
+            ].map(([t, d]) => (
+              <li key={t} className="px-4 py-4 first:pl-0">
+                <p className="text-sm font-medium">{t}</p>
+                <p className="mt-1 text-xs leading-relaxed text-white/50">{d}</p>
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        <p className="relative text-xs text-white/40">© {new Date().getFullYear()} LS Technologies</p>
+      </aside>
+
+      <main className="flex flex-col justify-center bg-background px-6 py-10 sm:px-12">
+        <div className="mx-auto w-full max-w-[360px]">
+          {/* Phones: the brand side collapses into a short header. */}
+          <div className="mb-8 md:hidden">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-8 place-items-center rounded-lg bg-foreground text-xs font-semibold text-background">LS</span>
+              <span className="text-lg font-semibold tracking-tight">LS Technologies</span>
+            </div>
+            <p className="mt-2 text-sm text-muted-foreground">Electronics and industrial solutions, tailored to every customer.</p>
+          </div>
+
+          <h2 className="text-2xl font-semibold tracking-tight">Sign in</h2>
+          <p className="mt-1.5 text-sm text-muted-foreground">Use your account to continue to your workspace.</p>
+
+          <form
+            className="mt-8 space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              login();
+            }}
+          >
             <div className="space-y-1.5">
-              <Label>Username</Label>
+              <Label htmlFor="username">Username</Label>
               <Input
+                id="username"
                 autoFocus
-                placeholder="Enter username"
+                autoComplete="username"
+                autoCapitalize="none"
+                spellCheck={false}
+                className="h-11"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && passwordRef.current?.focus()}
+                onKeyDown={(e) => e.key === "Enter" && passwordRef.current && (e.preventDefault(), passwordRef.current.focus())}
               />
             </div>
             <div className="space-y-1.5">
-              <Label>Password</Label>
-              <Input
-                ref={passwordRef}
-                type="password"
-                placeholder="Enter password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && login()}
-              />
+              <Label htmlFor="password">Password</Label>
+              <div className="relative">
+                <Input
+                  id="password"
+                  ref={passwordRef}
+                  type={show ? "text" : "password"}
+                  autoComplete="current-password"
+                  className="h-11 pr-11"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShow((v) => !v)}
+                  aria-label={show ? "Hide password" : "Show password"}
+                  className="absolute inset-y-0 right-0 grid w-11 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  {show ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+                </button>
+              </div>
             </div>
-            <Button className="w-full" onClick={login} disabled={loading}>
-              {loading ? "Logging in..." : "Login"}
+
+            <Button type="submit" className="h-11 w-full text-[15px]" disabled={loading}>
+              {loading ? "Signing in…" : <>Sign in <ArrowRight /></>}
             </Button>
-            {error && <div className="text-center text-sm text-destructive">{error}</div>}
-          </div>
-        </Card>
-      </div>
+            <p role="alert" className="min-h-5 text-center text-sm text-destructive">{error}</p>
+          </form>
+
+          <p className="mt-10 text-center text-[11px] text-muted-foreground/70">LS Technologies — an ahromlabs.com product</p>
+        </div>
+      </main>
     </div>
   );
 }
