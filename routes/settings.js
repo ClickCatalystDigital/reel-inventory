@@ -3,7 +3,8 @@
 const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
-const { queryAll, queryOne, execute, readBatch } = require('../db/schema');
+const { queryAll, queryOne, execute, readBatch, batch } = require('../db/schema');
+const { parseCompanyIds } = require('../utils/visibility');
 const ah = require('../utils/asyncHandler');
 const r2 = require('../utils/r2');
 
@@ -21,7 +22,9 @@ router.use(requireAdmin);
 // GET all users (no passwords)
 router.get('/users', ah(async (req, res) => {
   const users = await queryAll(
-    'SELECT id, username, role, created_at FROM users ORDER BY created_at ASC'
+    `SELECT id, username, role, created_at,
+       (SELECT group_concat(company_id) FROM user_companies uc WHERE uc.user_id = users.id) AS company_ids
+     FROM users ORDER BY created_at ASC`
   );
   res.json(users);
 }));
@@ -64,6 +67,14 @@ router.put('/users/:id', ah(async (req, res) => {
   if (!user) return res.status(404).json({ error: 'User not found' });
 
   const newRole = role || user.role;
+  // Which CRM companies this login belongs to (utils/visibility.js) — replaces the list when sent.
+  const companyIds = parseCompanyIds(req.body.company_ids);
+  if (companyIds) {
+    await batch([
+      ['DELETE FROM user_companies WHERE user_id = ?', [id]],
+      ...companyIds.map((c) => ['INSERT INTO user_companies (user_id, company_id) VALUES (?, ?)', [id, c]]),
+    ]);
+  }
 
   if (password) {
     const hash = await bcrypt.hash(password, 10);
@@ -84,6 +95,7 @@ router.delete('/users/:id', ah(async (req, res) => {
   }
   const result = await execute('DELETE FROM users WHERE id = ?', [id]);
   if (result.changes === 0) return res.status(404).json({ error: 'User not found' });
+  await execute('DELETE FROM user_companies WHERE user_id = ?', [id]);
   res.json({ success: true, message: 'User deleted' });
 }));
 

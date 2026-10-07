@@ -17,6 +17,8 @@ import { ChipMark } from "@/components/assistant/ChipMark";
 import { useAuth } from "@/lib/auth";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SearchPicker } from "@/components/SearchPicker";
+import { parseIds, type Company } from "@/lib/catalog";
 
 // Mirrors routes/settings.js's validRoles allowlist.
 const ROLE_OPTIONS = [
@@ -37,6 +39,7 @@ interface AppUser {
   username: string;
   role: string;
   created_at: string;
+  company_ids: string | null;
 }
 
 export default function SettingsPage() {
@@ -47,6 +50,7 @@ export default function SettingsPage() {
   const [newPassword, setNewPassword] = useState("");
   const [newRole, setNewRole] = useState("user");
   const [adding, setAdding] = useState(false);
+  const [companies, setCompanies] = useState<Company[]>([]);
 
   // Sections: Storage | AI (admin only — the server enforces it too) | Humans. The active one lives in the URL hash so a refresh keeps it.
   const tabs = user?.role === "admin" ? [TAB_STORAGE, TAB_AI, TAB_HUMANS] : [TAB_STORAGE, TAB_HUMANS];
@@ -81,6 +85,7 @@ export default function SettingsPage() {
     // Data fetch on mount — a legitimate effect use, not state derived from a prop.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     loadUsers();
+    api<Company[]>("/api/po/companies").then(setCompanies).catch(() => {});
   }, []);
 
   async function addUser() {
@@ -150,8 +155,8 @@ export default function SettingsPage() {
               ) : (
                 <>
                   {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
-                  {showLS && <UsersCard title="Clients" users={clientUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
-                  {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showLS && <UsersCard title="Clients" users={clientUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                 </>
               )}
             </>
@@ -165,11 +170,14 @@ export default function SettingsPage() {
 function UsersCard({
   title,
   users,
+  companies,
   onSaved,
   onDeleted,
 }: {
   title: string;
   users: AppUser[];
+  // Set for outside logins (clients, Gelco): which CRM companies they belong to decides which catalog items they see.
+  companies?: Company[];
   onSaved: () => void;
   onDeleted: () => void;
 }) {
@@ -182,6 +190,7 @@ function UsersCard({
             <TableRow>
               <TableHead>Username</TableHead>
               <TableHead>Role</TableHead>
+              {companies && <TableHead>Company</TableHead>}
               <TableHead>Created</TableHead>
               <TableHead>New Password</TableHead>
               <TableHead></TableHead>
@@ -190,12 +199,12 @@ function UsersCard({
           <TableBody>
             {users.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={5} className="text-center text-muted-foreground">
+                <TableCell colSpan={companies ? 6 : 5} className="text-center text-muted-foreground">
                   No users in this section
                 </TableCell>
               </TableRow>
             ) : (
-              users.map((u) => <UserRow key={u.id} user={u} onSaved={onSaved} onDeleted={onDeleted} />)
+              users.map((u) => <UserRow key={u.id} user={u} companies={companies} onSaved={onSaved} onDeleted={onDeleted} />)
             )}
           </TableBody>
         </Table>
@@ -204,15 +213,26 @@ function UsersCard({
   );
 }
 
-function UserRow({ user, onSaved, onDeleted }: { user: AppUser; onSaved: () => void; onDeleted: () => void }) {
+function UserRow({
+  user,
+  companies,
+  onSaved,
+  onDeleted,
+}: {
+  user: AppUser;
+  companies?: Company[];
+  onSaved: () => void;
+  onDeleted: () => void;
+}) {
   const [role, setRole] = useState(user.role);
+  const [companyIds, setCompanyIds] = useState(parseIds(user.company_ids));
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState(false);
 
   async function save() {
     setBusy(true);
     try {
-      await api(`/api/settings/users/${user.id}`, { method: "PUT", body: { role, password: password || undefined } });
+      await api(`/api/settings/users/${user.id}`, { method: "PUT", body: { role, password: password || undefined, ...(companies && { company_ids: companyIds }) } });
       showToast(`User "${user.username}" updated`);
       setPassword("");
       onSaved();
@@ -255,6 +275,19 @@ function UserRow({ user, onSaved, onDeleted }: { user: AppUser; onSaved: () => v
           </SelectContent>
         </Select>
       </TableCell>
+      {companies && (
+        <TableCell>
+          <SearchPicker
+            multiple
+            className="h-8 w-44"
+            options={companies.map((c) => ({ value: c.id, label: c.name }))}
+            value={companyIds}
+            onChange={setCompanyIds}
+            placeholder="Not linked"
+            searchPlaceholder="Search companies"
+          />
+        </TableCell>
+      )}
       <TableCell>{formatDate(user.created_at)}</TableCell>
       <TableCell>
         <Input

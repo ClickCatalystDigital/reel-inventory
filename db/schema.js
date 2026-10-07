@@ -38,6 +38,26 @@ async function initDB() {
     // Column already exists — safe to ignore
   }
 
+  // Catalog category (one of utils/visibility.js's ITEM_CATEGORIES, or NULL).
+  try {
+    await connect().execute(`ALTER TABLE items ADD COLUMN category TEXT`);
+  } catch (e) {
+    // Column already exists — safe to ignore
+  }
+
+  // Who may see an item outside LS Tech (utils/visibility.js): item -> CRM company, and the
+  // logins that belong to a company. This app's own tables — users/crm_companies are shared with ls_crm.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS item_visibility (
+    item_code TEXT NOT NULL,
+    company_id INTEGER NOT NULL,
+    PRIMARY KEY (item_code, company_id)
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS user_companies (
+    user_id INTEGER NOT NULL,
+    company_id INTEGER NOT NULL,
+    PRIMARY KEY (user_id, company_id)
+  )`);
+
   await connect().execute(`CREATE TABLE IF NOT EXISTS boxes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     box_number TEXT UNIQUE NOT NULL,

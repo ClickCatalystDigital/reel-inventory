@@ -10,6 +10,7 @@ const qs = (n) => Array(n).fill('?').join(',');
 const ah = require('../utils/asyncHandler');
 const { getDailyReportData } = require('../utils/dailyReport');
 const { hadStockAtStore } = require('../utils/storeMembership');
+const { needsVisibilityFilter, visibleToUser } = require('../utils/visibility');
 
 // Gelco roles are scoped to Gelco-only data; dashboard aggregates span all stores, so block
 // outright — except gelco_manager reading /stock-summary, which backs their "Stocks" tab
@@ -94,9 +95,12 @@ router.get('/stock-summary', ah(async (req, res) => {
   // never stocked there don't appear as rows of zeros. The LEFT JOIN below stays a LEFT JOIN (not
   // switched to inner) so the aggregate counts (total/outwarded) stay accurate
   // for items that do qualify; this WHERE EXISTS only controls which items appear.
-  const membershipFilter = storeFilter
-    ? `WHERE ${hadStockAtStore('i.item_code')}`
-    : '';
+  // Client/Gelco logins also only see items assigned to their company (utils/visibility.js).
+  const visFilter = needsVisibilityFilter(req.user, store);
+  const conds = [];
+  if (storeFilter) conds.push(hadStockAtStore('i.item_code'));
+  if (visFilter) conds.push(visibleToUser('i.item_code'));
+  const membershipFilter = conds.length ? `WHERE ${conds.join(' AND ')}` : '';
 
   if (as_on_date) {
     query = `
@@ -111,6 +115,7 @@ router.get('/stock-summary', ah(async (req, res) => {
     `;
     params.push(as_on_date + ' 23:59:59');
     if (storeFilter) params.push(store, store, store);
+    if (visFilter) params.push(req.user.id);
   } else {
     query = `
       SELECT i.item_code, i.description, i.default_spq,
@@ -123,6 +128,7 @@ router.get('/stock-summary', ah(async (req, res) => {
       GROUP BY i.item_code ORDER BY i.item_code
     `;
     if (storeFilter) params.push(store, store, store);
+    if (visFilter) params.push(req.user.id);
   }
 
   res.json(await queryAll(query, params));
