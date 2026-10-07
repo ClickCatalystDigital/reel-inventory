@@ -85,6 +85,22 @@ router.post('/', ah(async (req, res) => {
   }
 }));
 
+// Bulk "visible to": add or remove companies on many items at once (Catalog checkboxes).
+router.post('/bulk-visibility', ah(async (req, res) => {
+  if (!CATALOG_ADMINS.includes(req.user.role)) return res.status(403).json({ error: 'Not authorized' });
+  const { mode } = req.body;
+  const codes = Array.isArray(req.body.item_codes) ? [...new Set(req.body.item_codes.map(String))] : [];
+  const companyIds = parseCompanyIds(req.body.company_ids) || [];
+  if (!['add', 'remove'].includes(mode) || !codes.length || !companyIds.length) {
+    return res.status(400).json({ error: 'mode (add|remove), item_codes and company_ids are required' });
+  }
+  const sql = mode === 'add'
+    ? 'INSERT OR IGNORE INTO item_visibility (item_code, company_id) SELECT item_code, ? FROM items WHERE item_code = ?'
+    : 'DELETE FROM item_visibility WHERE company_id = ? AND item_code = ?';
+  await batch(companyIds.flatMap((c) => codes.map((code) => [sql, [c, code]])));
+  res.json({ success: true, message: `${mode === 'add' ? 'Assigned' : 'Removed'} for ${codes.length} item(s)` });
+}));
+
 router.put('/:itemCode', ah(async (req, res) => {
   const { item_code, description, default_spq } = req.body;
   const newCode = item_code ? item_code.trim().toUpperCase() : req.params.itemCode;

@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Search } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate, formatQty } from "@/lib/format";
@@ -10,7 +11,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { DataTable } from "@/components/data-table/DataTable";
+import { DataTable, type DataTableColumn } from "@/components/data-table/DataTable";
+import { Checkbox } from "@/components/ui/checkbox";
 import { SearchPicker } from "@/components/SearchPicker";
 import { useAuth } from "@/lib/auth";
 import { ITEM_CATEGORIES, parseIds, type Company } from "@/lib/catalog";
@@ -77,6 +79,43 @@ export default function CatalogPage() {
     if (!canManage) return;
     api<Company[]>("/api/po/companies").then(setCompanies).catch(() => {});
   }, [canManage]);
+  // Search (everyone) + checkbox selection with bulk "Visible to" (admin/manager).
+  const [q, setQ] = useState("");
+  const filtered = useMemo(() => {
+    const t = q.trim().toLowerCase();
+    if (!t) return items;
+    return items.filter((i) => [i.item_code, i.description, i.category ?? ""].some((f) => f.toLowerCase().includes(t)));
+  }, [items, q]);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkCompanies, setBulkCompanies] = useState<number[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const allSelected = filtered.length > 0 && filtered.every((i) => selected.has(i.item_code));
+  const toggle = (code: string) =>
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (!next.delete(code)) next.add(code);
+      return next;
+    });
+
+  async function bulkVisibility(mode: "add" | "remove") {
+    if (!bulkCompanies.length) return showToast("Pick at least one company", "error");
+    setBulkBusy(true);
+    try {
+      const r = await api<{ message: string }>("/api/items/bulk-visibility", {
+        method: "POST",
+        body: { mode, item_codes: [...selected], company_ids: bulkCompanies },
+      });
+      showToast(r.message);
+      setSelected(new Set());
+      setBulkCompanies([]);
+      loadItems();
+    } catch {
+      // api() already toasted
+    } finally {
+      setBulkBusy(false);
+    }
+  }
+
   const companyName = (id: number) => companies.find((c) => c.id === id)?.name ?? `#${id}`;
 
   async function loadItems() {
@@ -224,11 +263,57 @@ export default function CatalogPage() {
       </Card>
 
       <Card className="p-5">
+        <div className="relative mb-3">
+          <Search className="pointer-events-none absolute top-1/2 left-2.5 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input className="pl-8" placeholder="Search code, description or category" value={q} onChange={(e) => setQ(e.target.value)} />
+        </div>
+        {canManage && selected.size > 0 && (
+          <div className="mb-3 flex flex-wrap items-center gap-2 rounded-lg border border-border bg-muted/40 p-2">
+            <span className="px-1 text-sm font-medium">{selected.size} selected</span>
+            <SearchPicker
+              multiple
+              className="min-w-0 flex-1 bg-card sm:w-64 sm:flex-none"
+              options={companies.map((c) => ({ value: c.id, label: c.name }))}
+              value={bulkCompanies}
+              onChange={setBulkCompanies}
+              placeholder="Pick companies"
+              searchPlaceholder="Search companies"
+            />
+            <div className="flex w-full gap-2 sm:w-auto sm:flex-1">
+              <Button size="sm" disabled={bulkBusy} onClick={() => bulkVisibility("add")}>
+                Assign
+              </Button>
+              <Button size="sm" variant="outline" disabled={bulkBusy} onClick={() => bulkVisibility("remove")}>
+                Remove
+              </Button>
+              <Button size="sm" variant="ghost" className="ml-auto" onClick={() => setSelected(new Set())}>
+                Clear
+              </Button>
+            </div>
+          </div>
+        )}
         <DataTable
-          title="All Items"
-          data={items}
+          title={q ? `${filtered.length} of ${items.length} items` : "All Items"}
+          data={filtered}
           getRowKey={(i) => i.item_code}
           columns={[
+            ...(canManage
+              ? [
+                  {
+                    key: "sel",
+                    label: (
+                      <Checkbox
+                        checked={allSelected}
+                        onCheckedChange={() => setSelected(allSelected ? new Set() : new Set(filtered.map((i) => i.item_code)))}
+                        aria-label="Select all"
+                      />
+                    ),
+                    render: (i: Item) => (
+                      <Checkbox checked={selected.has(i.item_code)} onCheckedChange={() => toggle(i.item_code)} aria-label={`Select ${i.item_code}`} />
+                    ),
+                  } as DataTableColumn<Item>,
+                ]
+              : []),
             { label: "Item Code", render: (i) => <strong className="font-mono">{i.item_code}</strong> },
             { label: "Description", render: (i) => i.description },
             { label: "Category", render: (i) => i.category || <span className="text-muted-foreground">—</span> },
