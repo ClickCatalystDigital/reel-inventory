@@ -41,7 +41,12 @@ export default {
       const user = userFromHeaders((h) => request.headers.get(h));
       if (!user) return Response.redirect(new URL('/login', request.url), 302);
       const rule = ROLE_PAGE_ALLOWLIST[user.role];
-      const page = pathname.replace(/(.)\/$/, '$1'); // '/outward/' -> '/outward'
+      // Next's client-side navigation fetches RSC payloads ('/stocks.txt', '/stocks/__next._tree.txt');
+      // gate them as the page they belong to, or allowlisted roles get redirected mid-navigation.
+      const page = pathname
+        .replace(/\/__next\.[^/]*$/, '')
+        .replace(/\.txt$/, '')
+        .replace(/(.)\/$/, '$1') || '/'; // '/outward/' -> '/outward'
       if (rule && !rule.pages.includes(page)) {
         return Response.redirect(new URL(rule.redirectTo, request.url), 302);
       }

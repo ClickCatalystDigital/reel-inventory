@@ -126,6 +126,49 @@ export default function OutwardPage() {
     void addToCart(text);
   }, (msg) => showToast(msg, "error"));
 
+  // Phones: once the camera scrolls under the nav, dock a small copy of it top-right so the
+  // cart/table below stays visible. #reader is never remounted (that would kill the stream) —
+  // the same node is just pinned, cropped to the scan box and scaled with a transform, because
+  // html5-qrcode sizes its video and scan-box overlay in fixed pixels when it starts.
+  const camSlotRef = useRef<HTMLDivElement>(null);
+  const [camDock, setCamDock] = useState<{ w: number; h: number; top: number } | null>(null);
+  useEffect(() => {
+    const slot = camSlotRef.current;
+    if (!scanner.active || !slot) return;
+    const phone = window.matchMedia("(max-width: 767px)");
+    let docked = false;
+    let size = { w: 0, h: 0 };
+    function update() {
+      if (!slot) return;
+      if (!docked) size = { w: slot.offsetWidth, h: slot.offsetHeight };
+      const navBottom = document.querySelector("nav")?.getBoundingClientRect().bottom ?? 0;
+      const r = slot.getBoundingClientRect();
+      const dock = phone.matches && size.h > 50 && r.top + r.height / 2 < navBottom;
+      if (dock === docked) return;
+      docked = dock;
+      setCamDock(dock ? { ...size, top: navBottom } : null);
+    }
+    // Rotation changes the camera's natural size: undock, let it re-lay out, re-measure. Width
+    // only — phones fire height-only resizes while the address bar hides during a scroll.
+    let lastWidth = window.innerWidth;
+    function onResize() {
+      if (window.innerWidth === lastWidth) return update();
+      lastWidth = window.innerWidth;
+      docked = false;
+      setCamDock(null);
+      requestAnimationFrame(update);
+    }
+    window.addEventListener("scroll", update, { passive: true });
+    window.addEventListener("resize", onResize);
+    return () => {
+      window.removeEventListener("scroll", update);
+      window.removeEventListener("resize", onResize);
+      setCamDock(null);
+    };
+  }, [scanner.active]);
+  const CAM_SCALE = 0.6;
+  const camCrop = camDock ? Math.min(camDock.h - 2, 290) : 0; // qrbox is 250px; keep a 20px margin
+
   useEffect(() => {
     // One-off data fetch on mount — a legitimate effect use.
     (async () => {
@@ -545,8 +588,21 @@ export default function OutwardPage() {
           </Button>
         </div>
         {scanner.active && (
-          <div className="mt-3.5 overflow-hidden rounded-md border border-border">
-            <div id="reader" />
+          <div ref={camSlotRef} className="mt-3.5" style={camDock ? { height: camDock.h } : undefined}>
+            <div
+              className={cn("overflow-hidden rounded-md border border-border", camDock && "fixed right-4 z-30 bg-black shadow-lg")}
+              style={camDock ? { top: camDock.top + 8, width: (camDock.w - 2) * CAM_SCALE + 2, height: camCrop * CAM_SCALE + 2 } : undefined}
+            >
+              <div
+                style={
+                  camDock
+                    ? { width: camDock.w - 2, transformOrigin: "top left", transform: `scale(${CAM_SCALE}) translateY(${-(camDock.h - 2 - camCrop) / 2}px)` }
+                    : undefined
+                }
+              >
+                <div id="reader" />
+              </div>
+            </div>
           </div>
         )}
         <div className="mt-2 text-[11px] text-muted-foreground">
