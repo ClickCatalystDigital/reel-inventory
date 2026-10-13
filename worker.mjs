@@ -24,6 +24,10 @@ export default {
       return Response.redirect(url.toString(), 301);
     }
 
+    // Public: which commit this server runs (the deploy workflow checks it after each deploy; BUILD_COMMIT is
+    // passed with --var at deploy time).
+    if (pathname === '/api/version') return Response.json({ commit: env.BUILD_COMMIT || null });
+
     if (pathname.startsWith('/api/')) {
       // The demo has no password logins: everyone enters through /api/demo/enter.
       if (env.DEMO_MODE === '1' && pathname === '/api/login') return json(404, 'Not found');
