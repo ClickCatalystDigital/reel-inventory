@@ -154,7 +154,7 @@ export default function LoginPage() {
             <p role="alert" className="min-h-5 text-center text-sm text-destructive">{error}</p>
           </form>
 
-          <p className="mt-auto pt-10 text-center text-[11px] text-muted-foreground/70 md:mt-10 md:pt-0">{BRAND.short} — an ahromlabs.com product</p>
+          <p className="mt-auto pt-10 text-center text-[11px] text-muted-foreground/70 md:mt-10 md:pt-0">{BRAND.app} — an ahromlabs.com product</p>
         </div>
       </main>
     </div>

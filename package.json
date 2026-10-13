@@ -10,7 +10,7 @@
     "deploy": "npm run build && wrangler deploy",
     "db:init": "node scripts/init-db.js",
     "backup": "node scripts/backup-db.js",
-    "deploy:demo": "NEXT_PUBLIC_DEMO=1 npm run build && wrangler deploy -c wrangler.demo.jsonc",
+    "deploy:demo": "node scripts/demo/migrate.mjs && NEXT_PUBLIC_DEMO=1 npm run build && wrangler deploy -c wrangler.demo.jsonc",
     "demo:seed": "node scripts/demo/seed.mjs"
   },
   "dependencies": {

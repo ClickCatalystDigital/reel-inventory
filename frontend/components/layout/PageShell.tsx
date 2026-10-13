@@ -15,7 +15,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1">{children}</div>
       <footer className="print:hidden">
         <div className="mt-10 border-t py-4 text-right text-[11px] text-muted-foreground/80 md:pr-16">
-          {BRAND.short} — an{" "}
+          {BRAND.app} — an{" "}
           <a
             href="https://ahromlabs.com"
             target="_blank"

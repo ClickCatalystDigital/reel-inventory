@@ -11,7 +11,7 @@ import "./globals.css";
 import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: BRAND.short,
+  title: BRAND.app,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

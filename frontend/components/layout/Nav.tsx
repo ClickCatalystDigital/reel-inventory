@@ -24,7 +24,7 @@ export function Nav() {
     <nav className="sticky top-0 z-40 bg-[var(--nav-bg)] text-white">
       <div className="flex h-14 items-center justify-between gap-4 px-4">
         <Link href="/" className="shrink-0 font-bold tracking-wide">
-          {BRAND.short.toUpperCase()}
+          {BRAND.app.toUpperCase()}
         </Link>
 
         <div className="hidden h-5 w-px shrink-0 bg-white/15 md:block" />
