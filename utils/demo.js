@@ -73,6 +73,20 @@ async function returnAiQuestion(req) {
   if (token && token !== '1') await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used - 1 WHERE token = ? AND ai_used > 0', args: [token] });
 }
 
+// Emails the lead to us through ahromlabs.com (its /api/demo-lead, shared DEMO_LEAD_KEY). Never blocks or
+// fails the visitor's entry: the lead is already saved, so a mail problem is only logged.
+async function emailLead(lead) {
+  if (!process.env.DEMO_LEAD_KEY) return;
+  try {
+    const res = await fetch('https://ahromlabs.com/api/demo-lead', {
+      method: 'POST', signal: AbortSignal.timeout(5000),
+      headers: { 'content-type': 'application/json', 'x-demo-key': process.env.DEMO_LEAD_KEY },
+      body: JSON.stringify({ demo: 'electronics', name: lead.name, company: lead.company, email: lead.email, phone: lead.phone, about: lead.business }),
+    });
+    if (!res.ok) console.error('demo lead email failed', res.status);
+  } catch (e) { console.error('demo lead email failed', e.message); }
+}
+
 const router = express.Router();
 
 router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLead(req) }));
@@ -94,6 +108,7 @@ router.post('/lead', async (req, res, next) => {
       sql: 'INSERT INTO demo_leads (name, company, email, phone, business, ip, user_agent, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       args: [lead.name, lead.company, lead.email, lead.phone || null, lead.business || null, req.headers['cf-connecting-ip'] || null, clip(req.headers['user-agent'], 300) || null, token],
     });
+    await emailLead(lead);
     res.cookie('demo_lead', token, { ...COOKIE, maxAge: 30 * 24 * 60 * 60 * 1000 });
     res.json({ ok: true });
   } catch (err) { next(err); }

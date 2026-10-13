@@ -50,7 +50,7 @@ export default function DemoPage() {
     setError("");
     try {
       await post("/api/demo/lead", form);
-      track("generate_lead", { form: "demo" });
+      track("electronics_demo_form_sent");
       setStep("roles");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -64,7 +64,7 @@ export default function DemoPage() {
     setError("");
     try {
       const r = await post("/api/demo/enter", { username });
-      track("demo_role_selected", { role: username });
+      track("electronics_demo_login", { role: username });
       window.location.assign(r.home || "/");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Something went wrong");
@@ -74,7 +74,17 @@ export default function DemoPage() {
 
   return (
     <>
-    <main id="top" className="mx-auto grid min-h-dvh max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+    {/* Slim header: who made this and where to read more (not the full ahromlabs.com navbar, so the form stays the focus). */}
+    <header className="border-b">
+      <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 text-sm">
+        <a href="https://ahromlabs.com" className="font-semibold tracking-tight">Ahrom Labs</a>
+        <nav className="flex items-center gap-4 text-muted-foreground sm:gap-6">
+          <a href="https://ahromlabs.com/industries/electronics-component-trading" className="hover:text-foreground">How it was built</a>
+          <a href="https://ahromlabs.com/#contact" className="hover:text-foreground">Contact</a>
+        </nav>
+      </div>
+    </header>
+    <main id="top" className="mx-auto grid min-h-[calc(100dvh-3.5rem)] max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
       <section className="order-2 min-w-0 space-y-6 lg:order-none">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Ahrom Labs · live demo</p>

@@ -7,7 +7,7 @@
   "account_id": "5d8cf246f656006b81d99d734e8c0f40",
   "main": "worker.mjs",
   "compatibility_date": "2026-10-05",
-  "compatibility_flags": ["nodejs_compat"],
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"], // public fetch: utils/demo.js calls ahromlabs.com (same zone)
   "observability": { "enabled": true },
   "routes": [{ "pattern": "electronics-erp.ahromlabs.com", "custom_domain": true }],
   "placement": { "region": "aws:ap-south-1" },

@@ -12,6 +12,7 @@ import { ChipMark } from "./ChipMark";
 import { ResultCard } from "./ResultCard";
 import { AiLimitOverlay } from "@/components/demo/AiLimitOverlay";
 import { BRAND, DEMO } from "@/lib/brand";
+import { track } from "@/components/demo/DemoAnalytics";
 
 interface Msg {
   id: number;
@@ -145,7 +146,7 @@ export function AssistantWidget() {
     async (raw?: string) => {
       const q = (raw ?? text).trim();
       if (!q || busy) return;
-      if (locked) { setLimitOpen(true); return; }
+      if (locked) { setLimitOpen(true); track("electronics_demo_ai_limit"); return; }
       const next: Msg[] = [...msgs, { id: idRef.current++, role: "user", content: q }];
       setMsgs(next);
       setText("");
@@ -165,8 +166,9 @@ export function AssistantWidget() {
         if (DEMO && res.status === 429 && data?.demoLimit) {
           setDemoAi((d) => (d ? { ...d, left: 0 } : d));
           setLimitOpen(true);
+          track("electronics_demo_ai_limit");
         }
-        if (DEMO && res.ok) setDemoAi((d) => (d ? { ...d, left: Math.max(0, d.left - 1) } : d));
+        if (DEMO && res.ok) { setDemoAi((d) => (d ? { ...d, left: Math.max(0, d.left - 1) } : d)); track("electronics_demo_ai_question"); }
         if (!res.ok || !data?.reply) {
           setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", error: { text: data?.error || "Something went wrong. Please try again.", link: data?.link, linkLabel: data?.linkLabel } }]);
         } else {
@@ -214,7 +216,7 @@ export function AssistantWidget() {
         )}
         <button
           type="button"
-          onClick={() => { setTeaser(false); if (locked) setLimitOpen(true); else setOpen(true); }}
+          onClick={() => { setTeaser(false); if (locked) { setLimitOpen(true); track("electronics_demo_ai_limit"); } else setOpen(true); }}
           aria-label={locked ? `${BRAND.ai}: free questions used` : `Open ${BRAND.ai}`}
           title={BRAND.ai}
           className="lsai-orb fixed bottom-[136px] right-4 z-40 grid size-14 place-items-center rounded-full transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
