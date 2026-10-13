@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState, type FormEvent } from "react";
-import { ArrowRight, Boxes, ClipboardCheck, FileBarChart, Loader2, QrCode, ScanLine, ShieldCheck, Store, Users } from "lucide-react";
+import { ArrowRight, ArrowUp, ChevronRight, Loader2 } from "lucide-react";
+import { FEATURES } from "@/lib/demo-features";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -9,17 +10,6 @@ import { track } from "@/components/demo/DemoAnalytics";
 
 // Public demo entry (demo build only; the Worker serves it when DEMO_MODE=1): a short form, then the visitor
 // picks a sample login. Same flow as SB Ops' /demo. Only things this app does today.
-const FEATURES = [
-  [QrCode, "Every reel labelled", "Reels and boxes get their own number and a printable QR label the moment they come in."],
-  [ScanLine, "Scan-cart dispatch", "Scan reels into a cart, ship full or part reels against the customer's PO, print the packing list."],
-  [Store, "Two stores, one view", "Move reels or whole boxes between the main store and a partner store; filter any screen by store."],
-  [ClipboardCheck, "Approvals built in", "Store staff changes wait for a manager; the partner store signs off yesterday's dispatches each morning."],
-  [Users, "Customers and POs", "Clients, contacts, purchase orders from draft to dispatched, and a follow-up calendar."],
-  [Boxes, "Customer stock portal", "Each customer logs in to see only the stock kept for them."],
-  [FileBarChart, "Reports that trace", "Stock summary, search and trace by reel, dead and low stock, daily report as PDF."],
-  [ShieldCheck, "Role-based access", "Owner, manager, store staff, partner store and customer logins each see only their screens."],
-] as const;
-
 const FIELDS = [
   ["name", "Your name", "text", true],
   ["company", "Company", "text", true],
@@ -83,8 +73,9 @@ export default function DemoPage() {
   }
 
   return (
-    <main className="mx-auto grid min-h-dvh max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
-      <section className="order-2 space-y-6 lg:order-none">
+    <>
+    <main id="top" className="mx-auto grid min-h-dvh max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+      <section className="order-2 min-w-0 space-y-6 lg:order-none">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Ahrom Labs · live demo</p>
           <h1 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Inventory and CRM for electronics-component traders</h1>
@@ -94,13 +85,16 @@ export default function DemoPage() {
           </p>
         </div>
         <ul className="grid gap-3 sm:grid-cols-2">
-          {FEATURES.map(([Icon, title, text]) => (
-            <li key={title} className="flex gap-3">
-              <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
-              <div>
-                <p className="text-sm font-medium">{title}</p>
-                <p className="text-xs text-muted-foreground">{text}</p>
-              </div>
+          {/* Each feature links to its own section below (#in-detail), for visitors and search engines. */}
+          {FEATURES.map(([Icon, title, text, id]) => (
+            <li key={title}>
+              <a href={`#${id}`} className="group -m-2 flex gap-3 rounded-lg p-2 transition-colors hover:bg-muted/60">
+                <Icon className="mt-0.5 size-5 shrink-0 text-primary" />
+                <div>
+                  <p className="flex items-center gap-1 text-sm font-medium">{title}<ChevronRight className="size-3.5 text-muted-foreground transition-transform group-hover:translate-x-0.5" /></p>
+                  <p className="text-xs text-muted-foreground">{text}</p>
+                </div>
+              </a>
             </li>
           ))}
         </ul>
@@ -157,5 +151,29 @@ export default function DemoPage() {
         </div>
       </div>
     </main>
+
+    <section id="in-detail" aria-labelledby="in-detail-heading" className="mx-auto max-w-6xl border-t px-4 py-14">
+      <h2 id="in-detail-heading" className="text-2xl font-semibold tracking-tight sm:text-3xl">What Inventory Ops does, in detail</h2>
+      <p className="mt-3 max-w-3xl text-muted-foreground">
+        Inventory Ops is reel-level inventory and CRM for electronic-component importers, traders and distributors: stock you
+        can scan, dispatch checked against the customer&apos;s PO, and two stores in one view. Every feature below runs in the
+        live demo above with sample data.
+      </p>
+      <div className="mt-10 grid gap-x-12 gap-y-12 lg:grid-cols-2">
+        {FEATURES.map(([Icon, , , id, heading, body]) => (
+          <article key={id} id={id} className="scroll-mt-8">
+            <div className="flex items-center gap-2.5">
+              <span className="grid size-9 shrink-0 place-items-center rounded-lg bg-muted"><Icon className="size-5 text-primary" /></span>
+              <h3 className="text-lg font-semibold tracking-tight">{heading}</h3>
+            </div>
+            {body.map((p, i) => <p key={i} className="mt-3 text-sm leading-relaxed text-muted-foreground">{p}</p>)}
+            <a href="#top" className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-foreground underline-offset-2 hover:underline">
+              <ArrowUp className="size-3" /> Try it in the demo
+            </a>
+          </article>
+        ))}
+      </div>
+    </section>
+    </>
   );
 }

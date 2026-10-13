@@ -170,3 +170,7 @@
 @media (prefers-reduced-motion: reduce) {
   .lsai-orb { animation: none; }
 }
+
+/* Demo page: the feature links jump to their section below (app/demo/page.tsx). */
+html:has(#in-detail) { scroll-behavior: smooth; }
+@media (prefers-reduced-motion: reduce) { html:has(#in-detail) { scroll-behavior: auto; } }
