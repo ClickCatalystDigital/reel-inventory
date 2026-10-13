@@ -18,6 +18,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
 import { PdfOverlay } from "@/components/layout/PdfOverlay";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 
 interface Store {
   code: string;
@@ -400,7 +401,7 @@ export default function OutwardPage() {
         continue;
       }
       if (isGelco && reel.store_code !== "secondary") {
-        newSkipped.push({ reel_number: reel.reel_number, reason: "Not at Gelco Stores" });
+        newSkipped.push({ reel_number: reel.reel_number, reason: `Not at ${BRAND.partnerStore}` });
         continue;
       }
       if (cartReelsRef.current.has(reel.reel_number)) continue;
@@ -479,7 +480,7 @@ export default function OutwardPage() {
       // (fetched once here, shared across every item group in this
       // submission, so they stay groupable for reprint) stand in for the
       // fields a real customer shipment would need.
-      const shipmentCustomer = isGelco ? "Gelco Stores" : customerName.trim();
+      const shipmentCustomer = isGelco ? BRAND.partnerStore : customerName.trim();
       const shipmentInvoice = isGelco ? await getNextGelcoInvoiceNumber() : invoiceNumber.trim();
 
       let successCount = 0;
@@ -652,7 +653,7 @@ export default function OutwardPage() {
                 <Label>Shipment Label</Label>
                 <Input disabled value={formatDateTime(nowISTString())} />
                 <p className="text-[11px] text-muted-foreground">
-                  Gelco outward doesn&apos;t need a customer or invoice — today&apos;s date &amp; time is recorded as the shipment label.
+                  {BRAND.partner} outward doesn&apos;t need a customer or invoice — today&apos;s date &amp; time is recorded as the shipment label.
                 </p>
               </div>
             ) : (

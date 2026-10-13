@@ -1,6 +1,7 @@
 // routes/outward.js
 
 const express = require('express');
+const brand = require('../utils/brand');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST, getNextInvoiceNumber } = require('../db/schema');
 const { executeOutwardMany } = require('../utils/inventory');
@@ -26,7 +27,7 @@ router.get('/reel/:reelNumber', async (req, res) => {
   if (reel.status === 'Outwarded') return res.status(400).json({ error: 'Reel already fully outwarded', reel });
   if (reel.status === 'Deleted') return res.status(400).json({ error: 'Reel has been deleted', reel });
   if (GELCO_ROLES.includes(req.user?.role) && reel.store_code !== 'secondary') {
-    return res.status(403).json({ error: 'Reel not available at Gelco Stores', reel });
+    return res.status(403).json({ error: `Reel not available at ${brand.partnerStore}`, reel });
   }
   res.json(reel);
 });
@@ -171,7 +172,7 @@ router.post('/next-invoice-number', async (req, res) => {
     return res.status(403).json({ error: 'Not authorized' });
   }
   if (!(await isGateApprovedToday('secondary'))) {
-    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    return res.status(403).json({ error: `Today's ${brand.partner} outward summary must be approved before making changes` });
   }
   const invoice_number = await getNextInvoiceNumber();
   res.json({ invoice_number });
@@ -200,7 +201,7 @@ router.post('/grouped', async (req, res) => {
   if (isGelco) storeCode = 'secondary';
 
   if (isGelco && !(await isGateApprovedToday('secondary'))) {
-    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    return res.status(403).json({ error: `Today's ${brand.partner} outward summary must be approved before making changes` });
   }
 
   // Validate all reels exist and are in stock

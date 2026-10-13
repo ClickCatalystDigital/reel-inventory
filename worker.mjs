@@ -25,6 +25,8 @@ export default {
     }
 
     if (pathname.startsWith('/api/')) {
+      // The demo has no password logins: everyone enters through /api/demo/enter.
+      if (env.DEMO_MODE === '1' && pathname === '/api/login') return json(404, 'Not found');
       // Cap password guessing before spending CPU on bcrypt.
       if (pathname === '/api/login' && request.method === 'POST') {
         const key = request.headers.get('cf-connecting-ip') || 'unknown';
@@ -35,11 +37,16 @@ export default {
       return api.fetch(request, env, ctx);
     }
 
+    // Public demo (DEMO_MODE=1): visitors enter through /demo (lead form + role picker), never /login.
+    const demo = env.DEMO_MODE === '1';
+    const isDemoPage = demo && /^\/demo(\.txt|\/.*)?$/.test(pathname);
+    if (demo && pathname === '/login') return Response.redirect(new URL('/demo', request.url), 302);
+
     // Pages are static files, but still gated here: the login page and favicon are
     // public, everything else needs a valid session and a page the role may open.
-    if (pathname !== '/login' && pathname !== '/favicon.ico') {
+    if (pathname !== '/login' && pathname !== '/favicon.ico' && !isDemoPage) {
       const user = userFromHeaders((h) => request.headers.get(h));
-      if (!user) return Response.redirect(new URL('/login', request.url), 302);
+      if (!user) return Response.redirect(new URL(demo ? '/demo' : '/login', request.url), 302);
       const rule = ROLE_PAGE_ALLOWLIST[user.role];
       // Next's client-side navigation fetches RSC payloads ('/stocks.txt', '/stocks/__next._tree.txt');
       // gate them as the page they belong to, or allowlisted roles get redirected mid-navigation.

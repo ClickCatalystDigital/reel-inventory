@@ -3,6 +3,7 @@
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { isCrmPath } from "@/lib/nav-links";
+import { BRAND } from "@/lib/brand";
 
 // Content container: the CRM pages (Home calendar, Clients table) get more width than the
 // inventory pages, which keep their original max-w-5xl. Also carries the product footer (the same
@@ -14,7 +15,7 @@ export function PageShell({ children }: { children: React.ReactNode }) {
       <div className="flex-1">{children}</div>
       <footer className="print:hidden">
         <div className="mt-10 border-t py-4 text-right text-[11px] text-muted-foreground/80 md:pr-16">
-          LS Tech — an{" "}
+          {BRAND.short} — an{" "}
           <a
             href="https://ahromlabs.com"
             target="_blank"

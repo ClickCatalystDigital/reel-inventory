@@ -6,3 +6,4 @@ backups/
 .dev.vars
 .wrangler/
 frontend/out/
+.demo-secrets

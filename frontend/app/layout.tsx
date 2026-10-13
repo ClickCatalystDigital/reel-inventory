@@ -5,10 +5,13 @@ import { GeistMono } from "geist/font/mono";
 import { Toaster } from "@/components/ui/sonner";
 import { AuthProvider } from "@/lib/auth";
 import { StoreProvider } from "@/lib/store-context";
+import { DemoAnalytics } from "@/components/demo/DemoAnalytics";
+import { DEMO } from "@/lib/brand";
 import "./globals.css";
+import { BRAND } from "@/lib/brand";
 
 export const metadata: Metadata = {
-  title: "LS Tech",
+  title: BRAND.short,
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
@@ -30,6 +33,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
             <StoreProvider>{children}</StoreProvider>
           </AuthProvider>
           <Toaster />
+          {DEMO && <DemoAnalytics />}
         </ThemeProvider>
       </body>
     </html>

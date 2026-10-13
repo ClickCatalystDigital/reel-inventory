@@ -1,6 +1,7 @@
 // routes/inward.js
 
 const express = require('express');
+const brand = require('../utils/brand');
 const router = express.Router();
 const { queryAll, queryOne, execute, batch, nowIST } = require('../db/schema');
 const { executeInward } = require('../utils/inventory');
@@ -70,7 +71,7 @@ router.post('/', ah(async (req, res) => {
   const storeCode = GELCO_ROLES.includes(userRole) ? 'secondary' : (store_code || 'primary');
 
   if (GELCO_ROLES.includes(userRole) && !(await isGateApprovedToday('secondary'))) {
-    return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+    return res.status(403).json({ error: `Today's ${brand.partner} outward summary must be approved before making changes` });
   }
 
   // Managers and admins bypass approval

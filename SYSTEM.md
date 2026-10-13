@@ -322,6 +322,18 @@ Admin-only assistant modelled on SB Ops' OPS AI; **Both parts are built.** Plan:
 - **Settings layout (2026-10-06):** the Settings page is now a left rail (`components/settings/SettingsNav.tsx`; pill row on phones) with three sections — **Storage**, **AI** (admin only), **Humans** (users & access, still filtered by the store dropdown). The active section lives in the URL hash (`#storage`/`#ai`/`#humans`). The launcher is an ink dome with a faint 3D shadow and a small looping glitch on the circle itself (`.lsai-orb` in `globals.css`, off for reduced motion).
 - **Look:** ink-on-off-white (`bg-foreground text-background`) launcher/bubbles, a custom `ChipMark` microchip icon, flat cards, no blue. The app-wide `--primary` is now ink too (`#1a1a18` light / `#f0f0ec` dark, `--ring` follows); charts and the PO calendar chip keep their own blues.
 
+## 6d. Public demo — electronics-erp.ahromlabs.com (added 2026-10-13)
+
+Same code as lstechnologies.in, deployed as a second Worker (`wrangler.demo.jsonc`, Ahrom Labs Cloudflare account) with `DEMO_MODE=1` and a frontend built with `NEXT_PUBLIC_DEMO=1`. Mirrors SB Ops' demo (shanti-ops).
+
+- **Made-up names.** `utils/brand.js` and `frontend/lib/brand.ts` hold the company and partner-store names: LS Technologies / Gelco on the real site, Acme Components / Partner Store in the demo. The demo bundle contains no real names (customer names in the AI starters are compiled out). New visible text that names LS or Gelco must go through `BRAND`.
+- **Entry.** `/demo` (static page) → `POST /api/demo/lead` (saved in the separate leads DB, `LEADS_TURSO_URL`, so resets never touch it) → role picker → `POST /api/demo/enter` signs in as a sample login (`utils/demo.js` `DEMO_ROLES`). `/login` redirects to `/demo`; `/api/login` returns 404.
+- **Guard.** `utils/demo.js` `guard` refuses settings writes, the AI assistant, and document uploads. There is no R2 bucket in the demo.
+- **Data.** Turso group `lsdemo`: `ls-demo` (what the Worker uses), `ls-demo-golden` (the copy it is reset from), `ls-demo-leads`. `scripts/demo/seed.mjs` builds the golden DB from `scripts/demo/schema.sql` (the production layout incl. ls_crm's `crm_*` tables, structure only) and the real API, then spreads dates over 90 days. Always run `scripts/demo/scrub-check.mjs` before publishing a golden DB.
+- **Reset.** `workers/demo-reset-cron` deletes `ls-demo` and recreates it from the golden copy at 03:15 IST.
+- **Deploy.** `npm run deploy:demo`. Secrets (`wrangler secret put -c wrangler.demo.jsonc`): `TURSO_AUTH_TOKEN` (the `lsdemo` group token), `SESSION_SECRET` (its own). Local values are kept in the gitignored `.demo-secrets`. `npm run deploy` rebuilds the frontend without the demo flag, so the two never mix.
+- **Dates drift.** The golden data is dated at seed time, so "today" views empty out over weeks; re-seed a fresh golden DB every month or two.
+
 ## 7. Config / environment
 
 `wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).

@@ -1,6 +1,7 @@
 // routes/transfer.js
 
 const express = require('express');
+const brand = require('../utils/brand');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
 const { executeStockTransfer } = require('../utils/inventory');
@@ -78,10 +79,10 @@ router.post('/', ah(async (req, res) => {
 
   if (GELCO_ROLES.includes(userRole)) {
     if (to_store !== 'secondary' && fromStore !== 'secondary') {
-      return res.status(403).json({ error: 'Transfer must involve Gelco Stores' });
+      return res.status(403).json({ error: `Transfer must involve ${brand.partnerStore}` });
     }
     if (!(await isGateApprovedToday('secondary'))) {
-      return res.status(403).json({ error: "Today's Gelco outward summary must be approved before making changes" });
+      return res.status(403).json({ error: `Today's ${brand.partner} outward summary must be approved before making changes` });
     }
   }
 

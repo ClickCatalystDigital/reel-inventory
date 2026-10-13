@@ -28,6 +28,10 @@ app.post('/api/login', async (req, res) => {
   res.json({ success: true, username: user.username, role: user.role });
 });
 
+// Public demo only: lead form, role picker, and the guard below. utils/demo.js.
+const demo = require('./utils/demo');
+if (demo.DEMO) app.use('/api/demo', demo.router);
+
 app.get('/api/logout', (req, res) => {
   res.clearCookie('token', { httpOnly: true, secure: true, sameSite: 'strict', path: '/' });
   res.redirect('/login');
@@ -39,6 +43,8 @@ app.use((req, res, next) => {
   if (req.user) return next();
   res.status(401).json({ error: 'Not authenticated' });
 });
+
+if (demo.DEMO) app.use(demo.guard);
 
 app.use((req, res, next) => {
   if (req.user.role === 'client' && !CLIENT_API_ALLOWLIST.includes(req.path)) {

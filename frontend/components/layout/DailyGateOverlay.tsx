@@ -7,6 +7,7 @@ import { api } from "@/lib/api";
 import { formatQty } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BRAND } from "@/lib/brand";
 
 // Blocking full-viewport modal for Gelco roles until they clear the daily
 // "approve yesterday's outward summary" gate — port of renderGateOverlay().
@@ -36,7 +37,7 @@ export function DailyGateOverlay() {
         {role === "gelco_manager" ? (
           <>
             <div className="mb-3 border-b border-border pb-2 text-sm font-semibold uppercase text-muted-foreground">
-              Approve Yesterday&apos;s Gelco Outward Summary {status.date ? `(${status.date})` : ""}
+              Approve Yesterday&apos;s {BRAND.partner} Outward Summary {status.date ? `(${status.date})` : ""}
             </div>
             <Table>
               <TableHeader>
@@ -74,7 +75,7 @@ export function DailyGateOverlay() {
               Waiting for Manager Approval
             </div>
             <p className="text-[13px] text-muted-foreground">
-              Gelco Manager needs to approve yesterday&apos;s outward summary before you can continue. This page will
+              {BRAND.partner} manager needs to approve yesterday&apos;s outward summary before you can continue. This page will
               update automatically.
             </p>
           </>

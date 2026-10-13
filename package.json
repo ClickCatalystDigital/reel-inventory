@@ -9,7 +9,9 @@
     "build": "npm --prefix frontend install && npm --prefix frontend run build",
     "deploy": "npm run build && wrangler deploy",
     "db:init": "node scripts/init-db.js",
-    "backup": "node scripts/backup-db.js"
+    "backup": "node scripts/backup-db.js",
+    "deploy:demo": "NEXT_PUBLIC_DEMO=1 npm run build && wrangler deploy -c wrangler.demo.jsonc",
+    "demo:seed": "node scripts/demo/seed.mjs"
   },
   "dependencies": {
     "@libsql/client": "^0.17.2",

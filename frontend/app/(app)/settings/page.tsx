@@ -19,6 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SearchPicker } from "@/components/SearchPicker";
 import { parseIds, type Company } from "@/lib/catalog";
+import { BRAND } from "@/lib/brand";
 
 // Mirrors routes/settings.js's validRoles allowlist.
 const ROLE_OPTIONS = [
@@ -26,8 +27,8 @@ const ROLE_OPTIONS = [
   { value: "client", label: "Client" },
   { value: "manager", label: "Manager" },
   { value: "admin", label: "Admin" },
-  { value: "gelco_manager", label: "Gelco Manager" },
-  { value: "gelco_worker", label: "Gelco Worker" },
+  { value: "gelco_manager", label: `${BRAND.partner} manager` },
+  { value: "gelco_worker", label: `${BRAND.partner} worker` },
 ];
 
 const TAB_STORAGE: SettingsTab = { key: "storage", label: "Storage", caption: "Database & files", icon: Database };
@@ -156,7 +157,7 @@ export default function SettingsPage() {
                 <>
                   {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
                   {showLS && <UsersCard title="Clients" users={clientUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
-                  {showGelco && <UsersCard title="Gelco Users" users={gelcoUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showGelco && <UsersCard title={`${BRAND.partner} users`} users={gelcoUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                 </>
               )}
             </>

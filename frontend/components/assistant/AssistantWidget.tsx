@@ -20,7 +20,9 @@ interface Msg {
   fb?: boolean; // thumbs given: true = good, false = bad
 }
 
-const DEFAULT_STARTERS = ["How many reels of BLDC CARD do we have?", "What did we ship to Gelco Electronics in September?", "What's low on stock?", "Which POs are confirmed but not dispatched?"];
+// Real customer names: kept out of the demo build, which never shows this widget. The env check is inline
+// (not lib/brand's DEMO) so the build removes the list from the demo bundle entirely.
+const DEFAULT_STARTERS = process.env.NEXT_PUBLIC_DEMO === "1" ? [] : ["How many reels of BLDC CARD do we have?", "What did we ship to Gelco Electronics in September?", "What's low on stock?", "Which POs are confirmed but not dispatched?"];
 
 const greeting = () => {
   const h = new Date().getHours();

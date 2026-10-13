@@ -16,6 +16,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChipMark } from "@/components/assistant/ChipMark";
+import { BRAND } from "@/lib/brand";
 
 interface Balance { bought: number; used: number; left: number }
 interface DataAccess { on: boolean; approver_name?: string; approver_role?: string; recorded_by?: string; at?: string }
@@ -212,7 +213,7 @@ export function AssistantCard() {
         <div className="space-y-1">
           <h2 className="flex items-center gap-2 text-base font-semibold"><span className="grid size-6 place-items-center rounded-md bg-foreground text-background"><ChipMark className="size-4" /></span> LS AI</h2>
           <p className="max-w-xl text-sm text-muted-foreground">
-            An assistant for LS TECH inventory, clients and tasks. Admin only. It routes each question with a decision model and answers from fixed, read-only look-ups.
+            An assistant for {BRAND.short.toUpperCase()} inventory, clients and tasks. Admin only. It routes each question with a decision model and answers from fixed, read-only look-ups.
           </p>
         </div>
         <Button onClick={save} disabled={busy || !dirty}>{busy ? <Loader2 className="animate-spin" /> : null} Save</Button>
@@ -347,7 +348,7 @@ export function AssistantCard() {
           <DialogHeader><DialogTitle>Record the approval</DialogTitle></DialogHeader>
           <div className="space-y-3 text-sm">
             <p className="text-muted-foreground">
-              With this on, a question such as “what did we ship to Gelco in September?” sends item and customer names to OpenRouter (and, in “Show, then write” mode, the matching rows).
+              With this on, a question such as “what did we ship to {BRAND.partner} in September?” sends item and customer names to OpenRouter (and, in “Show, then write” mode, the matching rows).
               Read OpenRouter’s <a className="underline" href="https://openrouter.ai/terms" target="_blank" rel="noreferrer">terms</a> and <a className="underline" href="https://openrouter.ai/privacy" target="_blank" rel="noreferrer">privacy policy</a> first.
             </p>
             <div className="space-y-1.5"><Label>Approved by</Label><Input value={approver} onChange={(e) => setApprover(e.target.value)} placeholder="Full name" /></div>

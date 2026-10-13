@@ -16,6 +16,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { SearchPicker } from "@/components/SearchPicker";
 import { useAuth } from "@/lib/auth";
 import { ITEM_CATEGORIES, parseIds, type Company } from "@/lib/catalog";
+import { BRAND } from "@/lib/brand";
 
 function CompanyPicker({ companies, value, onChange }: { companies: Company[]; value: number[]; onChange: (v: number[]) => void }) {
   return (
@@ -25,7 +26,7 @@ function CompanyPicker({ companies, value, onChange }: { companies: Company[]; v
       options={companies.map((c) => ({ value: c.id, label: c.name }))}
       value={value}
       onChange={onChange}
-      placeholder="LS Tech only"
+      placeholder={`${BRAND.short} only`}
       searchPlaceholder="Search companies"
     />
   );
@@ -324,7 +325,7 @@ export default function CatalogPage() {
                     label: "Visible to",
                     render: (i: Item) => {
                       const ids = parseIds(i.company_ids);
-                      if (!ids.length) return <span className="text-muted-foreground">LS Tech only</span>;
+                      if (!ids.length) return <span className="text-muted-foreground">{BRAND.short} only</span>;
                       return <span title={ids.map(companyName).join(", ")}>{ids.length === 1 ? companyName(ids[0]) : `${ids.length} companies`}</span>;
                     },
                   },

@@ -7,6 +7,8 @@ import { api } from "@/lib/api";
 import { formatQty } from "@/lib/format";
 import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { BRAND, DEMO } from "@/lib/brand";
+import { DemoBanner } from "@/components/demo/DemoBanner";
 
 interface StockSummaryRow {
   item_code: string;
@@ -53,6 +55,7 @@ export default function StockPage() {
   return (
     <>
       <StockNav />
+      {DEMO && <DemoBanner />}
       <main className="mx-auto max-w-5xl space-y-4 px-4 pt-6 pb-6">
         <div>
           <h1 className="text-xl font-bold">Current Stock</h1>
@@ -138,7 +141,7 @@ function StockNav() {
 
   return (
     <nav className="sticky top-0 z-40 flex h-14 items-center justify-between gap-4 bg-[var(--nav-bg)] px-4 text-white">
-      <span className="font-bold tracking-wide">LS TECHNOLOGY — STOCK VIEW</span>
+      <span className="font-bold tracking-wide">{BRAND.company.toUpperCase()} — STOCK VIEW</span>
       <button
         title="Toggle dark mode"
         onClick={() => setTheme(isDark ? "light" : "dark")}

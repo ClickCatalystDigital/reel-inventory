@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useSelectedStore } from "@/lib/store-context";
 import { cn } from "@/lib/utils";
+import { BRAND } from "@/lib/brand";
 
 interface Store {
   code: string;
@@ -29,7 +30,7 @@ export function StoreSelector({ className }: { className?: string } = {}) {
   if (isLocked) {
     return (
       <span className={cn("rounded-md border border-border bg-secondary px-2.5 py-1.5 text-xs text-secondary-foreground", className)}>
-        🔒 Gelco Stores
+        🔒 {BRAND.partnerStore}
       </span>
     );
   }
