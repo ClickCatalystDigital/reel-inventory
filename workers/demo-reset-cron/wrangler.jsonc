@@ -1,0 +1,16 @@
+{
+  // Copy of shanti-ops/workers/demo-reset-cron for the LS Inventory demo (electronics-erp.ahromlabs.com).
+  // Deploy from this folder: npx wrangler deploy -c wrangler.jsonc
+  // It must be .jsonc: wrangler looks for wrangler.jsonc in parent folders before a local wrangler.toml,
+  // and the parent one is the live lstechnologies.in Worker.
+  "name": "ls-inventory-demo-reset",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-05",
+  "account_id": "5d8cf246f656006b81d99d734e8c0f40",
+  // workers.dev URL only for a manual run: POST with header x-trigger-key (TRIGGER_KEY).
+  "workers_dev": true,
+  // 21:45 UTC = 03:15 IST, a quarter hour after the SB Ops demo reset.
+  "triggers": { "crons": ["45 21 * * *"] },
+  // Not secret. TURSO_API_TOKEN (Turso platform token) and TRIGGER_KEY are Worker secrets.
+  "vars": { "TURSO_ORG": "pujan", "GROUP": "lsdemo", "DEMO_DB": "ls-demo", "GOLDEN_DB": "ls-demo-golden" }
+}
