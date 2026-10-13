@@ -17,8 +17,9 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <BottomNav />
       <DailyGateOverlay />
       {/* LS AI chat bubble: renders only for the admin role (the API enforces it too) */}
-      {/* The demo has no AI key (the API refuses /api/assistant there), so no bubble either. */}
-      {DEMO ? <DemoBanner /> : <AssistantWidget />}
+      {DEMO && <DemoBanner />}
+      {/* In the demo the bubble appears only when the demo has its own AI key, with two questions per visitor. */}
+      <AssistantWidget />
     </>
   );
 }

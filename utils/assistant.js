@@ -37,7 +37,8 @@ async function getSettings() {
     keyLast4: r.assistant_key_last4 || null,
     mode: MODES.includes(r.assistant_mode) ? r.assistant_mode : 'show',
     cap: Number.isInteger(cap) && cap > 0 ? cap : DEFAULT_CAP,
-    dataAccess: da && da.on ? da : { on: false, ...da },
+    // Public demo: the data is made up, so data questions are on without a recorded approval.
+    dataAccess: process.env.DEMO_MODE === '1' ? { on: true, demo: true } : da && da.on ? da : { on: false, ...da },
     jevModel: JEV_MODEL,
   };
 }

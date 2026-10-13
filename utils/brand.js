@@ -4,5 +4,5 @@
 const DEMO = process.env.DEMO_MODE === '1';
 
 module.exports = DEMO
-  ? { company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store' }
-  : { company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores' };
+  ? { app: 'Inventory Ops', ai: 'Inventory AI', company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store' }
+  : { app: 'LS TECH', ai: 'LS AI', company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores' };

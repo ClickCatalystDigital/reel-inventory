@@ -7,6 +7,7 @@ const E = require('./assistantEntities');
 const { TOOLS, BY_KEY } = require('./assistantTools');
 const { GUIDE, SCREEN_LABEL, pickSections } = require('./assistantGuide');
 const { istDateString, queryAll, queryOne } = require('../db/schema');
+const brand = require('./brand');
 
 const MAX_Q = 600;
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -41,7 +42,10 @@ const UNSUPPORTED_REPLY = {
   advice: ["I only report what the data shows — I can't give recommendations or forecasts. I can show how long stock will last at the recent shipping rate, and which customers have gone quiet.", ['Which items will run out in 30 days?', 'Which customers stopped ordering?']],
 };
 
-const STARTERS = ['How many reels of BLDC CARD do we have?', 'What did we ship to Gelco Electronics in September?', "What's low on stock?", 'Which POs are confirmed but not dispatched?'];
+// The public demo gets questions about its own sample data (real customer names never reach it).
+const STARTERS = process.env.DEMO_MODE === '1'
+  ? ['How many reels of BC857B do we have?', 'What did we ship to Brightline Appliances this month?', "What's low on stock?", 'Which POs are confirmed but not dispatched?']
+  : ['How many reels of BLDC CARD do we have?', 'What did we ship to Gelco Electronics in September?', "What's low on stock?", 'Which POs are confirmed but not dispatched?'];
 
 // {key: p} sorted by probability, from a Jev choice answer
 function ranked(a) {
@@ -144,7 +148,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
   let usage = null;
   if (!dry) {
     usage = await A.useQuestion(settings.cap);
-    if (!usage.ok) return { status: 429, body: { error: `LS AI has used today's ${settings.cap} questions. The limit resets at midnight IST.` } };
+    if (!usage.ok) return { status: 429, body: { error: `${brand.ai} has used today's ${settings.cap} questions. The limit resets at midnight IST.` } };
   } else usage = { used: await A.usedToday(), cap: settings.cap };
 
   const today = istDateString();
@@ -227,8 +231,8 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
     trace.push(`unsupported: ${un.key} (${Math.round(un.p * 100)}%)`);
     return done(text(UNSUPPORTED_REPLY[un.key][0], { chips: chips(UNSUPPORTED_REPLY[un.key][1]) }), kind, `unsupported:${un.key}`, false);
   }
-  if (kind === 'smalltalk') return done(text("Hi! I can look things up in your LS TECH data — stock, shipments, POs, tasks, clients — and explain how the app works. Try one of these:", { chips: chips(STARTERS) }), kind, null);
-  if (kind === 'offtopic') return done(text('I only help with LS TECH: inventory, shipments, purchase orders, tasks, clients and how this app works. Ask me something about those.', { chips: chips(STARTERS) }), kind, null);
+  if (kind === 'smalltalk') return done(text(`Hi! I can look things up in your ${brand.app} data — stock, shipments, POs, tasks, clients — and explain how the app works. Try one of these:`, { chips: chips(STARTERS) }), kind, null);
+  if (kind === 'offtopic') return done(text(`I only help with ${brand.app}: inventory, shipments, purchase orders, tasks, clients and how this app works. Ask me something about those.`, { chips: chips(STARTERS) }), kind, null);
   if (kind === 'unclear') return done(text("I'm not sure what you'd like to know. Could you say it with an item, customer or date? For example:", { chips: chips(STARTERS) }), kind, null, false);
 
   if (kind === 'action') {
@@ -243,7 +247,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
     let body = sec.text;
     if (settings.mode === 'write' && route.sectionP >= 0.3) {
       try {
-        const w = await A.writeAnswer(key, settings.model, 'You are LS AI, the help assistant inside LS TECH, an electronic-component inventory app. Answer the question using ONLY the GUIDE below. Short numbered steps, plain text, no markdown symbols. Use the guide\'s exact screen names. Never invent screens or buttons.', sec.text, question);
+        const w = await A.writeAnswer(key, settings.model, `You are ${brand.ai}, the help assistant inside ${brand.app}, an electronic-component inventory app. Answer the question using ONLY the GUIDE below. Short numbered steps, plain text, no markdown symbols. Use the guide\'s exact screen names. Never invent screens or buttons.`, sec.text, question);
         body = w.text; cost += w.cost; trace.push('writer: how-to');
       } catch (e) { trace.push(`writer failed: ${e.message}`); }
     }
@@ -392,7 +396,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
   if (settings.mode === 'write' && shown.rows.length) {
     try {
       const w = await A.writeAnswer(key, settings.model,
-        "You are LS AI, the assistant inside LS TECH, an electronic-component inventory app. Answer the QUESTION in one to three short sentences using ONLY the DATA. Copy numbers and names exactly. Never estimate or add up numbers that are not shown. Plain text, no markdown symbols. If the DATA does not answer the question, say what it does show.",
+        `You are ${brand.ai}, the assistant inside ${brand.app}, an electronic-component inventory app. Answer the QUESTION in one to three short sentences using ONLY the DATA. Copy numbers and names exactly. Never estimate or add up numbers that are not shown. Plain text, no markdown symbols. If the DATA does not answer the question, say what it does show.`,
         JSON.stringify({ title: shown.title, summary: shown.summary, rows: shown.rows.slice(0, 20) }).slice(0, 6000), question);
       written = w.text; cost += w.cost; trace.push('writer: data');
     } catch (e) { trace.push(`writer failed: ${e.message}`); }

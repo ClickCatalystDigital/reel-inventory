@@ -97,7 +97,17 @@ router.post('/test', ah(async (req, res) => {
 // One chat turn. Admin only (guard in app.js). History lives in the browser; only the last messages are sent.
 router.post('/chat', ah(async (req, res) => {
   const { messages, path, dry, context } = req.body || {};
-  const out = await require('../utils/assistantChat').turn({ user: req.user.username, role: req.user.role, messages, path, dry: dry === true && req.user.role === 'admin', context });
+  // Public demo: two questions per visitor (utils/demo.js), given back if the answer fails.
+  const demo = require('../utils/demo');
+  if (demo.DEMO && !(await demo.takeAiQuestion(req))) {
+    return res.status(429).json({ error: `That was your ${demo.AI_QUESTIONS} free questions.`, demoLimit: true });
+  }
+  const out = await require('../utils/assistantChat').turn({ user: req.user.username, role: req.user.role, messages, path, dry: !demo.DEMO && dry === true && req.user.role === 'admin', context });
+  if (demo.DEMO && out.status !== 200) {
+    await demo.returnAiQuestion(req).catch(() => {});
+    // Key or credit trouble is ours to fix; visitors can't open Settings in the demo.
+    if ([401, 402].includes(out.status)) out.body = { error: 'The assistant is unavailable right now. Please try again later.' };
+  }
   res.status(out.status).json(out.body);
 }));
 

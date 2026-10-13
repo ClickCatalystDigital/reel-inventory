@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowUp, ArrowUpRight, ChevronDown, RotateCcw, ThumbsDown, ThumbsUp, X } from "lucide-react";
+import { ArrowUp, ArrowUpRight, ChevronDown, Lock, RotateCcw, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
 import { cn } from "@/lib/utils";
 import { capitalize } from "@/lib/crm";
 import { safePath, type Briefing, type Reply } from "@/lib/assistant-links";
 import { ChipMark } from "./ChipMark";
 import { ResultCard } from "./ResultCard";
+import { AiLimitOverlay } from "@/components/demo/AiLimitOverlay";
+import { BRAND, DEMO } from "@/lib/brand";
 
 interface Msg {
   id: number;
@@ -66,6 +68,9 @@ export function AssistantWidget() {
   const [usual, setUsual] = useState<string[]>([]);
   const [defaults, setDefaults] = useState<string[]>(DEFAULT_STARTERS);
   const [teaser, setTeaser] = useState(false);
+  // Public demo: free questions left for this visitor (null until known), and the "that was your free questions" overlay.
+  const [demoAi, setDemoAi] = useState<{ enabled: boolean; left: number; limit: number } | null>(null);
+  const [limitOpen, setLimitOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const idRef = useRef(1);
@@ -73,6 +78,12 @@ export function AssistantWidget() {
 
   // LS Tech staff only (admin, manager, user). Gelco roles and clients never get the bubble; the server enforces it too.
   const canUse = ["admin", "manager", "user"].includes(user?.role ?? "");
+  const locked = DEMO && demoAi?.left === 0;
+
+  useEffect(() => {
+    if (!DEMO || !canUse) return;
+    fetch("/api/demo/ai").then((r) => (r.ok ? r.json() : null)).then((d) => d && setDemoAi(d)).catch(() => {});
+  }, [canUse]);
   const name = user ? capitalize(user.username) : "";
   const isPhone = () => typeof window !== "undefined" && window.matchMedia("(max-width: 767px)").matches;
 
@@ -134,6 +145,7 @@ export function AssistantWidget() {
     async (raw?: string) => {
       const q = (raw ?? text).trim();
       if (!q || busy) return;
+      if (locked) { setLimitOpen(true); return; }
       const next: Msg[] = [...msgs, { id: idRef.current++, role: "user", content: q }];
       setMsgs(next);
       setText("");
@@ -150,6 +162,11 @@ export function AssistantWidget() {
           body: JSON.stringify({ messages: history, path: pathname, context: contextRef.current }),
         });
         const data = await res.json().catch(() => null);
+        if (DEMO && res.status === 429 && data?.demoLimit) {
+          setDemoAi((d) => (d ? { ...d, left: 0 } : d));
+          setLimitOpen(true);
+        }
+        if (DEMO && res.ok) setDemoAi((d) => (d ? { ...d, left: Math.max(0, d.left - 1) } : d));
         if (!res.ok || !data?.reply) {
           setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", error: { text: data?.error || "Something went wrong. Please try again.", link: data?.link, linkLabel: data?.linkLabel } }]);
         } else {
@@ -164,7 +181,7 @@ export function AssistantWidget() {
         setBusy(false);
       }
     },
-    [msgs, text, busy, pathname]
+    [msgs, text, busy, pathname, locked]
   );
 
   // Thumbs on an answer: logged server-side (no new table); a thumbs-down also removes the question from "your usual" and lands in
@@ -177,10 +194,14 @@ export function AssistantWidget() {
   const reset = () => { setMsgs([]); contextRef.current = null; };
 
   if (!canUse) return null;
+  // The demo shows the assistant only when it has its own AI key (and once the visitor's count is known).
+  if (DEMO && !demoAi?.enabled) return null;
+  const limitOverlay = limitOpen && demoAi ? <AiLimitOverlay limit={demoAi.limit} onClose={() => setLimitOpen(false)} /> : null;
 
   if (!open) {
     return (
       <>
+        {limitOverlay}
         {teaser && (
           <button
             type="button"
@@ -193,12 +214,17 @@ export function AssistantWidget() {
         )}
         <button
           type="button"
-          onClick={() => { setTeaser(false); setOpen(true); }}
-          aria-label="Open LS AI"
-          title="LS AI"
+          onClick={() => { setTeaser(false); if (locked) setLimitOpen(true); else setOpen(true); }}
+          aria-label={locked ? `${BRAND.ai}: free questions used` : `Open ${BRAND.ai}`}
+          title={BRAND.ai}
           className="lsai-orb fixed bottom-[136px] right-4 z-40 grid size-14 place-items-center rounded-full transition-transform hover:scale-105 active:scale-95 md:bottom-6 md:right-6 print:hidden"
         >
           <ChipMark className="size-7" />
+          {locked && (
+            <span className="absolute -right-0.5 -top-0.5 grid size-6 place-items-center rounded-full border-2 border-background bg-foreground text-background">
+              <Lock className="size-3" />
+            </span>
+          )}
         </button>
       </>
     );
@@ -207,9 +233,11 @@ export function AssistantWidget() {
   const closeOnPhone = () => isPhone() && setOpen(false);
 
   return (
+    <>
+    {limitOverlay}
     <div
       role="dialog"
-      aria-label="LS AI assistant"
+      aria-label={`${BRAND.ai} assistant`}
       className={cn(
         "fixed z-50 flex flex-col overflow-hidden bg-background print:hidden",
         "inset-0 pt-[env(safe-area-inset-top)] animate-in fade-in slide-in-from-bottom-3 duration-200",
@@ -221,7 +249,10 @@ export function AssistantWidget() {
         <span className="grid size-8 shrink-0 place-items-center rounded-lg bg-foreground text-background">
           <ChipMark className="size-[18px]" />
         </span>
-        <p className="flex-1 text-sm font-semibold tracking-tight">LS AI</p>
+        <p className="flex-1 text-sm font-semibold tracking-tight">
+          {BRAND.ai}
+          {DEMO && demoAi && <span className="ml-2 text-[11px] font-normal text-muted-foreground">{demoAi.left} of {demoAi.limit} free questions left</span>}
+        </p>
         <button type="button" onClick={reset} disabled={busy || !msgs.length} aria-label="New conversation" title="New conversation" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30">
           <RotateCcw className="size-4" />
         </button>
@@ -396,5 +427,6 @@ export function AssistantWidget() {
         <p className="mt-1.5 text-center text-[10px] text-muted-foreground/70">Read-only · live data{quota ? ` · ${quota.used}/${quota.cap} questions today` : ""}</p>
       </form>
     </div>
+    </>
   );
 }
