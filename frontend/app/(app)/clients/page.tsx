@@ -20,11 +20,17 @@ import { ClientsOverview } from "@/components/crm/ClientsOverview";
 
 // Opens the detail sheet for /clients?open=<id> (linked from Home's watch list and task sheet).
 // Isolated so useSearchParams sits inside its own Suspense boundary (required by the static export).
-function OpenFromQuery({ onOpen }: { onOpen: (id: number) => void }) {
-  const id = useSearchParams().get("open");
+// ?q=<text> pre-fills the search box (Finance links a bill's party here).
+function OpenFromQuery({ onOpen, onSearch }: { onOpen: (id: number) => void; onSearch: (q: string) => void }) {
+  const params = useSearchParams();
+  const id = params.get("open");
+  const q = params.get("q");
   useEffect(() => {
     if (id && Number.isInteger(Number(id))) onOpen(Number(id));
   }, [id, onOpen]);
+  useEffect(() => {
+    if (q) onSearch(q);
+  }, [q, onSearch]);
   return null;
 }
 
@@ -41,6 +47,7 @@ export default function ClientsPage() {
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [adding, setAdding] = useState(false);
   const [openId, setOpenId] = useState<number | null>(null);
+  const searchFor = useCallback((q: string) => setFilters((f) => ({ ...f, q })), []);
 
   const loadClients = useCallback(async () => {
     try {
@@ -153,7 +160,7 @@ export default function ClientsPage() {
   return (
     <div className="space-y-4">
       <Suspense fallback={null}>
-        <OpenFromQuery onOpen={setOpenId} />
+        <OpenFromQuery onOpen={setOpenId} onSearch={searchFor} />
       </Suspense>
 
       <div className="flex flex-wrap items-center justify-between gap-2">

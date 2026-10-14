@@ -29,13 +29,13 @@ export function Nav() {
 
         <div className="hidden h-5 w-px shrink-0 bg-white/15 md:block" />
 
-        <div className="hidden flex-1 items-center gap-1 md:flex">
+        <div className="hidden min-w-0 flex-1 items-center gap-0.5 overflow-x-auto md:flex xl:gap-1">
           {getVisibleNavLinks(user?.role).map((l) => (
             <Link
               key={l.href}
               href={l.href}
               className={cn(
-                "rounded-md px-3 py-1.5 text-sm text-white/70 hover:bg-white/10 hover:text-white",
+                "shrink-0 rounded-md px-2 py-1.5 text-sm whitespace-nowrap text-white/70 hover:bg-white/10 hover:text-white xl:px-3",
                 pathname === l.href && "bg-white/10 text-white"
               )}
             >

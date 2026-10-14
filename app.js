@@ -54,7 +54,7 @@ app.use((req, res, next) => {
 });
 
 // CRM APIs are for LS Tech employees only (Gelco roles aren't covered by the client guard above).
-app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices', '/api/orders'], (req, res, next) => {
+app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices', '/api/orders', '/api/finance'], (req, res, next) => {
   if (!STAFF_ROLES.includes(req.user.role)) return res.status(403).json({ error: 'Not authorized' });
   next();
 });
@@ -84,6 +84,7 @@ app.use('/api/clients', require('./routes/clients'));
 app.use('/api/tasks', require('./routes/crm-tasks'));
 app.use('/api/products', require('./routes/crm-products'));
 app.use('/api/invoices', require('./routes/invoices'));
+app.use('/api/finance', require('./routes/finance'));
 const orders = require('./routes/orders');
 app.use('/api/orders', orders.staff);
 // Any login: scoped to the caller's own companies (user_companies), so staff simply see none.
