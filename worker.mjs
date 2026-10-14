@@ -1,5 +1,5 @@
 import { httpServerHandler } from 'cloudflare:node';
-import { env } from 'cloudflare:workers';
+import { env, waitUntil } from 'cloudflare:workers';
 import app from './app.js';
 import auth from './utils/auth.js';
 
@@ -7,6 +7,8 @@ const { userFromHeaders, ROLE_PAGE_ALLOWLIST } = auth;
 
 // Binding, not request state — see utils/r2.js.
 globalThis.R2_BUCKET = env.BUCKET;
+// Request-scoped (it finds the current request itself) — see utils/background.js.
+globalThis.WAIT_UNTIL = waitUntil;
 
 app.listen(8080); // the port is only a routing id for httpServerHandler
 const api = httpServerHandler({ port: 8080 });

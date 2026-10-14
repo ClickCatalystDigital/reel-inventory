@@ -88,7 +88,7 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
 
   return (
     <Sheet open={poId != null} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent side={isDesktop ? "right" : "bottom"} className={cn("gap-0 p-0", isDesktop ? "sm:max-w-lg" : "max-h-[90vh] rounded-t-2xl")}>
+      <SheetContent side={isDesktop ? "right" : "bottom"} className={cn("gap-0 p-0", isDesktop ? "data-[side=right]:sm:max-w-lg" : "max-h-[90vh] rounded-t-2xl")}>
         <SheetHeader className="border-b p-4 pr-12">
           <SheetTitle>{po ? `PO ${po.po_number}` : "PO"}</SheetTitle>
           <SheetDescription>

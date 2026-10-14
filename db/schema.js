@@ -296,6 +296,8 @@ async function initDB() {
   if (!invoiceCounter.rows.length) {
     await connect().execute("INSERT INTO counters (name, value) VALUES ('invoice', 9999)");
   }
+  // SYS-<n> PO numbers (routes/po.js nextSysPONumber); ls_crm created this row on the shared DB, a fresh DB needs it.
+  await connect().execute("INSERT OR IGNORE INTO counters (name, value) VALUES ('po_sys', 0)");
 
   // Seed default admin user if no users exist
   const userCount = await connect().execute("SELECT COUNT(*) as count FROM users");

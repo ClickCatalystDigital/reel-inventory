@@ -37,6 +37,10 @@ app.get('/api/logout', (req, res) => {
   res.redirect('/login');
 });
 
+// Telegram → Docs: Telegram can't log in, so this one route sits before the login check and is gated by the
+// webhook secret instead (routes/invoices.js).
+app.post('/api/invoices/telegram-webhook', (req, res, next) => require('./routes/invoices').telegramWebhook(req, res).catch(next));
+
 // All routes below require login
 app.use((req, res, next) => {
   req.user = userFromHeaders((h) => req.headers[h]);

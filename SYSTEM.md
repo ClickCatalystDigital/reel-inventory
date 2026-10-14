@@ -342,10 +342,24 @@ Same code as lstechnologies.in, deployed as a second Worker (`wrangler.demo.json
 - **Demo**: tables reach it through `migrate.mjs`; `seed.mjs` sets stages + lots; uploads/deletes of PO docs are blocked by `utils/demo.js` (no R2 there).
 - **Next**: invoicing tab with the ls_crm Docs merge (`po_docs.doc_type='invoice'` is the hook); stock reservation.
 
+## 6f. Finance + Docs — ported from ls_crm (added 2026-10-14)
+
+Both pages are in this app now (staff only: admin/manager/user), with no feature dropped. ls_crm still runs on the same DB.
+- **Finance** (`/finance`, `routes/finance.js` = ls_crm's, wrapped in `ah()`; reminder writes in one `batch()`): Receivables, Sales Register (+ voucher panel and payment-reminder date → open crm_tasks row matched by title, as ls_crm), Inventory (Tally stock items), Position, Payables. Read-only over the `crm_tally_*` tables the office-PC agent writes directly into Turso. Responses checked identical to ls_crm on all 14 endpoints.
+- **Docs** (`/docs`, tabs All · Invoices · Bank · PO, tab in the URL hash): `routes/invoices.js` is ls_crm's (upload → AI read → review → approve; Tally XML builders; checks; manual; bank-line attachments; Telegram) with these changes:
+  - Files go to this app's private bucket under `inventory-docs/crm/` and are served by `GET /api/invoices/file?key=` (login; PDFs inline for the review frame, other files as downloads). Rows ls_crm created keep their public URLs to its old bucket and still open; deleting one of those can't remove the old file.
+  - The AI read runs after the response through `utils/background.js` (Workers `waitUntil`, ~30 s budget; `worker.mjs` exposes it). A bank statement's 8 page reads run in parallel to fit. OpenRouter key = Settings → AI key (env `OPENROUTER_API_KEY` locally); model `EXTRACTION_MODEL` (default `google/gemini-2.5-flash`).
+  - Approve/reject/delete are admin/manager only (ls_crm: any login); approve/reject also only from `pending`. Statuses are unchanged — the office agent still pushes `approved` rows to Tally.
+  - Telegram webhook: `POST /api/invoices/telegram-webhook`, mounted before login in `app.js`, requires header `X-Telegram-Bot-Api-Secret-Token` = Worker secret `TELEGRAM_WEBHOOK_SECRET` (plus `TELEGRAM_BOT_TOKEN`). Without both it is off, so ls_crm keeps the bot until someone re-points it (setWebhook with `secret_token`). Retries/double taps are idempotent.
+  - ls_crm's bank-tab "Tally" match column called a `/reconcile` endpoint that never existed (always blank) — left out.
+- **POs**: `routes/po.js` replaced by ls_crm's superset (create/edit/confirm/dispatch/cancel/delete, PO import from uploaded PDFs). GETs open to every non-client login (the Outward picker); writes staff only; line inserts batched; delete also removes this app's Orders data (stage, lots, documents). `initDB()` now seeds the `po_sys` counter if missing.
+- Nav: Docs → `/docs` for staff; the Gelco upload page is labelled "Gelco Docs" for admin/manager ("Docs" for gelco_manager). Phones show 5 tabs + a "More" sheet (scanning pages stay on the bar).
+- Demo: uploads to Docs are blocked (no bucket); Finance/Docs show whatever the demo DB holds (empty until seeded).
+
 ## 7. Config / environment
 
 `wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).
-Secrets (never in files that are committed): `TURSO_AUTH_TOKEN`, `SESSION_SECRET`, `SETTINGS_ENC_KEY` — `wrangler secret put <NAME>` for the deployed Worker, `.dev.vars` (gitignored) for `wrangler dev`, `.env` for the `scripts/*.js` CLIs.
+Secrets (never in files that are committed): `TURSO_AUTH_TOKEN`, `SESSION_SECRET`, `SETTINGS_ENC_KEY`, and for Docs via Telegram `TELEGRAM_BOT_TOKEN` + `TELEGRAM_WEBHOOK_SECRET` — `wrangler secret put <NAME>` for the deployed Worker, `.dev.vars` (gitignored) for `wrangler dev`, `.env` for the `scripts/*.js` CLIs.
 
 ## 8. Running locally / Deployment
 

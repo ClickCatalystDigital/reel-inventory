@@ -1,4 +1,4 @@
-import { House, Users, ClipboardCheck, Landmark, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
+import { House, Users, ClipboardCheck, Landmark, FolderOpen, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
 import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-allowlist";
 
 // The primary links shown in both the desktop nav-links bar and the mobile
@@ -9,6 +9,7 @@ export const PRIMARY_NAV_LINKS = [
   { href: "/clients", label: "Clients", icon: Users },
   { href: "/orders", label: "Orders", icon: ClipboardCheck },
   { href: "/finance", label: "Finance", icon: Landmark },
+  { href: "/docs", label: "Docs", icon: FolderOpen },
   { href: "/catalog", label: "Catalog", icon: LayoutGrid },
   { href: "/inward", label: "Inward", icon: PackagePlus },
   { href: "/outward", label: "Outward", icon: PackageMinus },
@@ -33,11 +34,12 @@ export function getVisibleNavLinks(role: string | undefined) {
   const links: { href: string; label: string; icon: typeof FileText }[] = PRIMARY_NAV_LINKS.filter((l) =>
     isNavLinkVisible(role, l.href)
   );
-  if (role && (GELCO_DOCS_ROLES as readonly string[]).includes(role)) links.push(DOCS_LINK);
+  // Staff also have the CRM Docs page (/docs), so the Gelco upload page is named for what it is there.
+  if (role && (GELCO_DOCS_ROLES as readonly string[]).includes(role)) links.push(role === "gelco_manager" ? DOCS_LINK : { ...DOCS_LINK, label: "Gelco Docs" });
   if (role && (GELCO_STOCKS_ROLES as readonly string[]).includes(role)) links.push(STOCKS_LINK);
   return links;
 }
 
 // CRM pages: wider content area, and the store view-filter doesn't apply to them.
-export const CRM_PATHS = ["/", "/clients", "/orders", "/finance"];
+export const CRM_PATHS = ["/", "/clients", "/orders", "/finance", "/docs"];
 export const isCrmPath = (pathname: string) => CRM_PATHS.includes(pathname);

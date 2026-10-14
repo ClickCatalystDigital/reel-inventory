@@ -92,7 +92,7 @@ function VoucherSheet({ vno, onClose }: { vno: string | null; onClose: () => voi
   const amt = v ? resolveAmt({ amount: v.amount, bill_refs: v.bill_refs }) : 0;
   return (
     <Sheet open={vno != null} onOpenChange={(o) => !o && onClose()}>
-      <SheetContent className="gap-0 p-0 sm:max-w-md">
+      <SheetContent className="gap-0 p-0 data-[side=right]:w-full data-[side=right]:sm:max-w-md">
         <SheetHeader className="border-b p-4 pr-12">
           <SheetTitle>{vno}</SheetTitle>
           <SheetDescription>{v ? finDate(v.date) + (v.party_name ? " · " + v.party_name : "") : "—"}</SheetDescription>
