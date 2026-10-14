@@ -2,7 +2,7 @@
 
 import { createContext, useContext } from "react";
 
-export type DocsTab = "all" | "invoices" | "bank" | "po";
+export type DocsTab = "all" | "invoices" | "bank" | "po" | "sales";
 
 // What every Docs tab can ask the page to do (ls_crm had these as globals in docs.html).
 export interface DocsActions {

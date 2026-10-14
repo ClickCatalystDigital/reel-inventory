@@ -356,6 +356,15 @@ Both pages are in this app now (staff only: admin/manager/user), with no feature
 - Nav: Docs → `/docs` for staff; the Gelco upload page is labelled "Gelco Docs" for admin/manager ("Docs" for gelco_manager). Phones show 5 tabs + a "More" sheet (scanning pages stay on the bar).
 - Demo: uploads to Docs are blocked (no bucket); Finance/Docs show whatever the demo DB holds (empty until seeded).
 
+## 6g. Gelco tax invoices (added 2026-10-14)
+
+Gelco shipments now get a Tally-style tax invoice (layout of Tally's Sales_10023, `utils/invoicePdf.js`) in the same number series as their packing list (`counters.invoice`, already the series Tally uses for Gelco). Other customers are still invoiced in Tally and uploaded on Docs.
+- **When**: the Outward page downloads it right after a Gelco packing list (`POST /api/sales-invoices/:no` then `/pdf`); Gelco rows in Recent Outwards have an "Invoice" button; Docs → **Sales** lists every Gelco shipment (older ones get their invoice record when first opened).
+- **Data**: `sales_invoices` (header) + `sales_invoice_items` (per item: printed description, HSN, rate, GST %). Quantities are never stored — always read from the shipment's outwards, so an undone reel drops off. Intra-state: GST split CGST/SGST; total rounded to the rupee. Seller/buyer/bank details are constants in `utils/invoiceParties.js` (made-up ones in the demo).
+- **Prices are fixed at transfer**: `items.invoice_name / hsn_code / sale_rate / gst_rate` are the item's invoice details; a transfer to Gelco Stores refuses an item without rate + HSN (also for staff requests, checked at submit) and copies them onto each reel (`reels.inv_desc/inv_hsn/inv_rate/inv_gst`); moving a reel back clears them. A new invoice takes the reels' copy (else the item's current details), so Gelco's own outwards invoice themselves completely. The Transfer page shows these details when the destination is Gelco Stores; admin/manager fill missing ones there (`PUT /api/items/:code/invoice`).
+- **Who**: Gelco roles and staff can create/download; only admin/manager edit (Docs → Sales, "use as defaults" also updates the item). Gelco staff cannot edit invoices.
+- Not yet: pushing the invoice to Tally as a sales voucher (still entered there by hand); cancelled invoices / credit notes.
+
 ## 7. Config / environment
 
 `wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).

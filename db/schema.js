@@ -45,6 +45,11 @@ async function initDB() {
     // Column already exists — safe to ignore
   }
 
+  // Sales-invoice defaults per item (Gelco tax invoices, routes/sales-invoices.js), entered by hand for now.
+  for (const col of ['invoice_name TEXT', 'hsn_code TEXT', 'sale_rate REAL', 'gst_rate REAL']) {
+    try { await connect().execute(`ALTER TABLE items ADD COLUMN ${col}`); } catch (e) { /* exists */ }
+  }
+
   // Who may see an item outside LS Tech (utils/visibility.js): item -> CRM company, and the
   // logins that belong to a company. This app's own tables — users/crm_companies are shared with ls_crm.
   await connect().execute(`CREATE TABLE IF NOT EXISTS item_visibility (
@@ -76,6 +81,27 @@ async function initDB() {
     updated_at TEXT
   )`);
   await connect().execute('CREATE INDEX IF NOT EXISTS idx_po_dispatches_po ON po_dispatches(po_id)');
+  // Gelco tax invoices: one per Gelco shipment, numbered by the shipment's invoice_number (counters.invoice,
+  // the series Tally uses). Quantities are never stored — they're read from that shipment's outwards — only
+  // what a person decides per item: printed description, HSN, rate, GST %.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS sales_invoices (
+    invoice_no TEXT PRIMARY KEY,
+    invoice_date TEXT NOT NULL,
+    customer_name TEXT NOT NULL,
+    created_by TEXT,
+    created_at TEXT,
+    updated_by TEXT,
+    updated_at TEXT
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS sales_invoice_items (
+    invoice_no TEXT NOT NULL,
+    item_code TEXT NOT NULL,
+    description TEXT,
+    hsn_code TEXT,
+    rate REAL,
+    gst_rate REAL,
+    PRIMARY KEY (invoice_no, item_code)
+  )`);
   await connect().execute(`CREATE TABLE IF NOT EXISTS po_docs (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     po_id INTEGER NOT NULL,
@@ -186,6 +212,11 @@ async function initDB() {
     await connect().execute(`ALTER TABLE reels ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);
   } catch (e) {
     // Column already exists — safe to ignore
+  }
+  // Invoice details (items.invoice_name/hsn_code/sale_rate/gst_rate) frozen onto each reel when it moves to the partner store (utils/inventory.js), so its invoice
+  // uses the price agreed at transfer time even if the item's default changes later.
+  for (const col of ['inv_desc TEXT', 'inv_hsn TEXT', 'inv_rate REAL', 'inv_gst REAL']) {
+    try { await connect().execute(`ALTER TABLE reels ADD COLUMN ${col}`); } catch (e) { /* exists */ }
   }
   try {
     await connect().execute(`ALTER TABLE boxes ADD COLUMN store_code TEXT NOT NULL DEFAULT 'primary'`);

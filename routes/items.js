@@ -101,6 +101,19 @@ router.post('/bulk-visibility', ah(async (req, res) => {
   res.json({ success: true, message: `${mode === 'add' ? 'Assigned' : 'Removed'} for ${codes.length} item(s)` });
 }));
 
+// Invoice details used when the item goes to the partner store (and as defaults on its invoices).
+router.put('/:itemCode/invoice', ah(async (req, res) => {
+  if (!CATALOG_ADMINS.includes(req.user.role)) return res.status(403).json({ error: 'Not authorized' });
+  const { invoice_name, hsn_code, sale_rate, gst_rate } = req.body;
+  const rate = sale_rate === '' || sale_rate == null ? null : Number(sale_rate);
+  const gst = gst_rate === '' || gst_rate == null ? 18 : Number(gst_rate);
+  if ((rate != null && (!Number.isFinite(rate) || rate < 0)) || !Number.isFinite(gst) || gst < 0) return res.status(400).json({ error: 'Invalid rate' });
+  const r = await execute('UPDATE items SET invoice_name = ?, hsn_code = ?, sale_rate = ?, gst_rate = ? WHERE item_code = ?',
+    [String(invoice_name || '').trim() || null, String(hsn_code || '').trim() || null, rate, gst, req.params.itemCode]);
+  if (!r.changes) return res.status(404).json({ error: 'Item not found' });
+  res.json({ success: true });
+}));
+
 router.put('/:itemCode', ah(async (req, res) => {
   const { item_code, description, default_spq } = req.body;
   const newCode = item_code ? item_code.trim().toUpperCase() : req.params.itemCode;

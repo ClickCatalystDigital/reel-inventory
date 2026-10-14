@@ -161,6 +161,24 @@ async function transferOneReel(exec, reel, to_store, transferred_by, notes, box_
   );
 }
 
+// Reels going to the partner store carry their invoice details (description, HSN, rate, GST) from then on,
+// so the partner's own outwards invoice themselves; reels coming back lose them.
+const PARTNER = 'secondary';
+async function requireInvoiceDetails(itemCodes) {
+  const codes = [...new Set(itemCodes)];
+  const rows = await queryAll(`SELECT item_code FROM items WHERE item_code IN (${marks(codes.length)}) AND sale_rate IS NOT NULL AND TRIM(COALESCE(hsn_code, '')) != ''`, codes);
+  const ok = new Set(rows.map((r) => r.item_code));
+  const missing = codes.filter((c) => !ok.has(c));
+  if (missing.length) throw new Error(`Set the invoice rate and HSN for ${missing.join(', ')} before moving it to the partner store`);
+}
+const snapshotSql = (n) => `UPDATE reels SET
+    inv_desc = (SELECT COALESCE(NULLIF(TRIM(invoice_name), ''), description) FROM items WHERE items.item_code = reels.item_code),
+    inv_hsn = (SELECT hsn_code FROM items WHERE items.item_code = reels.item_code),
+    inv_rate = (SELECT sale_rate FROM items WHERE items.item_code = reels.item_code),
+    inv_gst = (SELECT COALESCE(gst_rate, 18) FROM items WHERE items.item_code = reels.item_code)
+  WHERE reel_number IN (${marks(n)})`;
+const clearSql = (n) => `UPDATE reels SET inv_desc = NULL, inv_hsn = NULL, inv_rate = NULL, inv_gst = NULL WHERE reel_number IN (${marks(n)})`;
+
 async function executeStockTransfer(kind, number, to_store, notes, transferred_by) {
   if (kind === 'reel') {
     const reel = await queryOne('SELECT * FROM reels WHERE reel_number = ?', [number]);
@@ -174,7 +192,9 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
     // see SYSTEM.md) — its box_number is preserved as display/history context on
     // the log row, not as a constraint. Reels in the same box are explicitly
     // allowed to end up in different stores as a result.
+    if (to_store === PARTNER) await requireInvoiceDetails([reel.item_code]);
     await transferOneReel(execute, reel, to_store, transferred_by, notes, reel.box_number || null);
+    await execute((to_store === PARTNER ? snapshotSql : clearSql)(1), [reel.reel_number]);
     return { from_store, to_store, quantity: reel.quantity };
   }
 
@@ -206,6 +226,7 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
     if (to_store === from_store) throw new Error('Source and destination store cannot be the same');
 
     const quantity = activeReels.reduce((sum, r) => sum + r.quantity, 0);
+    if (to_store === PARTNER) await requireInvoiceDetails(activeReels.map((r) => r.item_code));
 
     // Real transaction — the one place in this codebase that needs genuine
     // all-or-nothing atomicity (a "box transfer" that only moved 3 of 5 reels
@@ -225,6 +246,7 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
         if (moved.changes !== part.length) {
           throw new Error(`Box ${number} had reels moved by another transfer — refresh and try again`);
         }
+        await tx((to_store === PARTNER ? snapshotSql : clearSql)(part.length), part);
       }
       const now = nowIST();
       for (const rows of chunk(activeReels)) {
@@ -249,4 +271,4 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
   throw new Error(`Unknown transfer kind "${kind}"`);
 }
 
-module.exports = { executeInward, executeOutwardReel, executeOutwardMany, executeStockTransfer };
+module.exports = { executeInward, executeOutwardReel, executeOutwardMany, executeStockTransfer, requireInvoiceDetails };

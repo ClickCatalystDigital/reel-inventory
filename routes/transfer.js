@@ -4,7 +4,7 @@ const express = require('express');
 const brand = require('../utils/brand');
 const router = express.Router();
 const { queryAll, queryOne, execute, nowIST } = require('../db/schema');
-const { executeStockTransfer } = require('../utils/inventory');
+const { executeStockTransfer, requireInvoiceDetails } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
 const ah = require('../utils/asyncHandler');
 
@@ -99,7 +99,13 @@ router.post('/', ah(async (req, res) => {
     }
   }
 
-  // Staff: save as pending request
+  // Staff: save as pending request — but refuse now, not at approval, if the item can't go to the partner store yet.
+  if (to_store === 'secondary') {
+    const codes = (await queryAll(kind === 'box'
+      ? "SELECT item_code FROM reels WHERE box_number = ? AND status = 'In Stock'"
+      : 'SELECT item_code FROM reels WHERE reel_number = ?', [number])).map((r) => r.item_code);
+    try { if (codes.length) await requireInvoiceDetails(codes); } catch (err) { return res.status(400).json({ error: err.message }); }
+  }
   try {
     const payload = JSON.stringify({ kind, number, to_store, notes: notes || null, from_store: fromStore });
     await execute(

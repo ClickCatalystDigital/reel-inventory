@@ -14,10 +14,11 @@ import { AllTab } from "@/components/docs/AllTab";
 import { InvoicesTab } from "@/components/docs/InvoicesTab";
 import { BankTab } from "@/components/docs/BankTab";
 import { PoTab } from "@/components/docs/PoTab";
+import { SalesTab } from "@/components/docs/SalesTab";
 import { ReviewSheet } from "@/components/docs/ReviewSheet";
 import { PoSheet } from "@/components/docs/PoSheet";
 
-const TABS: DocsTab[] = ["all", "invoices", "bank", "po"];
+const TABS: DocsTab[] = ["all", "invoices", "bank", "po", "sales"];
 
 // Docs (ported from ls_crm): every uploaded document is read by AI, reviewed here, then approved for the
 // office-PC agent to push into Tally. Customer POs live in the same list. The tab is kept in the URL hash.
@@ -159,11 +160,13 @@ export default function DocsPage() {
             <TabsTrigger value="invoices">Invoices</TabsTrigger>
             <TabsTrigger value="bank">Bank</TabsTrigger>
             <TabsTrigger value="po">PO</TabsTrigger>
+            <TabsTrigger value="sales">Sales</TabsTrigger>
           </TabsList>
           <TabsContent value="all"><AllTab /></TabsContent>
           <TabsContent value="invoices"><InvoicesTab /></TabsContent>
           <TabsContent value="bank"><BankTab /></TabsContent>
           <TabsContent value="po"><PoTab /></TabsContent>
+          <TabsContent value="sales"><SalesTab /></TabsContent>
         </Tabs>
       </div>
 

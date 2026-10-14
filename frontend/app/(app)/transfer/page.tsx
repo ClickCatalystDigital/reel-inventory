@@ -17,6 +17,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
 import { PdfOverlay } from "@/components/layout/PdfOverlay";
 import { cn } from "@/lib/utils";
+import { InvoiceDetails } from "@/components/transfer/InvoiceDetails";
 
 interface Store {
   code: string;
@@ -65,6 +66,7 @@ export default function TransferPage() {
   const [notes, setNotes] = useState("");
   const [scanInput, setScanInput] = useState("");
   const [cart, setCart] = useState<CartItem[]>([]);
+  const [invoiceReady, setInvoiceReady] = useState(false);
   const [skipped, setSkipped] = useState<Skipped[]>([]);
   const [boxTotals, setBoxTotals] = useState<Record<string, number>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -292,6 +294,7 @@ export default function TransferPage() {
   async function submitCart() {
     if (cart.length === 0) return showToast("Cart is empty", "error");
     if (!toStore) return showToast("Select a destination store", "error");
+    if (toStore === "secondary" && !invoiceReady) return showToast("Set the invoice rate and HSN for every item first", "error");
 
     setSubmitting(true);
     try {
@@ -533,12 +536,15 @@ export default function TransferPage() {
           )}
 
           <div className="mt-4 space-y-4 border-t border-border pt-4">
+            {toStore === "secondary" && (
+              <InvoiceDetails itemCodes={[...new Set(cart.map((r) => r.item_code))].sort()} onReady={setInvoiceReady} />
+            )}
             <div className="space-y-1.5">
               <Label>Notes (optional)</Label>
               <Input placeholder="e.g. Rebalancing stock" value={notes} onChange={(e) => setNotes(e.target.value)} />
             </div>
             <div className="flex gap-2">
-              <Button className="flex-1" variant="secondary" onClick={submitCart} disabled={cart.length === 0 || !toStore || submitting}>
+              <Button className="flex-1" variant="secondary" onClick={submitCart} disabled={cart.length === 0 || !toStore || submitting || (toStore === "secondary" && !invoiceReady)}>
                 {submitting ? "Processing..." : `Transfer ${cart.length} Reel(s)`}
               </Button>
               <Button variant="ghost" onClick={clearCart}>

@@ -457,6 +457,23 @@ export default function OutwardPage() {
     }
   }
 
+  // Gelco shipments are invoiced in the same number series as their packing list (routes/sales-invoices.js).
+  async function downloadInvoice(invoice: string) {
+    try {
+      await api(`/api/sales-invoices/${encodeURIComponent(invoice)}`, { method: "POST" });
+      const res = await fetch(`/api/sales-invoices/${encodeURIComponent(invoice)}/pdf`);
+      if (!res.ok) throw new Error();
+      const url = URL.createObjectURL(await res.blob());
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `invoice_${invoice}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast("Invoice could not be generated — download it later from the Outward list", "error");
+    }
+  }
+
   async function getNextGelcoInvoiceNumber() {
     const { invoice_number } = await api<{ invoice_number: string }>("/api/outward/next-invoice-number", { method: "POST" });
     return invoice_number;
@@ -512,6 +529,7 @@ export default function OutwardPage() {
       if (successCount > 0) {
         showToast(`${successCount} reel(s) outwarded successfully`);
         await downloadPackingList(shipmentCustomer, shipmentInvoice, cart, notes);
+        if (isGelco) await downloadInvoice(shipmentInvoice);
       }
       if (pendingCount > 0) showToast(`${pendingCount} reel(s) submitted for approval (grouped by item)`);
       if (errors.length > 0) showToast(`${errors.length} item(s) failed: ${errors[0]}`, "error");
@@ -791,6 +809,11 @@ export default function OutwardPage() {
                   <Button size="sm" variant="ghost" onClick={() => regenPackingList(o.customer_name, o.invoice_number)}>
                     PDF
                   </Button>
+                  {o.customer_name === BRAND.partnerStore && (
+                    <Button size="sm" variant="ghost" onClick={() => downloadInvoice(o.invoice_number)}>
+                      Invoice
+                    </Button>
+                  )}
                   <Button size="sm" variant="destructive" onClick={() => undoOutward(o.id, o.reel_number)}>
                     Undo
                   </Button>
