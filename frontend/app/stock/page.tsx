@@ -9,6 +9,8 @@ import { Card } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BRAND, DEMO } from "@/lib/brand";
 import { DemoBanner } from "@/components/demo/DemoBanner";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { PortalOrders } from "@/components/orders/PortalOrders";
 
 interface StockSummaryRow {
   item_code: string;
@@ -57,71 +59,82 @@ export default function StockPage() {
       <StockNav />
       {DEMO && <DemoBanner />}
       <main className="mx-auto max-w-5xl space-y-4 px-4 pt-6 pb-6">
-        <div>
-          <h1 className="text-xl font-bold">Current Stock</h1>
-          <p className="text-sm text-muted-foreground">{lastUpdated}</p>
-        </div>
+        <Tabs defaultValue="stock" className="space-y-4">
+          <TabsList>
+            <TabsTrigger value="stock">Stock</TabsTrigger>
+            <TabsTrigger value="orders">Orders</TabsTrigger>
+          </TabsList>
+          <TabsContent value="orders">
+            <PortalOrders />
+          </TabsContent>
+          <TabsContent value="stock" className="space-y-4">
+            <div>
+              <h1 className="text-xl font-bold">Current Stock</h1>
+              <p className="text-sm text-muted-foreground">{lastUpdated}</p>
+            </div>
 
-        <Card className="p-5">
-          <div className="grid grid-cols-3 gap-4 text-center">
-            <div>
-              <div className="text-2xl font-bold">{rows === null ? "—" : items.length}</div>
-              <div className="text-xs text-muted-foreground">Items</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{rows === null ? "—" : totalReels.toLocaleString("en-IN")}</div>
-              <div className="text-xs text-muted-foreground">Reels In Stock</div>
-            </div>
-            <div>
-              <div className="text-2xl font-bold">{rows === null ? "—" : formatQty(totalQty)}</div>
-              <div className="text-xs text-muted-foreground">Total Quantity</div>
-            </div>
-          </div>
-        </Card>
+            <Card className="p-5">
+              <div className="grid grid-cols-3 gap-4 text-center">
+                <div>
+                  <div className="text-2xl font-bold">{rows === null ? "—" : items.length}</div>
+                  <div className="text-xs text-muted-foreground">Items</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{rows === null ? "—" : totalReels.toLocaleString("en-IN")}</div>
+                  <div className="text-xs text-muted-foreground">Reels In Stock</div>
+                </div>
+                <div>
+                  <div className="text-2xl font-bold">{rows === null ? "—" : formatQty(totalQty)}</div>
+                  <div className="text-xs text-muted-foreground">Total Quantity</div>
+                </div>
+              </div>
+            </Card>
 
-        <Card className="p-5">
-          <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-            Stock by Item
-          </div>
-          <div className="overflow-x-auto rounded-md border border-border">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Item Code</TableHead>
-                  <TableHead>Description</TableHead>
-                  <TableHead>Reels In Stock</TableHead>
-                  <TableHead>Total Quantity</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows === null ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      Loading...
-                    </TableCell>
-                  </TableRow>
-                ) : items.length === 0 ? (
-                  <TableRow>
-                    <TableCell colSpan={4} className="text-center text-muted-foreground">
-                      No stock currently
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  items.map((s) => (
-                    <TableRow key={s.item_code}>
-                      <TableCell>
-                        <strong>{s.item_code}</strong>
-                      </TableCell>
-                      <TableCell>{s.description || "—"}</TableCell>
-                      <TableCell>{s.in_stock_reels || 0}</TableCell>
-                      <TableCell>{formatQty(s.total_quantity || 0)}</TableCell>
+            <Card className="p-5">
+              <div className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Stock by Item
+              </div>
+              <div className="overflow-x-auto rounded-md border border-border">
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Item Code</TableHead>
+                      <TableHead>Description</TableHead>
+                      <TableHead>Reels In Stock</TableHead>
+                      <TableHead>Total Quantity</TableHead>
                     </TableRow>
-                  ))
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </Card>
+                  </TableHeader>
+                  <TableBody>
+                    {rows === null ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                          Loading...
+                        </TableCell>
+                      </TableRow>
+                    ) : items.length === 0 ? (
+                      <TableRow>
+                        <TableCell colSpan={4} className="text-center text-muted-foreground">
+                          No stock currently
+                        </TableCell>
+                      </TableRow>
+                    ) : (
+                      items.map((s) => (
+                        <TableRow key={s.item_code}>
+                          <TableCell>
+                            <strong>{s.item_code}</strong>
+                          </TableCell>
+                          <TableCell>{s.description || "—"}</TableCell>
+                          <TableCell>{s.in_stock_reels || 0}</TableCell>
+                          <TableCell>{formatQty(s.total_quantity || 0)}</TableCell>
+                        </TableRow>
+                      ))
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </main>
     </>
   );

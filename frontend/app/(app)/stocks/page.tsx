@@ -7,6 +7,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
+import { PortalOrders } from "@/components/orders/PortalOrders";
 
 interface Store {
   code: string;
@@ -37,6 +38,7 @@ export default function StocksPage() {
   }, []);
 
   useEffect(() => {
+    if (store === "orders") return;
     async function load() {
       try {
         const data = await api<StockSummaryRow[]>(`/api/dashboard/stock-summary?store=${encodeURIComponent(store)}`);
@@ -66,10 +68,14 @@ export default function StocksPage() {
                 {s.name}
               </TabsTrigger>
             ))}
+            <TabsTrigger value="orders">Orders</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>
 
+      {store === "orders" ? (
+        <PortalOrders />
+      ) : (
       <Card className="p-5">
         <div className="mb-4 grid grid-cols-2 gap-4 text-center sm:flex sm:items-center">
           <Stat label="Items" value={summary.length} />
@@ -94,6 +100,7 @@ export default function StocksPage() {
           ]}
         />
       </Card>
+      )}
     </div>
   );
 }

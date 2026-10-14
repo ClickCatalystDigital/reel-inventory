@@ -1,4 +1,4 @@
-import { House, Users, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
+import { House, Users, ClipboardCheck, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
 import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-allowlist";
 
 // The primary links shown in both the desktop nav-links bar and the mobile
@@ -7,6 +7,7 @@ import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-a
 export const PRIMARY_NAV_LINKS = [
   { href: "/", label: "Home", icon: House },
   { href: "/clients", label: "Clients", icon: Users },
+  { href: "/orders", label: "Orders", icon: ClipboardCheck },
   { href: "/catalog", label: "Catalog", icon: LayoutGrid },
   { href: "/inward", label: "Inward", icon: PackagePlus },
   { href: "/outward", label: "Outward", icon: PackageMinus },
@@ -37,5 +38,5 @@ export function getVisibleNavLinks(role: string | undefined) {
 }
 
 // CRM pages: wider content area, and the store view-filter doesn't apply to them.
-export const CRM_PATHS = ["/", "/clients"];
+export const CRM_PATHS = ["/", "/clients", "/orders"];
 export const isCrmPath = (pathname: string) => CRM_PATHS.includes(pathname);

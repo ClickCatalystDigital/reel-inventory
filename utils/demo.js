@@ -16,7 +16,7 @@ const DEMO_ROLES = [
   { username: 'store', label: 'Store staff', blurb: 'Scans reels in and out; changes go for approval' },
   { username: 'partner_manager', label: 'Partner store manager', blurb: "Partner store only; approves yesterday's outward" },
   { username: 'partner_worker', label: 'Partner store worker', blurb: 'Ships from the partner store once the day is approved' },
-  { username: 'customer', label: 'Customer portal', blurb: 'Read-only view of the stock kept for them' },
+  { username: 'customer', label: 'Customer portal', blurb: 'Read-only view of their stock and order progress' },
 ];
 
 // Visitors' details live in their own database (LEADS_TURSO_URL) so the nightly reset never touches them.
@@ -137,6 +137,8 @@ function guard(req, res, next) {
   const hit = BLOCKED.some((p) => path === p || path.startsWith(p + '/'));
   if (hit && write) return res.status(403).json({ error: 'Not available in the demo' });
   if (write && /^\/api\/gelco-docs\/\d+$/.test(path)) return res.status(403).json({ error: 'Not available in the demo' });
+  // No R2 bucket in the demo: PO document upload/delete.
+  if (write && /^\/api\/orders\/(\d+|docs)\/(docs|\d+)$/.test(path)) return res.status(403).json({ error: 'Not available in the demo' });
   next();
 }
 

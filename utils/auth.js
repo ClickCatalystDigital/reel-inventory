@@ -27,8 +27,8 @@ const ROLE_PAGE_ALLOWLIST = {
   gelco_manager: { pages: ['/catalog', '/outward', '/gelco-docs', '/stocks'], redirectTo: '/outward' },
 };
 
-// `client` is read-only and restricted to /stock, so it may only hit the API paths /stock uses.
-const CLIENT_API_ALLOWLIST = ['/api/auth/me', '/api/stores', '/api/dashboard/stock-summary'];
+// `client` is read-only and restricted to /stock, so it may only hit the API paths /stock uses (stock + its Orders tab).
+const CLIENT_API_ALLOWLIST = ['/api/auth/me', '/api/stores', '/api/dashboard/stock-summary', '/api/portal/orders', '/api/portal/file'];
 
 // LS Tech employees: the only roles that may use the CRM pages/APIs (Home, Clients). An allowlist, so
 // gelco_*, client and any future role are blocked by default.

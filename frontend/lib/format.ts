@@ -5,7 +5,9 @@
 
 export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr.replace(" ", "T") + "+05:30");
+  // Date-only values ('2026-10-20', e.g. PO dates) need a time before the offset can be appended.
+  const iso = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr + "T00:00:00" : dateStr.replace(" ", "T");
+  const d = new Date(iso + "+05:30");
   return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
 }
 

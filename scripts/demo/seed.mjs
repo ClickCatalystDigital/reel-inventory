@@ -149,6 +149,17 @@ await api('owner', 'POST', `/api/po/${poBright}/dispatch`, { dispatch_date: day(
 await ship('STM32G030', 2, 'Voltix Motors Ltd', poVoltix, 'INV-2604');
 await ship('1N4148W', 2, 'Orbit Power Systems', null, 'INV-2607');
 
+// Production stage + dispatch lots (Orders page, and the customer portal's Orders tab — the
+// 'customer' login belongs to Brightline).
+const lot = (po_id, item_code, quantity, d, notes) => api('owner', 'POST', '/api/orders/dispatches', { po_id, item_code, quantity, dispatch_date: day(d), notes });
+await api('owner', 'PUT', `/api/orders/${poBright}/stage`, { stage: 'Dispatch' });
+await lot(poBright, 'BC857B', 4500, -2, 'Lot 1 of 2');
+await lot(poBright, 'CC0603-104K', 12000, -2, 'Lot 1 of 1');
+await lot(poBright, 'RC0603-10K', 7500, -2, 'Lot 1 of 2');
+await lot(poBright, 'BC857B', 4500, 6, 'Lot 2 of 2, planned');
+await api('owner', 'PUT', `/api/orders/${poVoltix}/stage`, { stage: 'Under QC' });
+await lot(poVoltix, 'STM32G030', 2000, 5, 'Partial, after QC');
+
 // --- 8. Work waiting for a manager: store staff requests go to approval ---
 await api('store', 'POST', '/api/inward', { item_code: 'LM358DR', num_reels: 4, num_boxes: 0, store_code: 'primary', notes: 'Supplier delivery, awaiting check' });
 await api('store', 'POST', '/api/outward/grouped', { item_code: 'SS34', reel_numbers: reels.SS34.splice(0, 2), customer_name: 'Voltix Motors Ltd', invoice_number: 'INV-2609', company_id: companyId['Voltix Motors Ltd'], po_id: poVoltix, store_code: 'primary' });
@@ -159,6 +170,7 @@ const spread = (table, col, from, span) => execute(`UPDATE ${table} SET ${col} =
 await spread('reels', 'inward_date', 30, 60);
 await spread('outwards', 'outward_date', 1, 29);
 await spread('stock_transfers', 'transferred_at', 1, 29);
+await spread('po_dispatches', 'updated_at', 1, 5);
 
 server.close();
 const counts = {};

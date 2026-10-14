@@ -57,6 +57,35 @@ async function initDB() {
     company_id INTEGER NOT NULL,
     PRIMARY KEY (user_id, company_id)
   )`);
+  // PO production tracking (routes/orders.js). This app's own tables: crm_purchase_orders.status
+  // belongs to ls_crm (draft/confirmed/dispatched/cancelled) and is never touched here.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS po_stages (
+    po_id INTEGER PRIMARY KEY,
+    stage TEXT NOT NULL,
+    updated_by TEXT,
+    updated_at TEXT
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS po_dispatches (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_id INTEGER NOT NULL,
+    item_code TEXT NOT NULL,
+    quantity INTEGER NOT NULL,
+    dispatch_date TEXT,
+    notes TEXT,
+    updated_by TEXT,
+    updated_at TEXT
+  )`);
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_po_dispatches_po ON po_dispatches(po_id)');
+  await connect().execute(`CREATE TABLE IF NOT EXISTS po_docs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    po_id INTEGER NOT NULL,
+    doc_type TEXT NOT NULL,
+    original_filename TEXT,
+    r2_key TEXT NOT NULL,
+    uploaded_by TEXT,
+    uploaded_at TEXT
+  )`);
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_po_docs_po ON po_docs(po_id)');
 
   await connect().execute(`CREATE TABLE IF NOT EXISTS boxes (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
