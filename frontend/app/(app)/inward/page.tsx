@@ -58,6 +58,9 @@ export default function InwardPage() {
   const [numReelsRaw, setNumReelsRaw] = useState("");
   const [reelsPerBox, setReelsPerBox] = useState("0");
   const [storeCode, setStoreCode] = useState("");
+  // Receiving against a procurement (China) order item: new reels go to the customer POs waiting on it.
+  const [procItems, setProcItems] = useState<{ id: number; number: string; supplier: string; qty_ordered: number; qty_received: number; stage: string }[]>([]);
+  const [procItemId, setProcItemId] = useState("none");
   const [notes, setNotes] = useState("");
 
   const [result, setResult] = useState<InwardResult | null>(null);
@@ -136,6 +139,14 @@ export default function InwardPage() {
     setNumReelsRaw("");
   }
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setProcItemId("none");
+    if (!itemCode || isGelco) return setProcItems([]);
+    api<typeof procItems>(`/api/procurement/open-items?item_code=${encodeURIComponent(itemCode)}`).then(setProcItems).catch(() => setProcItems([]));
+     
+  }, [itemCode, isGelco]);
+
   async function submitInward(e: React.FormEvent) {
     e.preventDefault();
     if (!itemCode) return showToast("Select an item", "error");
@@ -150,7 +161,7 @@ export default function InwardPage() {
     try {
       const data = await api<InwardResult>("/api/inward", {
         method: "POST",
-        body: { item_code: itemCode, num_reels: numReels, num_boxes: numBoxes, notes, store_code: storeCode },
+        body: { item_code: itemCode, num_reels: numReels, num_boxes: numBoxes, notes, store_code: procItemId !== "none" ? "primary" : storeCode, proc_item_id: procItemId !== "none" ? Number(procItemId) : undefined },
       });
       showToast(data.message);
       setResult(data);
@@ -325,10 +336,28 @@ export default function InwardPage() {
             </div>
           )}
 
+          {procItems.length > 0 && (
+            <div className="space-y-1.5">
+              <Label>Against procurement order (optional)</Label>
+              <Select value={procItemId} onValueChange={setProcItemId}>
+                <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Not against an order</SelectItem>
+                  {procItems.map((p) => (
+                    <SelectItem key={p.id} value={String(p.id)}>
+                      {p.number} · {p.supplier} · {formatQty(p.qty_received)} / {formatQty(p.qty_ordered)} received · {p.stage}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              {procItemId !== "none" && <p className="text-xs text-muted-foreground">Received into LS Tech Stores and reserved for the customer POs waiting on this order, earliest due first.</p>}
+            </div>
+          )}
+
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
             <div className="space-y-1.5 sm:flex-1">
               <Label>Receiving Store</Label>
-              <Select value={storeCode} onValueChange={setStoreCode} disabled={isGelco}>
+              <Select value={procItemId !== "none" ? "primary" : storeCode} onValueChange={setStoreCode} disabled={isGelco || procItemId !== "none"}>
                 <SelectTrigger className="w-full">
                   <SelectValue />
                 </SelectTrigger>

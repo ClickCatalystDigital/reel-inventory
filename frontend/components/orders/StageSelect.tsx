@@ -1,48 +1,33 @@
 "use client";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PO_STAGES, PO_STAGE_HINT } from "@/lib/po-stages";
-import { api } from "@/lib/api";
-import { showToast } from "@/lib/toast";
+import { cn } from "@/lib/utils";
+import { LINE_STATUSES, PO_STAGES, PO_STAGE_HINT } from "@/lib/po-stages";
 
-// PO stage dropdown; read-only text for roles that can't edit.
-export function StageSelect({ poId, stage, canEdit, onChanged }: { poId: number; stage: string | null; canEdit: boolean; onChanged: () => void }) {
-  if (!canEdit) return <span className="text-sm">{stage ?? <span className="text-muted-foreground">Not set</span>}</span>;
-  async function change(v: string) {
-    try {
-      await api(`/api/orders/${poId}/stage`, { method: "PUT", body: { stage: v } });
-      showToast(`Stage set to ${v}`, "success");
-      onChanged();
-    } catch {
-      // api() already toasted
-    }
-  }
+const TONE: Record<string, string> = {
+  "Not planned": "border-dashed text-muted-foreground",
+  Ready: "border-success/40 bg-success/10 text-success",
+  Dispatch: "border-foreground/30 bg-foreground/5",
+  Completed: "border-success bg-success text-white",
+};
+
+// A line's / PO's derived status (utils/poProgress.js).
+export function StageBadge({ stage, className }: { stage: string; className?: string }) {
   return (
-    <Select value={stage ?? undefined} onValueChange={change}>
-      <SelectTrigger size="sm" className="w-[190px]" onClick={(e) => e.stopPropagation()}>
-        <SelectValue placeholder="Not set" />
-      </SelectTrigger>
-      <SelectContent>
-        {PO_STAGES.map((s) => (
-          <SelectItem key={s} value={s}>
-            {s}
-            {PO_STAGE_HINT[s] && <span className="text-muted-foreground"> ({PO_STAGE_HINT[s]})</span>}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+    <span title={PO_STAGE_HINT[stage]} className={cn("inline-flex items-center rounded-full border px-2 py-0.5 text-[11px] font-medium whitespace-nowrap", TONE[stage] || "border-warning/40 bg-warning/10 text-warning", className)}>
+      {stage}
+    </span>
   );
 }
 
-// Customer-facing progress: the 8 stages as a row of steps.
-export function StageSteps({ stage }: { stage: string | null }) {
-  const at = stage ? PO_STAGES.indexOf(stage as (typeof PO_STAGES)[number]) : -1;
+// The stages as a row of steps (customer portal).
+export function StageSteps({ stage, compact }: { stage: string | null; compact?: boolean }) {
+  const at = stage ? LINE_STATUSES.indexOf(stage as (typeof LINE_STATUSES)[number]) - 1 : -1;
   return (
-    <ol className="grid grid-cols-4 gap-1.5 sm:grid-cols-8">
+    <ol className={cn("grid gap-1", compact ? "grid-cols-8" : "grid-cols-4 sm:grid-cols-8")}>
       {PO_STAGES.map((s, i) => (
-        <li key={s} className="space-y-1">
-          <div className={i <= at ? "h-1.5 rounded-full bg-foreground" : "h-1.5 rounded-full bg-muted"} />
-          <div className={i === at ? "text-[11px] font-semibold" : "text-[11px] text-muted-foreground"}>{s}</div>
+        <li key={s} className="space-y-1" title={s}>
+          <div className={cn("h-1 rounded-full", i <= at ? "bg-foreground" : "bg-muted")} />
+          {!compact && <div className={cn("text-[10px] leading-tight", i === at ? "font-semibold" : "text-muted-foreground")}>{s}</div>}
         </li>
       ))}
     </ol>

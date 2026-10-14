@@ -1,11 +1,18 @@
 const { queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, nowIST } = require('../db/schema');
+const { procItemFor, allocateReceived } = require('./procurement');
 
 // Rows per multi-row INSERT / IN() list — keeps bound variables far below SQLite's limit.
 const CHUNK = 400;
 const chunk = (arr, n = CHUNK) => Array.from({ length: Math.ceil(arr.length / n) }, (_, i) => arr.slice(i * n, (i + 1) * n));
 const marks = (n) => Array(n).fill('?').join(',');
 
-async function executeInward(item_code, num_reels, num_boxes, notes, store_code = 'primary') {
+// procItemId: inwarding against a procurement order item (utils/procurement.js) — checked before anything is
+// written, then the new reels are reserved to the customer POs waiting on it.
+async function executeInward(item_code, num_reels, num_boxes, notes, store_code = 'primary', procItemId = null, user = null) {
+  if (procItemId) {
+    if (store_code !== 'primary') throw new Error('Procurement orders are received into LS Tech Stores');
+    await procItemFor(procItemId, item_code);
+  }
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [item_code]);
   if (!item) throw new Error(`Item "${item_code}" not found in catalog`);
   if (item.status === 'Deleted') throw new Error(`Item "${item_code}" has been archived and cannot receive stock`);
@@ -59,11 +66,13 @@ async function executeInward(item_code, num_reels, num_boxes, notes, store_code 
 
     try {
       await batch(statements);
-      return { boxes: createdBoxes, reels: createdReels };
     } catch (err) {
       if (attempt === 1 && /UNIQUE|constraint/i.test(err.message)) { await healCounters(); continue; }
       throw err;
     }
+    // Outside the retry: the reels exist now, so a failure here must not inward them a second time.
+    if (procItemId) await allocateReceived(procItemId, createdReels, user);
+    return { boxes: createdBoxes, reels: createdReels };
   }
 }
 
@@ -185,6 +194,7 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
     if (!reel) throw new Error(`Reel ${number} not found`);
     if (reel.status === 'Outwarded') throw new Error(`Reel ${number} already outwarded`);
     if (reel.status === 'Deleted') throw new Error(`Reel ${number} has been deleted`);
+    if (reel.reserved_po_item_id) throw new Error(`Reel ${number} is reserved for a customer PO — release it on Orders first`);
     const from_store = reel.store_code;
     if (to_store === from_store) throw new Error('Source and destination store cannot be the same');
 
@@ -214,6 +224,8 @@ async function executeStockTransfer(kind, number, to_store, notes, transferred_b
     if (activeReels.length === 0) {
       throw new Error(`Box ${number} has no in-stock reels to transfer`);
     }
+    const held = activeReels.filter((r) => r.reserved_po_item_id).map((r) => r.reel_number);
+    if (held.length) throw new Error(`Box ${number} has reels reserved for a customer PO (${held.join(', ')}) — release them on Orders, or move the other reels individually`);
 
     const stores = new Set(activeReels.map((r) => r.store_code));
     if (stores.size > 1) {

@@ -149,15 +149,26 @@ await api('owner', 'POST', `/api/po/${poBright}/dispatch`, { dispatch_date: day(
 await ship('STM32G030', 2, 'Voltix Motors Ltd', poVoltix, 'INV-2604');
 await ship('1N4148W', 2, 'Orbit Power Systems', null, 'INV-2607');
 
-// Production stage + dispatch lots (Orders page, and the customer portal's Orders tab — the
-// 'customer' login belongs to Brightline).
+// Orders: reserve free stock to the open POs, then a China procurement order for what's still short (one item
+// in transit), plus planned dispatch lots. Statuses on Orders and the customer portal (the 'customer' login
+// belongs to Brightline) follow from these.
 const lot = (po_id, item_code, quantity, d, notes) => api('owner', 'POST', '/api/orders/dispatches', { po_id, item_code, quantity, dispatch_date: day(d), notes });
-await api('owner', 'PUT', `/api/orders/${poBright}/stage`, { stage: 'Dispatch' });
-await lot(poBright, 'BC857B', 4500, -2, 'Lot 1 of 2');
-await lot(poBright, 'CC0603-104K', 12000, -2, 'Lot 1 of 1');
-await lot(poBright, 'RC0603-10K', 7500, -2, 'Lot 1 of 2');
+for (const id of [poBright, poVoltix]) {
+  const { lines } = await api('owner', 'GET', `/api/orders/${id}`);
+  for (const l of lines) if (l.free_stock > 0 && l.ordered > l.dispatched) await api('owner', 'POST', `/api/orders/${id}/lines/${l.id}/reserve`, {});
+}
+const short = await api('owner', 'GET', '/api/procurement/shortfall');
+if (short.length) {
+  const order = await api('owner', 'POST', '/api/procurement', {
+    supplier: 'Shenzhen Demo Electronics', expected_date: day(18),
+    items: short.map((g) => ({ item_code: g.item_code, qty: Math.ceil(g.needed / 1000) * 1000 + 1000, unit_cost: 0.02, currency: 'USD', allocations: g.lines.map((l) => ({ po_item_id: l.po_item_id, qty: l.needed })) })),
+  });
+  await api('owner', 'PUT', `/api/procurement/${order.id}`, { status: 'ordered' });
+  const detail = await api('owner', 'GET', `/api/procurement/${order.id}`);
+  const stages = ['In Transit', 'Under QC', 'Under Manufacturing'];
+  for (const [i, it] of detail.items.entries()) await api('owner', 'PUT', `/api/procurement/${order.id}/items/${it.id}/stage`, { stage: stages[i % stages.length] });
+}
 await lot(poBright, 'BC857B', 4500, 6, 'Lot 2 of 2, planned');
-await api('owner', 'PUT', `/api/orders/${poVoltix}/stage`, { stage: 'Under QC' });
 await lot(poVoltix, 'STM32G030', 2000, 5, 'Partial, after QC');
 
 // --- 8. Work waiting for a manager: store staff requests go to approval ---
@@ -171,6 +182,7 @@ await spread('reels', 'inward_date', 30, 60);
 await spread('outwards', 'outward_date', 1, 29);
 await spread('stock_transfers', 'transferred_at', 1, 29);
 await spread('po_dispatches', 'updated_at', 1, 5);
+await spread('procurement_orders', 'created_at', 3, 10);
 
 server.close();
 const counts = {};

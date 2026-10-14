@@ -90,7 +90,9 @@ router.post('/:id/approve', requireApprover, async (req, res) => {
         payload.num_reels,
         payload.num_boxes,
         payload.notes,
-        payload.store_code || 'primary'
+        payload.store_code || 'primary',
+        payload.proc_item_id || null,
+        req.user.username
       );
     } else if (request.type === 'outward') {
       // Payload can be single reel or box (array of reel_numbers)
@@ -179,7 +181,9 @@ router.post('/:id/edit-approve', requireApprover, async (req, res) => {
         newPayload.num_reels,
         newPayload.num_boxes,
         newPayload.notes,
-        newPayload.store_code || 'primary'
+        newPayload.store_code || 'primary',
+        newPayload.proc_item_id || null,
+        req.user.username
       );
     } else if (request.type === 'outward') {
       const reelNumbers = newPayload.reel_numbers || [newPayload.reel_number];

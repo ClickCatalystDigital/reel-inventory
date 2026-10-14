@@ -39,10 +39,11 @@ interface ReelLookup {
   quantity: number;
   store_code: string;
   box_number: string | null;
+  reserved_po_item_id?: number | null;
 }
 interface BoxLookup {
   box: { box_number: string; store_code: string };
-  reels: { reel_number: string; item_code: string; quantity: number; store_code: string; status: string }[];
+  reels: { reel_number: string; item_code: string; quantity: number; store_code: string; status: string; reserved_po_item_id?: number | null }[];
 }
 interface Transfer {
   id: number;
@@ -220,6 +221,11 @@ export default function TransferPage() {
         showToast(`${reelNumber} is at ${storeLabel(reel.store_code)}, not ${storeLabel(fromStore)}`, "error");
         return;
       }
+      if (reel.reserved_po_item_id) {
+        playErrorSound();
+        showToast(`${reelNumber} is reserved for a customer PO — release it on Orders first`, "error");
+        return;
+      }
       setCart((prev) => [
         { reel_number: reel.reel_number, item_code: reel.item_code, quantity: reel.quantity, box_number: reel.box_number || null },
         ...prev,
@@ -248,6 +254,10 @@ export default function TransferPage() {
       }
       if (reel.store_code !== fromStore) {
         newSkipped.push({ reel_number: reel.reel_number, reason: `At ${storeLabel(reel.store_code)}` });
+        continue;
+      }
+      if (reel.reserved_po_item_id) {
+        newSkipped.push({ reel_number: reel.reel_number, reason: "Reserved for a customer PO" });
         continue;
       }
       if (cartReelsRef.current.has(reel.reel_number)) continue;

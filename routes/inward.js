@@ -3,6 +3,7 @@
 const express = require('express');
 const brand = require('../utils/brand');
 const router = express.Router();
+const { procItemFor } = require('../utils/procurement');
 const { queryAll, queryOne, execute, batch, nowIST } = require('../db/schema');
 const { executeInward } = require('../utils/inventory');
 const { isGateApprovedToday } = require('../utils/dailyGate');
@@ -59,6 +60,8 @@ const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 router.post('/', ah(async (req, res) => {
   const { item_code, num_reels, num_boxes, notes, store_code } = req.body;
+  // Optional: received against a procurement (China) order item — see utils/procurement.js.
+  const procItemId = Number(req.body.proc_item_id) || null;
   if (!item_code || !num_reels || num_reels < 1) {
     return res.status(400).json({ error: 'item_code and num_reels (>= 1) are required' });
   }
@@ -74,10 +77,15 @@ router.post('/', ah(async (req, res) => {
     return res.status(403).json({ error: `Today's ${brand.partner} outward summary must be approved before making changes` });
   }
 
+  if (procItemId) {
+    if (GELCO_ROLES.includes(userRole)) return res.status(403).json({ error: 'Not authorized' });
+    try { await procItemFor(procItemId, item_code); } catch (err) { return res.status(400).json({ error: err.message }); }
+  }
+
   // Managers and admins bypass approval
   if (APPROVER_ROLES.includes(userRole)) {
     try {
-      const result = await executeInward(item_code, num_reels, num_boxes, notes, storeCode);
+      const result = await executeInward(item_code, num_reels, num_boxes, notes, storeCode, procItemId, username);
       const totalBoxes = Number(num_boxes) > 0 ? Number(num_boxes) : 0;
       return res.json({
         success: true,
@@ -98,7 +106,7 @@ router.post('/', ah(async (req, res) => {
 
   // Staff: save as pending request
   try {
-    const payload = JSON.stringify({ item_code, num_reels, num_boxes: num_boxes || 0, notes: notes || null, store_code: storeCode });
+    const payload = JSON.stringify({ item_code, num_reels, num_boxes: num_boxes || 0, notes: notes || null, store_code: storeCode, proc_item_id: procItemId });
     await execute(
       'INSERT INTO requests (type, status, created_by, created_at, payload) VALUES (?, ?, ?, ?, ?)',
       ['inward', 'pending', username, nowIST(), payload]

@@ -15,6 +15,13 @@ router.use((req, res, next) => {
   next();
 });
 
+// Statements that undo what this app hangs off customer PO lines: reservations and procurement allocations.
+// lineSql selects the affected crm_po_items ids.
+const releaseLines = (lineSql, args) => [
+  [`UPDATE reels SET reserved_po_item_id = NULL, reserved_at = NULL, reserved_by = NULL WHERE reserved_po_item_id IN (${lineSql})`, args],
+  [`DELETE FROM procurement_allocations WHERE po_item_id IN (${lineSql})`, args],
+];
+
 async function nextSysPONumber() {
   // Sync counter above the highest existing SYS-N in case of drift from failed deletes
   const maxRow = await queryOne(
@@ -445,11 +452,9 @@ router.delete('/:id/items/:itemId', ah(async (req, res) => {
   if (['dispatched', 'cancelled'].includes(po.status))
     return res.status(400).json({ error: `Cannot modify a ${po.status} PO` });
 
-  const r = await execute(
-    'DELETE FROM crm_po_items WHERE id = ? AND po_id = ?',
-    [req.params.itemId, req.params.id]
-  );
-  if (!r.changes) return res.status(404).json({ error: 'Item not found' });
+  const line = await queryOne('SELECT id FROM crm_po_items WHERE id = ? AND po_id = ?', [req.params.itemId, req.params.id]);
+  if (!line) return res.status(404).json({ error: 'Item not found' });
+  await batch([...releaseLines('?', [line.id]), ['DELETE FROM crm_po_items WHERE id = ?', [line.id]]]);
   res.json({ success: true });
 }));
 
@@ -564,10 +569,10 @@ router.post('/:id/cancel', ah(async (req, res) => {
   if (po.status === 'dispatched')
     return res.status(400).json({ error: 'Cannot cancel a dispatched PO' });
 
-  await execute(
-    "UPDATE crm_purchase_orders SET status = 'cancelled', updated_at = ? WHERE id = ?",
-    [nowIST(), req.params.id]
-  );
+  await batch([
+    ["UPDATE crm_purchase_orders SET status = 'cancelled', updated_at = ? WHERE id = ?", [nowIST(), req.params.id]],
+    ...releaseLines('SELECT id FROM crm_po_items WHERE po_id = ?', [req.params.id]),
+  ]);
   res.json({ success: true, message: 'PO cancelled' });
 }));
 
@@ -586,6 +591,7 @@ router.delete('/:id', ah(async (req, res) => {
     const docs = await queryAll('SELECT r2_key FROM po_docs WHERE po_id = ?', [req.params.id]);
     await batch([
       ...(po.po_number ? [["DELETE FROM crm_tasks WHERE title LIKE ? AND status = 'open'", [`%PO ${po.po_number}%`]]] : []),
+      ...releaseLines('SELECT id FROM crm_po_items WHERE po_id = ?', [req.params.id]),
       ['DELETE FROM crm_po_items WHERE po_id = ?', [req.params.id]],
       ['DELETE FROM po_stages WHERE po_id = ?', [req.params.id]],
       ['DELETE FROM po_dispatches WHERE po_id = ?', [req.params.id]],

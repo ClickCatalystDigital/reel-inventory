@@ -16,10 +16,14 @@ const APPROVER_ROLES = ['admin', 'manager', 'gelco_manager', 'gelco_worker'];
 const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 
 router.get('/reel/:reelNumber', async (req, res) => {
+  // reserved_po_* say which customer PO this reel is set aside for (Outward warns when shipping it elsewhere).
   const reel = await queryOne(`
-    SELECT r.*, i.description 
-    FROM reels r 
-    JOIN items i ON r.item_code = i.item_code 
+    SELECT r.*, i.description, rp.po_id AS reserved_po_id, rpo.po_number AS reserved_po_number, rco.name AS reserved_for
+    FROM reels r
+    JOIN items i ON r.item_code = i.item_code
+    LEFT JOIN crm_po_items rp ON rp.id = r.reserved_po_item_id
+    LEFT JOIN crm_purchase_orders rpo ON rpo.id = rp.po_id
+    LEFT JOIN crm_companies rco ON rco.id = rpo.company_id
     WHERE r.reel_number = ?
   `, [req.params.reelNumber]);
 
@@ -217,6 +221,21 @@ router.post('/grouped', async (req, res) => {
     if (reel.status === 'Outwarded') return res.status(400).json({ error: `Reel ${reel_number} already outwarded` });
     if (isGelco && reel.store_code !== 'secondary') {
       return res.status(403).json({ error: `Reel ${reel_number} belongs to a different store` });
+    }
+  }
+  // Reels reserved for a customer PO line only ship on that PO, unless an admin/manager overrides.
+  const reserved = [...found.values()].filter((r) => r.reserved_po_item_id);
+  if (reserved.length) {
+    const lines = await queryAll(`SELECT pi.id, pi.po_id, p.po_number FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id
+      WHERE pi.id IN (${reserved.map(() => '?').join(',')})`, reserved.map((r) => r.reserved_po_item_id));
+    const lineBy = Object.fromEntries(lines.map((l) => [l.id, l]));
+    const wrong = reserved.filter((r) => lineBy[r.reserved_po_item_id] && lineBy[r.reserved_po_item_id].po_id !== Number(po_id));
+    const canOverride = ['admin', 'manager'].includes(userRole) && req.body.override === true;
+    if (wrong.length && !canOverride) {
+      return res.status(409).json({
+        error: `${wrong.map((r) => `${r.reel_number} is reserved for PO ${lineBy[r.reserved_po_item_id].po_number}`).join('; ')}`,
+        reserved: wrong.map((r) => r.reel_number),
+      });
     }
   }
 

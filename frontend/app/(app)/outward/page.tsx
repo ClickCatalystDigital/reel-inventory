@@ -30,6 +30,7 @@ interface CartItem {
   description: string;
   quantity: number;
   box_number: string;
+  reserved_for?: string; // "PO PA (Alpha)" when the reel is set aside for a customer PO
 }
 interface Skipped {
   reel_number: string;
@@ -373,16 +374,17 @@ export default function OutwardPage() {
     cartReelsRef.current.add(reelNumber);
     let added = false;
     try {
-      const reel = await api<{ reel_number: string; item_code: string; description: string; quantity: number; box_number: string | null }>(
+      const reel = await api<{ reel_number: string; item_code: string; description: string; quantity: number; box_number: string | null; reserved_po_number?: string | null; reserved_for?: string | null }>(
         `/api/outward/reel/${reelNumber}`
       );
+      const reservedFor = reel.reserved_po_number ? `PO ${reel.reserved_po_number}${reel.reserved_for ? ` (${reel.reserved_for})` : ""}` : undefined;
       setCart((prev) => [
-        { reel_number: reel.reel_number, item_code: reel.item_code, description: reel.description, quantity: reel.quantity, box_number: reel.box_number || "—" },
+        { reel_number: reel.reel_number, item_code: reel.item_code, description: reel.description, quantity: reel.quantity, box_number: reel.box_number || "—", reserved_for: reservedFor },
         ...prev,
       ]);
       added = true;
       playSuccessSound();
-      showToast(`Added ${reel.reel_number}`);
+      showToast(reservedFor ? `Added ${reel.reel_number} — reserved for ${reservedFor}` : `Added ${reel.reel_number}`, reservedFor ? "error" : "success");
     } finally {
       if (!added) cartReelsRef.current.delete(reelNumber);
     }
@@ -503,23 +505,35 @@ export default function OutwardPage() {
       let successCount = 0;
       let pendingCount = 0;
       const errors: string[] = [];
+      // Reels reserved for another customer PO come back 409; admin/manager may confirm and ship anyway.
+      const send = async (item_code: string, reels: CartItem[], override: boolean) => {
+        const res = await fetch("/api/outward/grouped", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            item_code,
+            reel_numbers: reels.map((r) => r.reel_number),
+            customer_name: shipmentCustomer,
+            invoice_number: shipmentInvoice,
+            outward_type: "Full",
+            notes: notes.trim() || undefined,
+            company_id: isGelco ? null : companyId,
+            po_id: isGelco ? null : (poId ? parseInt(poId) : null),
+            store_code: storeCode,
+            override,
+          }),
+        });
+        return { status: res.status, data: await res.json().catch(() => ({})) };
+      };
+      const canOverride = user?.role === "admin" || user?.role === "manager";
       for (const [item_code, reels] of Object.entries(byItem)) {
         try {
-          const result = await api<{ pending?: boolean }>("/api/outward/grouped", {
-            method: "POST",
-            body: {
-              item_code,
-              reel_numbers: reels.map((r) => r.reel_number),
-              customer_name: shipmentCustomer,
-              invoice_number: shipmentInvoice,
-              outward_type: "Full",
-              notes: notes.trim() || undefined,
-              company_id: isGelco ? null : companyId,
-              po_id: isGelco ? null : (poId ? parseInt(poId) : null),
-              store_code: storeCode,
-            },
-          });
-          if (result.pending) pendingCount += reels.length;
+          let r = await send(item_code, reels, false);
+          if (r.status === 409 && canOverride && window.confirm(`${r.data.error}\n\nShip these reels on this shipment anyway? Their reservation is used up.`)) {
+            r = await send(item_code, reels, true);
+          }
+          if (r.status >= 400) throw new Error(r.data.error || "failed");
+          if (r.data.pending) pendingCount += reels.length;
           else successCount += reels.length;
         } catch (err) {
           errors.push(`${item_code}: ${err instanceof Error ? err.message : "failed"}`);
@@ -646,6 +660,7 @@ export default function OutwardPage() {
                   <span className="text-xs text-muted-foreground">
                     {r.item_code} &middot; {formatQty(r.quantity)} pcs &middot; {r.box_number}
                   </span>
+                  {r.reserved_for && <span className="rounded bg-warning/10 px-1.5 py-0.5 text-[10px] font-semibold text-warning">Reserved · {r.reserved_for}</span>}
                 </div>
                 <button className="px-1 text-lg font-bold text-destructive" onClick={() => removeFromCart(r.reel_number)} title="Remove">
                   ×

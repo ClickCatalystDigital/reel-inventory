@@ -12,17 +12,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 import { SearchPicker } from "@/components/SearchPicker";
 import { PoSheet } from "@/components/orders/PoSheet";
-import { StageSelect } from "@/components/orders/StageSelect";
+import { StageBadge } from "@/components/orders/StageSelect";
+import { ProcurementTab } from "@/components/orders/ProcurementTab";
 import { api } from "@/lib/api";
 import { useAuth } from "@/lib/auth";
 import { isApproverRole } from "@/lib/crm";
 import { formatDate, formatDateTime, formatQty } from "@/lib/format";
 import { showToast } from "@/lib/toast";
-import { PO_STAGES, type PoDetail } from "@/lib/po-stages";
+import { LINE_STATUSES, type PoDetail } from "@/lib/po-stages";
 
 interface PoRow {
   id: number; po_number: string; status: string; order_date: string | null; expected_dispatch_date: string | null;
-  company_name: string | null; stage: string | null; qty_ordered: number; qty_dispatched: number; doc_count: number;
+  company_name: string | null; stage: string; qty_ordered: number; qty_dispatched: number; qty_reserved: number; qty_needed: number; doc_count: number;
 }
 interface LotRow {
   id: number; po_id: number; po_number: string; company_name: string | null; item_code: string; description: string | null;
@@ -61,14 +62,14 @@ export default function OrdersPage() {
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!lot?.po_id) return setLotLines([]);
-    api<PoDetail>(`/api/orders/${lot.po_id}`).then((d) => setLotLines(d.lines)).catch(() => setLotLines([]));
+    api<PoDetail>(`/api/orders/${lot.po_id}`).then((d) => setLotLines(d.lines.filter((l): l is typeof l & { item_code: string } => !!l.item_code))).catch(() => setLotLines([]));
   }, [lot?.po_id]);
 
   const shownPos = useMemo(() => {
     const t = q.trim().toLowerCase();
     return pos.filter(
       (p) =>
-        (stageFilter === "all" || (p.stage ?? "none") === stageFilter) &&
+        (stageFilter === "all" || p.stage === stageFilter) &&
         (!t || p.po_number.toLowerCase().includes(t) || (p.company_name ?? "").toLowerCase().includes(t))
     );
   }, [pos, q, stageFilter]);
@@ -116,6 +117,7 @@ export default function OrdersPage() {
         <TabsList>
           <TabsTrigger value="pos">POs</TabsTrigger>
           <TabsTrigger value="dispatch">Dispatch</TabsTrigger>
+          <TabsTrigger value="procurement">Procurement</TabsTrigger>
         </TabsList>
 
         <TabsContent value="pos">
@@ -129,8 +131,7 @@ export default function OrdersPage() {
                 aria-label="Filter by stage"
               >
                 <option value="all">All stages</option>
-                <option value="none">Not set</option>
-                {PO_STAGES.map((s) => <option key={s} value={s}>{s}</option>)}
+                {LINE_STATUSES.map((s) => <option key={s} value={s}>{s}</option>)}
               </select>
             </div>
             <DataTable
@@ -144,7 +145,8 @@ export default function OrdersPage() {
                 { label: "Ordered", render: (p) => formatDate(p.order_date), className: "hidden md:table-cell" },
                 { label: "Due", render: (p) => formatDate(p.expected_dispatch_date), className: "hidden md:table-cell" },
                 { label: "CRM", render: (p) => <Badge variant="outline">{p.status}</Badge>, className: "hidden lg:table-cell" },
-                { label: "Stage", render: (p) => <StageSelect poId={p.id} stage={p.stage} canEdit={canEdit} onChanged={reload} /> },
+                { label: "Status", render: (p) => <StageBadge stage={p.stage} /> },
+                { label: "Needed", render: (p) => (p.qty_needed ? <span className="font-semibold text-warning">{formatQty(p.qty_needed)}</span> : "—"), className: "hidden md:table-cell" },
                 { label: "Dispatched", render: (p) => `${formatQty(p.qty_dispatched)} / ${formatQty(p.qty_ordered)}`, className: "hidden sm:table-cell" },
                 { label: "Docs", render: (p) => p.doc_count || "—", className: "hidden sm:table-cell" },
               ]}
@@ -171,7 +173,7 @@ export default function OrdersPage() {
                 { label: "Item", render: (d) => <strong>{d.item_code}</strong> },
                 { label: "Qty", render: (d) => formatQty(d.quantity) },
                 { label: "PO", render: (d) => poLink(d.po_id, d.po_number) },
-                { label: "Status", render: (d) => d.stage ?? <span className="text-muted-foreground">Not set</span> },
+                { label: "Status", render: (d) => <StageBadge stage={d.stage ?? "Not planned"} /> },
                 { label: "Dispatch Date", render: (d) => (d.dispatch_date ? formatDate(d.dispatch_date) : "—") },
                 ...(canEdit
                   ? [{
@@ -191,6 +193,10 @@ export default function OrdersPage() {
               ]}
             />
           </Card>
+        </TabsContent>
+
+        <TabsContent value="procurement">
+          <ProcurementTab canEdit={canEdit} onOpenPo={setOpenPo} />
         </TabsContent>
       </Tabs>
 

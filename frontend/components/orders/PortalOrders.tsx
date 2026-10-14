@@ -7,11 +7,13 @@ import { Button } from "@/components/ui/button";
 import { api } from "@/lib/api";
 import { formatDate, formatQty } from "@/lib/format";
 import { docTypeLabel, type PoDetail } from "@/lib/po-stages";
-import { StageSteps } from "./StageSelect";
+import { StageBadge, StageSteps } from "./StageSelect";
 
-// Customer portal: the caller's own POs (server scopes by user_companies) with stage, lots and documents.
+// Customer portal: the caller's own POs (server scopes by user_companies): status per PO and per line
+// (tap a line for its steps), planned shipments and documents.
 export function PortalOrders() {
   const [pos, setPos] = useState<PoDetail[] | null>(null);
+  const [open, setOpen] = useState<number | null>(null); // line showing its stage steps
   useEffect(() => {
     api<PoDetail[]>("/api/portal/orders").then(setPos).catch(() => setPos([]));
   }, []);
@@ -30,38 +32,46 @@ export function PortalOrders() {
                 {[po.order_date && `Ordered ${formatDate(po.order_date)}`, po.expected_dispatch_date && `Expected ${formatDate(po.expected_dispatch_date)}`].filter(Boolean).join(" · ")}
               </div>
             </div>
-            <div className="text-sm font-semibold">{po.stage ?? "Received"}</div>
+            <StageBadge stage={po.stage} />
           </div>
 
           <StageSteps stage={po.stage} />
 
-          <div className="grid gap-4 md:grid-cols-2">
-            <div className="space-y-1.5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Items</div>
-              {po.lines.map((l) => {
-                const sent = po.dispatches.filter((d) => d.item_code === l.item_code).reduce((s, d) => s + d.quantity, 0);
-                return (
-                  <div key={l.id} className="flex justify-between gap-3 text-sm">
-                    <span><strong>{l.item_code}</strong>{l.description && <span className="text-muted-foreground"> · {l.description}</span>}</span>
-                    <span className="shrink-0 text-muted-foreground">{formatQty(sent)} / {formatQty(l.quantity_ordered)}</span>
+          <div className="divide-y rounded-lg border">
+            {po.lines.map((l) => {
+              const pct = l.ordered ? Math.min(100, Math.round((l.dispatched / l.ordered) * 100)) : 0;
+              const isOpen = open === l.id;
+              return (
+                <button key={l.id} onClick={() => setOpen(isOpen ? null : l.id)} className="block w-full space-y-2 p-3 text-left hover:bg-muted/30">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-sm font-semibold">{l.item_code}</div>
+                      {l.description && <div className="truncate text-xs text-muted-foreground">{l.description}</div>}
+                    </div>
+                    <StageBadge stage={l.status} />
                   </div>
-                );
-              })}
-            </div>
-            <div className="space-y-1.5">
-              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Dispatches</div>
-              {po.dispatches.length === 0 ? (
-                <p className="text-sm text-muted-foreground">None yet</p>
-              ) : (
-                po.dispatches.map((d) => (
-                  <div key={d.id} className="flex justify-between gap-3 text-sm">
-                    <span><strong>{d.item_code}</strong> × {formatQty(d.quantity)}</span>
-                    <span className="text-muted-foreground">{d.dispatch_date ? formatDate(d.dispatch_date) : "Date TBC"}</span>
+                  <div className="h-1 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-foreground" style={{ width: `${pct}%` }} /></div>
+                  <div className="flex flex-wrap justify-between gap-x-4 text-[11px] text-muted-foreground">
+                    <span>{formatQty(l.dispatched)} of {formatQty(l.ordered)} dispatched{l.reserved > 0 && l.status !== "Completed" ? ` · ${formatQty(l.reserved)} ready` : ""}</span>
+                    {l.expected_date && !["Ready", "Dispatch", "Completed"].includes(l.status) && <span>Expected {formatDate(l.expected_date)}</span>}
                   </div>
-                ))
-              )}
-            </div>
+                  {isOpen && <div className="pt-1"><StageSteps stage={l.status} /></div>}
+                </button>
+              );
+            })}
           </div>
+
+          {po.dispatches.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Planned shipments</div>
+              {po.dispatches.map((d) => (
+                <div key={d.id} className="flex justify-between gap-3 text-sm">
+                  <span><strong>{d.item_code}</strong> × {formatQty(d.quantity)}</span>
+                  <span className="text-muted-foreground">{d.dispatch_date ? formatDate(d.dispatch_date) : "Date TBC"}</span>
+                </div>
+              ))}
+            </div>
+          )}
 
           {po.docs.length > 0 && (
             <div className="flex flex-wrap gap-2">

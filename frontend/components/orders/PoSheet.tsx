@@ -13,7 +13,7 @@ import { showToast } from "@/lib/toast";
 import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import { PO_DOC_TYPES, docTypeLabel, type PoDetail } from "@/lib/po-stages";
-import { StageSelect } from "./StageSelect";
+import { StageBadge } from "./StageSelect";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -74,6 +74,33 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
     }
   }
 
+  async function reserve(lineId: number) {
+    if (!po) return;
+    setBusy(true);
+    try {
+      const r = await api<{ message: string }>(`/api/orders/${po.id}/lines/${lineId}/reserve`, { method: "POST", body: {} });
+      showToast(r.message, "success");
+      changed();
+    } catch {
+      // api() already toasted
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function release(lineId: number) {
+    if (!po || !confirm("Release the reels reserved for this line? They become free stock again.")) return;
+    setBusy(true);
+    try {
+      const r = await api<{ message: string }>(`/api/orders/${po.id}/lines/${lineId}/release`, { method: "POST", body: {} });
+      showToast(r.message, "success");
+      changed();
+    } catch {
+      // api() already toasted
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function deleteDoc(id: number) {
     if (!confirm("Delete this document?")) return;
     try {
@@ -84,7 +111,6 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
     }
   }
 
-  const shipped = (code: string) => po?.dispatches.filter((d) => d.item_code === code).reduce((s, d) => s + d.quantity, 0) ?? 0;
 
   return (
     <Sheet open={poId != null} onOpenChange={(o) => !o && onClose()}>
@@ -101,14 +127,12 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
             <Skeleton className="h-64 w-full" />
           ) : (
             <>
-              <Section title="Stage">
+              <Section title="Status">
                 <div className="flex flex-wrap items-center gap-2">
-                  <StageSelect poId={po.id} stage={po.stage} canEdit={canEdit} onChanged={changed} />
+                  <StageBadge stage={po.stage} />
                   {po.status && <Badge variant="outline">CRM: {po.status}</Badge>}
                 </div>
-                {po.stage_updated_at && (
-                  <p className="text-xs text-muted-foreground">Updated {formatDateTime(po.stage_updated_at)}{po.stage_updated_by && ` by ${po.stage_updated_by}`}</p>
-                )}
+                <p className="text-xs text-muted-foreground">Worked out from each line: reserved stock, procurement orders and shipments.</p>
               </Section>
 
               <Section title="Items">
@@ -116,20 +140,45 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
                   <p className="text-sm text-muted-foreground">No line items</p>
                 ) : (
                   <div className="divide-y rounded-md border text-sm">
-                    {po.lines.map((l) => (
-                      <div key={l.id} className="flex items-start justify-between gap-3 p-2.5">
-                        <div className="min-w-0">
-                          <div className="font-semibold">{l.item_code}</div>
-                          {l.description && <div className="truncate text-xs text-muted-foreground">{l.description}</div>}
+                    {po.lines.map((l) => {
+                      const left = l.ordered - l.dispatched - l.reserved;
+                      return (
+                        <div key={l.id} className="space-y-2 p-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div className="min-w-0">
+                              <div className="font-semibold">{l.item_code || "Unassigned item"}</div>
+                              {l.description && <div className="truncate text-xs text-muted-foreground">{l.description}</div>}
+                            </div>
+                            <StageBadge stage={l.status} />
+                          </div>
+                          <div className="grid grid-cols-5 gap-1 text-center text-[11px]">
+                            {[["Ordered", l.ordered], ["Dispatched", l.dispatched], ["Reserved", l.reserved], ["In procurement", l.in_procurement], ["Still needed", l.needed]].map(([k, v]) => (
+                              <div key={k as string} className="rounded bg-muted/40 px-1 py-1.5">
+                                <div className={k === "Still needed" && (v as number) > 0 ? "font-bold text-warning" : "font-semibold"}>{formatQty(v as number)}</div>
+                                <div className="text-muted-foreground">{k}</div>
+                              </div>
+                            ))}
+                          </div>
+                          {(l.procurement || []).filter((p) => p.qty > 0 || p.stage !== "Received").map((p) => (
+                            <div key={p.proc_item_id} className="flex items-center justify-between text-xs text-muted-foreground">
+                              <span>{p.number} · {formatQty(p.qty)} awaited{p.expected_date ? ` · due ${formatDate(p.expected_date)}` : ""}</span>
+                              <StageBadge stage={p.stage} />
+                            </div>
+                          ))}
+                          {canEdit && l.item_code && (
+                            <div className="flex flex-wrap items-center gap-2 text-xs">
+                              <span className="text-muted-foreground">Free at LS Tech Stores: <strong className="text-foreground">{formatQty(l.free_stock ?? 0)}</strong></span>
+                              {left > 0 && (l.free_stock ?? 0) > 0 && (
+                                <Button size="sm" className="ml-auto h-7" disabled={busy} onClick={() => reserve(l.id)}>Reserve</Button>
+                              )}
+                              {l.reserved > 0 && (
+                                <Button size="sm" variant="outline" className={cn("h-7", !(left > 0 && (l.free_stock ?? 0) > 0) && "ml-auto")} disabled={busy} onClick={() => release(l.id)}>Release</Button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        <div className="shrink-0 text-right text-xs">
-                          <div>Ordered <strong>{formatQty(l.quantity_ordered)}</strong></div>
-                          <div className="text-muted-foreground">Dispatched {formatQty(shipped(l.item_code))}</div>
-                          {/* ponytail: "Ready – Reserved" waits on a stock reservation design; this is LS Tech Stores' free stock only */}
-                          <div className="text-muted-foreground">Available {formatQty(l.in_stock ?? 0)}</div>
-                        </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </Section>

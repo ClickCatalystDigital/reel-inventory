@@ -81,6 +81,38 @@ async function initDB() {
     updated_at TEXT
   )`);
   await connect().execute('CREATE INDEX IF NOT EXISTS idx_po_dispatches_po ON po_dispatches(po_id)');
+  // Procurement (China) orders: items have their own stage; allocations tie an item's qty to the customer PO
+  // lines waiting for it (po_item_id NULL = bought for LS stock). routes/procurement.js.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS procurement_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    number TEXT UNIQUE NOT NULL,
+    supplier TEXT,
+    status TEXT NOT NULL DEFAULT 'draft',
+    expected_date TEXT,
+    notes TEXT,
+    created_by TEXT, created_at TEXT, updated_by TEXT, updated_at TEXT
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS procurement_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proc_id INTEGER NOT NULL,
+    item_code TEXT NOT NULL,
+    qty_ordered INTEGER NOT NULL,
+    qty_received INTEGER NOT NULL DEFAULT 0,
+    stage TEXT NOT NULL DEFAULT 'EQ',
+    stage_updated_by TEXT, stage_updated_at TEXT,
+    unit_cost REAL, currency TEXT
+  )`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS procurement_allocations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    proc_item_id INTEGER NOT NULL,
+    po_item_id INTEGER,
+    qty INTEGER NOT NULL
+  )`);
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_proc_items_proc ON procurement_items(proc_id)');
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_proc_alloc_item ON procurement_allocations(proc_item_id)');
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_proc_alloc_po_item ON procurement_allocations(po_item_id)');
+  try { await connect().execute('ALTER TABLE items ADD COLUMN supplier TEXT'); } catch (e) { /* exists */ }
+
   // Gelco tax invoices: one per Gelco shipment, numbered by the shipment's invoice_number (counters.invoice,
   // the series Tally uses). Quantities are never stored — they're read from that shipment's outwards — only
   // what a person decides per item: printed description, HSN, rate, GST %.
@@ -213,6 +245,11 @@ async function initDB() {
   } catch (e) {
     // Column already exists — safe to ignore
   }
+  // Reservation of a whole reel for one customer PO line (crm_po_items.id) — utils/poProgress.js.
+  for (const col of ['reserved_po_item_id INTEGER', 'reserved_at TEXT', 'reserved_by TEXT']) {
+    try { await connect().execute(`ALTER TABLE reels ADD COLUMN ${col}`); } catch (e) { /* exists */ }
+  }
+  await connect().execute('CREATE INDEX IF NOT EXISTS idx_reels_reserved ON reels(reserved_po_item_id)');
   // Invoice details (items.invoice_name/hsn_code/sale_rate/gst_rate) frozen onto each reel when it moves to the partner store (utils/inventory.js), so its invoice
   // uses the price agreed at transfer time even if the item's default changes later.
   for (const col of ['inv_desc TEXT', 'inv_hsn TEXT', 'inv_rate REAL', 'inv_gst REAL']) {
@@ -329,6 +366,7 @@ async function initDB() {
   }
   // SYS-<n> PO numbers (routes/po.js nextSysPONumber); ls_crm created this row on the shared DB, a fresh DB needs it.
   await connect().execute("INSERT OR IGNORE INTO counters (name, value) VALUES ('po_sys', 0)");
+  await connect().execute("INSERT OR IGNORE INTO counters (name, value) VALUES ('proc', 0)"); // PRC-<n> procurement orders
 
   // Seed default admin user if no users exist
   const userCount = await connect().execute("SELECT COUNT(*) as count FROM users");
