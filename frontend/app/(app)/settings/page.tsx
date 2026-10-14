@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { Database, UserPlus, Users } from "lucide-react";
+import { BookOpen, Database, UserPlus, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
@@ -19,7 +19,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { SearchPicker } from "@/components/SearchPicker";
 import { parseIds, type Company } from "@/lib/catalog";
-import { BRAND } from "@/lib/brand";
+import { BRAND, DEMO } from "@/lib/brand";
 
 // Mirrors routes/settings.js's validRoles allowlist.
 const ROLE_OPTIONS = [
@@ -108,9 +108,19 @@ export default function SettingsPage() {
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="text-xl font-bold">Settings</h1>
-        <p className="text-sm text-muted-foreground">Storage, the LS AI assistant, and the people who use the app</p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold">Settings</h1>
+          <p className="text-sm text-muted-foreground">Storage, the LS AI assistant, and the people who use the app</p>
+        </div>
+        {!DEMO && (
+          <Button asChild variant="outline" size="sm">
+            <a href="/ls-tech-guide.html" target="_blank" rel="noopener">
+              <BookOpen className="size-4" />
+              Working guide · what changed
+            </a>
+          </Button>
+        )}
       </div>
 
       <Tabs value={active} onValueChange={selectTab} orientation="vertical" className="flex-col gap-4 md:flex-row md:items-start">

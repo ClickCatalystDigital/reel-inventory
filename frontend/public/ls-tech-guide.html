@@ -1,0 +1,235 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>LS Tech Working Guide</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;700;800&family=Source+Sans+3:wght@400;600;700&family=IBM+Plex+Mono:wght@500&display=swap">
+<style>
+/* Layout: a left index of tasks beside one reading column; each task card = what it's for, steps, who can do it. */
+:root {
+  --bg: #f6f7f8; --surface: #ffffff; --ink: #16191d; --muted: #5d6670; --line: #dde1e5;
+  --accent: #0f6b5c; --accent-soft: #e3f1ee; --warn: #9a5b00; --warn-soft: #fbf1df;
+  --display: "Archivo", "Helvetica Neue", Arial, sans-serif;
+  --body: "Source Sans 3", "Segoe UI", system-ui, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #121518; --surface: #1a1e22; --ink: #e8ecef; --muted: #9aa4ad; --line: #2c3238;
+  --accent: #5cc4b0; --accent-soft: #17302b; --warn: #e3b25e; --warn-soft: #2e2516; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #121518; --surface: #1a1e22; --ink: #e8ecef; --muted: #9aa4ad; --line: #2c3238;
+  --accent: #5cc4b0; --accent-soft: #17302b; --warn: #e3b25e; --warn-soft: #2e2516; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 17px/1.6 var(--body); padding-inline: 16px; padding-block: 0 64px; margin: 0; }
+.wrap { max-width: 1120px; margin: 0 auto; display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 48px; }
+header { max-width: 1120px; margin: 0 auto; padding-block: 48px 32px; }
+.back { display: inline-block; font: 500 13px/1 var(--mono); color: var(--muted); text-decoration: none; margin-bottom: 18px; }
+.back:hover, .back:focus-visible { color: var(--accent); }
+.eyebrow { font: 500 12px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+h1 { font: 800 clamp(30px, 5vw, 48px)/1.08 var(--display); margin: 12px 0 14px; text-wrap: balance; letter-spacing: -.01em; }
+.lede { max-width: 64ch; color: var(--muted); margin: 0; }
+nav { position: sticky; top: calc(env(safe-area-inset-top, 0px) + 24px); align-self: start; font-size: 15px; }
+nav p { font: 500 11px/1 var(--mono); letter-spacing: .12em; text-transform: uppercase; color: var(--muted); margin: 0 0 10px; }
+nav a { display: block; padding: 5px 0 5px 12px; border-left: 2px solid var(--line); color: var(--ink); text-decoration: none; }
+nav a:hover, nav a:focus-visible { border-color: var(--accent); color: var(--accent); outline: none; }
+main { min-width: 0; display: grid; gap: 28px; }
+section { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 26px 28px; scroll-margin-top: 20px; }
+h2 { font: 700 24px/1.2 var(--display); margin: 0 0 6px; text-wrap: balance; }
+h3 { font: 700 15px/1.3 var(--display); margin: 22px 0 8px; letter-spacing: .01em; }
+.where { font: 500 13px/1.4 var(--mono); color: var(--accent); margin: 0 0 14px; }
+p { margin: 0 0 12px; max-width: 68ch; }
+ol, ul { margin: 0 0 12px; padding-left: 1.3em; max-width: 68ch; }
+li { margin: 4px 0; }
+b { font-weight: 700; }
+.ui { font: 500 .86em var(--mono); background: var(--accent-soft); color: var(--accent); padding: 1px 6px; border-radius: 4px; white-space: nowrap; }
+.note { background: var(--warn-soft); border-left: 3px solid var(--warn); padding: 12px 16px; border-radius: 0 6px 6px 0; margin: 14px 0 4px; }
+.note b { color: var(--warn); }
+.who { font-size: 14px; color: var(--muted); border-top: 1px solid var(--line); padding-top: 10px; margin-top: 16px; }
+.stages { display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 14px; padding: 0; list-style: none; }
+.stages li { font: 500 12.5px/1 var(--mono); padding: 7px 10px; border: 1px solid var(--line); border-radius: 999px; margin: 0; }
+.stages li.end { background: var(--accent); color: var(--surface); border-color: var(--accent); }
+.tbl { overflow-x: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15px; min-width: 560px; }
+th, td { text-align: left; padding: 9px 10px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { font: 700 12px/1.3 var(--display); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+td:first-child { font-weight: 600; }
+.yes { color: var(--accent); font-weight: 700; }
+.no { color: var(--muted); }
+@media (max-width: 860px) { .wrap { grid-template-columns: 1fr; gap: 24px; } nav { position: static; } section { padding: 20px 18px; } }
+@media (prefers-reduced-motion: no-preference) { html { scroll-behavior: smooth; } }
+</style>
+</head>
+<body>
+<header>
+  <a class="back" href="/">← Back to the app</a>
+  <div class="eyebrow">lstechnologies.in · updated 14 Oct 2026</div>
+  <h1>How to use the system, after the October update</h1>
+  <p class="lede">What changed and how to do each everyday task: customer orders, reserving stock, supplier procurement, receiving goods, Gelco transfers and invoices, documents and finance. Each section says where to find it and who can do it.</p>
+</header>
+
+<div class="wrap">
+  <nav aria-label="Sections">
+    <p>Tasks</p>
+    <a href="#start">Before you start</a>
+    <a href="#orders">Customer orders</a>
+    <a href="#reserve">Reserving stock</a>
+    <a href="#procure">Procurement orders</a>
+    <a href="#receive">Receiving goods</a>
+    <a href="#outward">Shipping reserved reels</a>
+    <a href="#gelco">Gelco transfers &amp; invoices</a>
+    <a href="#docs">Docs</a>
+    <a href="#finance">Finance</a>
+    <a href="#portal">Customer portal</a>
+    <a href="#roles">Who can do what</a>
+  </nav>
+
+  <main>
+    <section id="start">
+      <h2>Before you start</h2>
+      <p class="where">One-time setup for admins and managers</p>
+      <ol>
+        <li><b>Set invoice details for items you send to Gelco.</b> Each item needs a rate, an HSN code and the description to print on the invoice. You can set them on the <span class="ui">Transfer</span> page the first time you move the item to Gelco Stores, or later in <span class="ui">Docs → Sales</span>.</li>
+        <li><b>Check that the Tally agent on the office PC is running.</b> Finance shows Tally's data; the latest sales voucher received is from 25 Jun 2026.</li>
+        <li><b>Reserve stock for open POs.</b> Open each customer PO on <span class="ui">Orders</span> and press <span class="ui">Reserve</span> where free stock exists, so what's still short shows up for procurement.</li>
+      </ol>
+    </section>
+
+    <section id="orders">
+      <h2>Customer orders</h2>
+      <p class="where">Orders → POs</p>
+      <p>Every customer PO now shows a status worked out from its lines. Nobody sets it by hand any more. Click a PO number to open its overlay.</p>
+      <p>Each line shows five figures: <b>Ordered</b>, <b>Dispatched</b> (from real outwards on that PO), <b>Reserved</b> (reels set aside for it), <b>In procurement</b> (on a supplier order, not yet arrived) and <b>Still needed</b>.</p>
+      <h3>Line statuses, least to most advanced</h3>
+      <ul class="stages" aria-label="Line statuses">
+        <li>Not planned</li><li>EQ</li><li>RM Procurement</li><li>Under Manufacturing</li><li>Under QC</li><li>In Transit</li><li>Ready</li><li>Dispatch</li><li class="end">Completed</li>
+      </ul>
+      <p><b>Ready</b> means reserved stock covers what's left to ship. <b>Dispatch</b> means part has shipped and the rest is reserved. A PO's status is its least advanced line.</p>
+      <p>The <span class="ui">Dispatch</span> tab is still there for <b>planned</b> shipment dates. Actual dispatched quantities come from Outward.</p>
+      <p class="who">View: admin, manager, staff. Reserve, release and dispatch rows: admin and manager.</p>
+    </section>
+
+    <section id="reserve">
+      <h2>Reserving stock for a PO</h2>
+      <p class="where">Orders → open a PO → Items</p>
+      <ol>
+        <li>Each line shows <b>Free at LS Tech Stores</b>: in stock, not reserved for anyone. Gelco Stores stock never counts.</li>
+        <li>Press <span class="ui">Reserve</span>. Whole reels are set aside, oldest stock first, until the line is covered. The last reel may cover a little more than needed.</li>
+        <li>Press <span class="ui">Release</span> to make the reels free stock again.</li>
+      </ol>
+      <p>Reserved reels are protected: Outward warns before shipping one to a different customer, and Transfer will not move one to Gelco. Cancelling or deleting a PO releases its reels automatically.</p>
+      <p class="who">Admin and manager.</p>
+    </section>
+
+    <section id="procure">
+      <h2>Procurement orders</h2>
+      <p class="where">Orders → Procurement</p>
+      <h3>Create an order from what's short</h3>
+      <ol>
+        <li>Open <span class="ui">To procure</span>. It lists every item open POs still need after reservations, added up across all POs. Click an item to see which POs are waiting.</li>
+        <li>If an item has free stock, reserve it on the PO first.</li>
+        <li>Tick the items to buy and press <span class="ui">Create draft order</span>.</li>
+        <li>Enter the supplier, the expected arrival date and, if you like, a unit cost and currency. The quantity starts at what the POs need. Raise it to buy extra for LS stock, or add other items for stock only.</li>
+        <li>Press <span class="ui">Create draft</span>. When you've placed the order with the supplier, open it and press <span class="ui">Mark ordered</span>.</li>
+      </ol>
+      <h3>Update progress per item</h3>
+      <p>Open the order from <span class="ui">Procurement orders</span> and change each item's stage as it progresses. The customer PO lines waiting on that item move to the same status, on Orders and on the customer portal.</p>
+      <ul class="stages" aria-label="Procurement stages">
+        <li>EQ</li><li>RM Procurement</li><li>Under Manufacturing</li><li>Under QC</li><li>In Transit</li><li class="end">Received</li>
+      </ul>
+      <p><b>Received</b> is set automatically when the goods are inwarded against the order. An order can be cancelled until anything on it has arrived; the waiting POs go back to "Not planned".</p>
+      <p class="who">View: admin, manager, staff. Create, edit and change stages: admin and manager.</p>
+    </section>
+
+    <section id="receive">
+      <h2>Receiving goods against an order</h2>
+      <p class="where">Inward</p>
+      <ol>
+        <li>Choose the item as usual. If an open procurement order includes it, an <span class="ui">Against procurement order</span> box appears.</li>
+        <li>Pick the order, enter the reels and submit.</li>
+      </ol>
+      <p>The new reels go into LS Tech Stores and are reserved to the waiting POs, earliest due date first. Anything left over is free stock. When the full quantity has arrived the item is marked Received, and when every item has, the order closes.</p>
+      <p>Staff inwards still go for approval; the reservation happens when a manager approves.</p>
+    </section>
+
+    <section id="outward">
+      <h2>Shipping reserved reels</h2>
+      <p class="where">Outward</p>
+      <p>A reserved reel shows <b>Reserved · PO …</b> in the cart. Shipping it on its own PO is normal and completes that line.</p>
+      <p>If you ship it on a different PO, the system stops and names the PO it's reserved for. Admins and managers can confirm and ship anyway; the reservation is used up.</p>
+    </section>
+
+    <section id="gelco">
+      <h2>Gelco transfers and invoices</h2>
+      <p class="where">Transfer · Outward · Docs → Sales</p>
+      <h3>Transferring to Gelco Stores</h3>
+      <p>When the destination is Gelco Stores, the Transfer page shows each item's invoice details. Every item needs a rate and an HSN code before it can move; admins and managers can fill missing ones right there. The details are saved on each reel at that moment, so a later price change does not affect stock already at Gelco.</p>
+      <h3>Invoices for Gelco shipments</h3>
+      <ul>
+        <li>Each Gelco shipment downloads its <b>tax invoice</b> right after the packing list, with the <b>same number</b>. It is the series Tally uses for Gelco.</li>
+        <li>The layout matches Tally's invoice: CGST/SGST per line, rounded total, amount in words, bank details.</li>
+        <li>Download any shipment's invoice again from the <span class="ui">Invoice</span> button in Outward's recent list, or from <span class="ui">Docs → Sales</span>.</li>
+        <li>An invoice prints <b>DRAFT</b> while any item has no rate. Admins and managers fill it in on Docs → Sales; tick "use as defaults" to save the details for future invoices.</li>
+      </ul>
+      <div class="note"><b>Still manual:</b> enter the invoice in Tally as before. Pushing it into Tally automatically comes later.</div>
+      <p class="who">Gelco staff can generate and download invoices but cannot edit them. Editing and setting rates: admin and manager.</p>
+    </section>
+
+    <section id="docs">
+      <h2>Docs</h2>
+      <p class="where">Docs (the old Gelco PDF page is now "Gelco Docs")</p>
+      <p>Everything from the old CRM's Docs page now lives here, with the same tabs.</p>
+      <ul>
+        <li><b>All</b> shows every document and PO with backlog figures. Press <span class="ui">Add</span> to upload a PDF for the AI to read, or enter one by hand.</li>
+        <li><b>Invoices</b> covers purchase and freight invoices: GST credit, cost per piece, shipment details.</li>
+        <li><b>Bank</b> has statements per bank, transactions with notes and attached receipts.</li>
+        <li><b>PO</b> covers customer POs: create, import from a PDF, confirm, dispatch, cancel.</li>
+        <li><b>Sales</b> holds Gelco tax invoices (see above).</li>
+      </ul>
+      <h3>Reviewing an uploaded document</h3>
+      <ol>
+        <li>Upload the PDF and wait while it is read, about a minute. You can continue in the background.</li>
+        <li>The review panel opens with the PDF beside the fields. Check the party, numbers and lines; for purchase invoices, pick the Tally stock item for any line marked ⚠.</li>
+        <li>Watch for "Possible duplicate" and "Ledger not in Tally" warnings.</li>
+        <li><span class="ui">Save</span>, then <span class="ui">Approve → Tally</span>. The office PC pushes approved documents into Tally.</li>
+      </ol>
+      <p class="who">Upload, edit and save: admin, manager, staff. Approve, reject and delete: admin and manager.</p>
+    </section>
+
+    <section id="finance">
+      <h2>Finance</h2>
+      <p class="where">Finance</p>
+      <p>The old CRM's Finance page, read from Tally's data. <b>Receivables</b> covers ageing, the collections forecast and debtor reconciliation. <b>Sales Register</b> lets you open any voucher and set a payment reminder date, which creates a task. <b>Inventory</b> shows Tally stock items and valuation. <b>Position</b> has cash and bank, advances, tax and this year's revenue against costs. <b>Payables</b> has supplier balances and the purchase register.</p>
+      <p class="who">Admin, manager, staff.</p>
+    </section>
+
+    <section id="portal">
+      <h2>What customers see</h2>
+      <p class="where">Customer login → Orders tab</p>
+      <p>Customers see each of their POs with a status for every line, a progress bar of what has shipped, how much is ready, and the expected date when goods are on the way. Tapping a line shows its steps. They can download documents you attached to the PO (PO, packing list, invoice). They never see suppliers, costs or your stock figures.</p>
+    </section>
+
+    <section id="roles">
+      <h2>Who can do what</h2>
+      <div class="tbl">
+        <table>
+          <thead><tr><th>Task</th><th>Admin / Manager</th><th>Staff</th><th>Gelco staff</th><th>Customer</th></tr></thead>
+          <tbody>
+            <tr><td>See Orders, Procurement, Docs, Finance</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Reserve / release stock</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Create procurement orders, change stages</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Inward against a procurement order</td><td class="yes">Yes</td><td>Needs approval</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Approve documents to Tally</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Set item invoice rates / edit invoices</td><td class="yes">Yes</td><td class="no">No</td><td class="no">No</td><td class="no">No</td></tr>
+            <tr><td>Download Gelco invoices</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="yes">Yes</td><td class="no">No</td></tr>
+            <tr><td>See own order progress</td><td>—</td><td>—</td><td>—</td><td class="yes">Yes</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

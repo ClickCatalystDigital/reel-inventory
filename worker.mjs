@@ -47,6 +47,8 @@ export default {
     const demo = env.DEMO_MODE === '1';
     const isDemoPage = demo && /^\/demo(\.txt|\/.*)?$/.test(pathname);
     if (demo && pathname === '/login') return Response.redirect(new URL('/demo', request.url), 302);
+    // The staff guide names the real company and partner store; the demo must not serve it.
+    if (demo && pathname === '/ls-tech-guide.html') return new Response('Not found', { status: 404 });
 
     // Pages are static files, but still gated here: the login page and favicon are
     // public, everything else needs a valid session and a page the role may open.

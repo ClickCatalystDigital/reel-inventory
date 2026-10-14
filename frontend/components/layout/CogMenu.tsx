@@ -2,7 +2,8 @@
 
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { Settings, Moon, Sun, LogOut, ClipboardList } from "lucide-react";
+import { Settings, Moon, Sun, LogOut, ClipboardList, BookOpen } from "lucide-react";
+import { DEMO } from "@/lib/brand";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -25,6 +26,7 @@ export function CogMenu() {
   // so also check the page is actually reachable before linking to it.
   const isApprover = !!user && APPROVER_ROLES.includes(user.role) && isNavLinkVisible(user.role, "/requests");
   const isAdminOrManager = user?.role === "admin" || user?.role === "manager";
+  const isStaff = isAdminOrManager || user?.role === "user";
 
   return (
     <DropdownMenu>
@@ -51,6 +53,14 @@ export function CogMenu() {
               <Settings className="size-4" />
               Settings
             </Link>
+          </DropdownMenuItem>
+        )}
+        {isStaff && !DEMO && (
+          <DropdownMenuItem asChild>
+            <a href="/ls-tech-guide.html" target="_blank" rel="noopener">
+              <BookOpen className="size-4" />
+              Working guide
+            </a>
           </DropdownMenuItem>
         )}
         <DropdownMenuItem onSelect={() => setTheme(isDark ? "light" : "dark")}>
