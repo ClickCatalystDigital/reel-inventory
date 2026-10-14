@@ -160,7 +160,7 @@ for (const id of [poBright, poVoltix]) {
 const short = await api('owner', 'GET', '/api/procurement/shortfall');
 if (short.length) {
   const order = await api('owner', 'POST', '/api/procurement', {
-    supplier: 'Shenzhen Demo Electronics', expected_date: day(18),
+    supplier: 'Demo Components Supplier', expected_date: day(18),
     items: short.map((g) => ({ item_code: g.item_code, qty: Math.ceil(g.needed / 1000) * 1000 + 1000, unit_cost: 0.02, currency: 'USD', allocations: g.lines.map((l) => ({ po_item_id: l.po_item_id, qty: l.needed })) })),
   });
   await api('owner', 'PUT', `/api/procurement/${order.id}`, { status: 'ordered' });

@@ -1,4 +1,4 @@
-import { Boxes, ClipboardCheck, FileBarChart, QrCode, ScanLine, ShieldCheck, Sparkles, Store, Users } from "lucide-react";
+import { Boxes, ClipboardCheck, FileBarChart, FileText, Landmark, QrCode, ScanLine, ShieldCheck, Ship, Sparkles, Store, Users } from "lucide-react";
 
 // The public demo page's features (app/demo/page.tsx) and its structured data (app/demo/layout.tsx).
 // Each feature: [icon, title, one line, section id, section heading, section paragraphs]. The paragraphs fill
@@ -24,8 +24,19 @@ export const FEATURES = [
     "Each customer company has its contacts, call notes and a follow-up calendar, with tasks assigned to the salesperson who owns them. Customer purchase orders move from draft to confirmed to dispatched, with line items and unit prices, so the value of open orders is always known.",
     "Dispatches are tied to the purchase order they fulfil, so it is clear what is still owed on every PO and when to chase the next call-off.",
   ]],
-  [Boxes, "Customer stock portal", "Each customer logs in to see only the stock kept for them.", "customer-portal", "A stock portal for customers", [
-    "Customers who keep stock with you get their own login, which shows a read-only summary of the items kept for them: reels and quantity in stock, item by item.",
+  [Ship, "Procurement and reservations", "Reserve stock for each PO line; what's short pools into supplier orders tracked item by item.", "procurement", "Order tracking, reservations and procurement", [
+    "Every customer PO line shows what was ordered, shipped, reserved and still needed. Free stock is reserved to a line with one click, whole reels, oldest first, and a reserved reel can't be shipped to another customer or moved to the partner store by mistake.",
+    "Whatever stock can't cover is pooled across all open POs into a draft supplier order, with extra quantity bought for stock. Each item on that order moves through its own stages (engineering questions, raw material, manufacturing, QC, in transit), and the customer lines waiting on it follow automatically. When the goods arrive, the new reels are reserved to the waiting POs, earliest due date first.",
+  ]],
+  [FileText, "Documents read by AI", "Upload supplier invoices, bank statements and POs; AI fills them in for review before they go to the accounts.", "documents", "Documents read for you", [
+    "Purchase and freight invoices, bills of entry, bank statements and customer POs are uploaded as PDFs (or sent from a phone) and read by AI into fields and line items. Nothing is posted until someone reviews it: duplicates and unknown ledgers are flagged, and approved documents are queued for the accounting system.",
+    "Partner-store shipments get a tax invoice generated automatically, in the same number series as their packing list, with prices fixed when the stock moved to the partner.",
+  ]],
+  [Landmark, "Finance at a glance", "Receivables, sales and purchase registers, cash position and payables, from the accounting data.", "finance", "Finance from the accounting system", [
+    "Receivables with ageing and a collections forecast, the sales register with a reminder date per invoice, purchase register and supplier payables, bank and cash balances, and the year's revenue against costs, all from the accounting system's data.",
+  ]],
+  [Boxes, "Customer stock portal", "Each customer logs in to see their stock and each order line's progress.", "customer-portal", "A stock and order portal for customers", [
+    "Customers who keep stock with you get their own login, which shows a read-only summary of the items kept for them, and the progress of every line on their purchase orders, from procurement to dispatch, with their documents to download.",
     "Which items a customer can see is set per item in the catalog, so the same system serves every customer without one seeing another's parts.",
   ]],
   [FileBarChart, "Reports that trace", "Stock summary, search and trace by reel, dead and low stock, daily report as PDF.", "reports", "Stock reports and traceability", [

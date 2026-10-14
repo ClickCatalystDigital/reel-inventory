@@ -184,7 +184,7 @@ function CreateOrder({ items, onClose, onCreated }: { items: Short[]; onClose: (
         <DialogHeader><DialogTitle>New procurement order</DialogTitle></DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-3 sm:grid-cols-[1fr_160px]">
-            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="e.g. Shenzhen supplier name" /></div>
+            <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">Supplier</Label><Input value={supplier} onChange={(e) => setSupplier(e.target.value)} placeholder="Supplier name" /></div>
             <div className="space-y-1.5"><Label className="text-xs text-muted-foreground">Expected arrival</Label><Input type="date" value={expected} onChange={(e) => setExpected(e.target.value)} /></div>
           </div>
           <div className="max-h-[45vh] space-y-2 overflow-y-auto">
