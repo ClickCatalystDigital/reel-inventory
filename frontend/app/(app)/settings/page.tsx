@@ -165,7 +165,7 @@ export default function SettingsPage() {
                 <Card className="p-5 text-center text-muted-foreground">Loading users...</Card>
               ) : (
                 <>
-                  {showLS && <UsersCard title={`${BRAND.short} users`} users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showLS && <UsersCard title={DEMO ? `${BRAND.short} users` : "LS Users"} users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
                   {showLS && <UsersCard title="Clients" users={clientUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                   {showGelco && <UsersCard title={`${BRAND.partner} users`} users={gelcoUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                 </>
