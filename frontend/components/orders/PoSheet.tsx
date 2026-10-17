@@ -14,6 +14,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { cn } from "@/lib/utils";
 import { PO_DOC_TYPES, docTypeLabel, type PoDetail } from "@/lib/po-stages";
 import { StageBadge } from "./StageSelect";
+import { BRAND } from "@/lib/brand";
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
@@ -167,7 +168,7 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
                           ))}
                           {canEdit && l.item_code && (
                             <div className="flex flex-wrap items-center gap-2 text-xs">
-                              <span className="text-muted-foreground">Free at LS Tech Stores: <strong className="text-foreground">{formatQty(l.free_stock ?? 0)}</strong></span>
+                              <span className="text-muted-foreground">Free at {BRAND.mainStore}: <strong className="text-foreground">{formatQty(l.free_stock ?? 0)}</strong></span>
                               {left > 0 && (l.free_stock ?? 0) > 0 && (
                                 <Button size="sm" className="ml-auto h-7" disabled={busy} onClick={() => reserve(l.id)}>Reserve</Button>
                               )}

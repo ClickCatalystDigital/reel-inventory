@@ -12,16 +12,16 @@ const brand = require('./brand');
 const MAX_Q = 600;
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-const KINDS = {
+const KINDS = brand.deep({
   data: "Asks for numbers, lists or records from LS TECH's own data: stock, reels, boxes, items, inward, shipments to customers, transfers, purchase orders, approvals, tasks or clients.",
   howto: 'Asks how to do something in the LS TECH app, or where to find a screen or feature.',
   action: "Asks to create, change, delete, approve, reject, send or otherwise act on data (for example 'delete REEL-123', 'approve request 5', 'add a client').",
   smalltalk: 'A greeting, thanks or small talk.',
   offtopic: "Not about LS TECH's inventory, customers, tasks or this app (general knowledge, other companies, coding, jokes).",
   unclear: 'Too vague or incomplete to tell what is wanted.',
-};
+});
 const PERIODS = { today: 'Today', yesterday: 'Yesterday', this_week: 'This week', last_week: 'Last week', this_month: 'This month', last_month: 'Last month', last_30_days: 'The last 30 days', this_year: 'This year', all_time: 'All time, overall, ever', none: 'No period is mentioned' };
-const STORES = { all: 'All stores. Also use this whenever no store is literally named', primary: 'LS Tech Stores — only when the question names LS Tech Stores / the main store / the primary store', secondary: 'Gelco Stores — only when the question names Gelco Stores / the secondary store. A CUSTOMER called Gelco Electronics is NOT a store' };
+const STORES = brand.deep({ all: 'All stores. Also use this whenever no store is literally named', primary: 'LS Tech Stores — only when the question names LS Tech Stores / the main store / the primary store', secondary: 'Gelco Stores — only when the question names Gelco Stores / the secondary store. A CUSTOMER called Gelco Electronics is NOT a store' });
 
 // Jev's answers for a question are remembered for an hour (per Worker instance): asking the same thing again skips the Jev call —
 // faster and free — while the data look-up still runs fresh, so numbers are never stale. Best effort: a cold instance just asks Jev.
@@ -30,17 +30,17 @@ const JEV_TTL = 3600e3, JEV_MAX = 300;
 function cacheGet(k) { const e = JEV_CACHE.get(k); if (e && Date.now() - e.t < JEV_TTL) return e.v; JEV_CACHE.delete(k); return null; }
 function cacheSet(k, v) { if (JEV_CACHE.size >= JEV_MAX) JEV_CACHE.delete(JEV_CACHE.keys().next().value); JEV_CACHE.set(k, { t: Date.now(), v }); }
 
-const UNSUPPORTED = {
+const UNSUPPORTED = brand.deep({
   none: 'No — what it asks for could be found in stock, shipment, purchase-order, task or client records',
   money: 'Money amounts for SHIPMENTS or stock: selling price, revenue, margin, profit, cost (NOT purchase-order values, which exist)',
   who_did: 'Who personally received, shipped, scanned or entered a particular stock movement, or what a person did all day (stock movements do not record which staff member did them)',
   advice: 'Advice, a recommendation or an opinion, such as "what should I order", "will sales grow", "is this customer reliable" (NOT how long stock will last, NOT customers who stopped ordering)',
-};
-const UNSUPPORTED_REPLY = {
+});
+const UNSUPPORTED_REPLY = brand.deep({
   money: ["Shipments and stock don't carry prices, so I can't give revenue or cost for them. Purchase-order lines do have unit prices — I can tell you what POs are worth.", ['How much are the confirmed POs worth?', 'What did we ship to Gelco Electronics in September?']],
   who_did: ["The app doesn't record which staff member received or shipped stock. It does record who submitted and who approved or rejected requests, and who made transfers.", ['What did pranav approve this month?', 'Any approvals waiting?']],
   advice: ["I only report what the data shows — I can't give recommendations or forecasts. I can show how long stock will last at the recent shipping rate, and which customers have gone quiet.", ['Which items will run out in 30 days?', 'Which customers stopped ordering?']],
-};
+});
 
 // The public demo gets questions about its own sample data (real customer names never reach it).
 const STARTERS = process.env.DEMO_MODE === '1'
@@ -172,7 +172,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
     period: { type: 'choice', instructions: 'Which time period is the latest question about?', criteria: PERIODS },
   };
   // Complex questions are chains of small decisions Jev is good at: is this a follow-up, does it need a second look-up, is it a comparison.
-  if (context) questions.follow_up = { type: 'noul', instructions: "Is the latest question a short follow-up that only makes sense together with the previous question, because it leaves out the subject (for example 'and last month?', 'what about Gelco Stores?', 'same for Sansui', 'and the reels?')?", criteria: { true: 'It leaves out something it expects us to remember from the previous question.', false: 'It is complete on its own.' } };
+  if (context) questions.follow_up = { type: 'noul', instructions: brand.text("Is the latest question a short follow-up that only makes sense together with the previous question, because it leaves out the subject (for example 'and last month?', 'what about Gelco Stores?', 'same for Sansui', 'and the reels?')?"), criteria: { true: 'It leaves out something it expects us to remember from the previous question.', false: 'It is complete on its own.' } };
   const second = { ...toolCriteria, none: 'No second look-up is needed — one look-up answers the whole question' };
   questions.second_tool = { type: 'choice', instructions: "Does the latest question ALSO ask for a second, different look-up besides its main one (for example 'stock AND transfers of BLDC CARD', 'overdue tasks and pending approvals')? If so, which one?", criteria: second };
   questions.compare = { type: 'noul', instructions: "Does the latest question ask to compare two time periods or how something changed between them (for example 'September vs August', 'compared to last month', 'is it up or down')?", criteria: { true: 'It compares two periods or asks about a change over time.', false: 'It asks about a single period or no period.' } };
@@ -243,7 +243,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
 
   if (kind === 'howto') {
     const sec = sectionOf(route.section) || pickSections(question, 1)[0];
-    if (!sec) return done(text("I couldn't find that in the app guide. Try describing the screen or task, for example “how do I ship reels to a customer?”.", { chips: chips(['How do I ship reels to a customer?', 'How do I transfer stock to Gelco Stores?', 'Where do I approve requests?']) }), kind, null);
+    if (!sec) return done(text("I couldn't find that in the app guide. Try describing the screen or task, for example “how do I ship reels to a customer?”.", { chips: chips(brand.deep(['How do I ship reels to a customer?', 'How do I transfer stock to Gelco Stores?', 'Where do I approve requests?'])) }), kind, null);
     let body = sec.text;
     if (settings.mode === 'write' && route.sectionP >= 0.3) {
       try {
@@ -320,7 +320,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
         if (cands.length === 1) ctx.customer = cands[0];
         else if (cands.length > 1) {
           try {
-            const r = await chooseCandidate(key, question, 'customer or company', cands, (c) => `${c.label}${c.internal ? ' — OUR OWN internal Gelco Stores warehouse, not a customer' : ' — a customer'}`); cost += r.cost;
+            const r = await chooseCandidate(key, question, 'customer or company', cands, (c) => `${c.label}${c.internal ? brand.text(' — OUR OWN internal Gelco Stores warehouse, not a customer') : ' — a customer'}`); cost += r.cost;
             trace.push(`customer pick: ${r.pick ? r.pick.label : 'none'} (${Math.round((r.p || 0) * 100)}%)`);
             if (r.pick && r.p >= 0.6) ctx.customer = r.pick; else return askWhich('customer', cands, (c) => c.label);
           } catch (err) { return askWhich('customer', cands, (c) => c.label); }
@@ -331,7 +331,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
         if (a && (!b || b.score < 0.85 * a.score)) ctx.client = { ids: a.ids, label: a.label };
         else if (a && b) return askWhich('client', cands.filter((x) => x.score >= 0.85 * a.score), (c) => c.label);
         else if (carry && prior?.client) ctx.client = prior.client;
-        else if (tool.required) return { reply: text('Which client or company? For example “notes on Rotomotive”.') };
+        else if (tool.required) return { reply: text(brand.text('Which client or company? For example “notes on Rotomotive”.')) };
       } else if (e === 'po') {
         const cands = await E.poCandidates(question);
         if (cands.length === 1) ctx.po = cands[0];

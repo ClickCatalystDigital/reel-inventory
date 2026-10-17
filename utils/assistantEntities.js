@@ -1,6 +1,7 @@
 // LS AI — turning words in a question into exact values: stores, periods, items, customers, POs, users, reel/box
 // numbers. Everything here is deterministic code; Jev is only asked to choose between candidates found here.
 const { queryAll, istDateString } = require('../db/schema');
+const brand = require('./brand');
 
 // ---------- small text helpers ----------
 const STOP = new Set(('a an and any are as at be by can could did do does for from get give have how i in is it its list me my of on or our please '
@@ -31,8 +32,9 @@ const COMPANY_NOISE = new Set(['pvt', 'ltd', 'limited', 'private', 'p', 'co', 'c
 function normalizeCustomer(name) {
   return String(name || '').toLowerCase().replace(/[^a-z0-9 ]+/g, ' ').split(/\s+/).filter((t) => t && !COMPANY_NOISE.has(t)).join(' ');
 }
-// Internal warehouse rows: Gelco roles ship to "Gelco Stores", which is NOT a customer.
-const INTERNAL_KEYS = new Set(['gelco stores']);
+// Internal warehouse rows: partner-store roles ship to brand.partnerStore ("Gelco Stores"), which is NOT a customer.
+const PARTNER_KEY = brand.partnerStore.toLowerCase();
+const INTERNAL_KEYS = new Set([PARTNER_KEY]);
 
 // All distinct customer spellings (outwards + CRM companies), grouped by normalised key; near-identical keys
 // (typos such as ELCTRONICS) are merged. One query.
@@ -150,11 +152,11 @@ function reelBox(question) {
 function parseStore(question) {
   const q = question.toLowerCase();
   if (/\ball (the )?stores?\b|\bboth stores\b|\bacross stores\b/.test(q)) return 'all';
-  if (/\bgelco stores?\b|\bsecondary\b/.test(q)) return 'secondary';
+  if (new RegExp(`\\b${PARTNER_KEY.replace(/s$/, '')}s?\\b|\\bsecondary\\b`).test(q)) return 'secondary';
   if (/\bls ?tech( stores?)?\b|\bprimary\b|\bmain store\b/.test(q)) return 'primary';
   return null;
 }
-const STORE_NAME = { all: 'All stores', primary: 'LS Tech Stores', secondary: 'Gelco Stores' };
+const STORE_NAME = { all: 'All stores', primary: brand.mainStore, secondary: brand.partnerStore };
 
 // ---------- periods (IST, Monday-first weeks) ----------
 const MONTHS = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
@@ -235,5 +237,5 @@ async function customerKeyMap() {
 
 module.exports = {
   customerKeyMap, norm, words, distinctive, normalizeCustomer, loadCustomerGroups, customerCandidates, clientCandidates, itemCandidates, poCandidates, userMentions, reelBox,
-  parseStore, STORE_NAME, parsePeriod, previousPeriod, periodFromPreset, fmtD, add, STOP,
+  parseStore, STORE_NAME, PARTNER_KEY, parsePeriod, previousPeriod, periodFromPreset, fmtD, add, STOP,
 };

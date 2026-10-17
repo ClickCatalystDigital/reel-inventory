@@ -1,6 +1,6 @@
 // LS AI — how-to guide for the LS TECH app, written from SYSTEM.md. Each section: { key, label, path, text }.
 // `path` must be a real screen (it is the only kind of link the assistant may show). Keep text short and exact.
-const GUIDE = [
+const GUIDE = require('./brand').deep([
   { key: 'home', label: 'Home: tasks and calendar', path: '/', text: 'Home shows your follow-up tasks (left) and a Week / Month / Year calendar (right). Admin and manager can switch Mine / All and assign a task by clicking the avatar. Click Done to complete a task (use Undo in the toast to reopen it). Click a day to see its tasks and quick-add a new one. Click a task to edit its title or due date, read the contact and last note, or "Log this call" (note + next touchpoint). Invoice-review tasks can be approved or rejected by admin or manager. The Watch List shows high-severity clients.' },
   { key: 'clients', label: 'Clients: contacts and pipeline', path: '/clients', text: 'Clients lists your CRM contacts with KPIs and a pipeline by stage (new, contacted, qualified, customer, lost). Use the search box, the status chips (with counts) and Filters (product, designation, severity). Click Add to create a client; click a name to edit it, log a call note and schedule the next touchpoint. Select rows and use Delete selected for bulk delete.' },
   { key: 'catalog', label: 'Catalog: items', path: '/catalog', text: 'Catalog is the master item list. Add an item with its code, description and default SPQ (pieces per reel). Edit or Delete (archive) from the table. An archived item cannot receive new stock; adding the same code again restores it. With a store selected in the top bar, the list shows only items that have been stocked at that store.' },
@@ -18,7 +18,7 @@ const GUIDE = [
   { key: 'docs', label: 'Docs: PO and invoice PDFs', path: '/gelco-docs', text: 'Docs stores PO and invoice PDFs privately. Choose a file and the type (PO or Invoice) and upload; only PDFs are accepted. Use Download or Delete in the list. The list follows the store selected at the top.' },
   { key: 'settings', label: 'Settings: users, storage, LS AI', path: '/settings', text: 'Settings (admin and manager) manages users and roles, shows storage use for the database and file storage, and — for admin only — the LS AI card: OpenRouter key, credit, model, daily limit and data-access approval.' },
   { key: 'stores', label: 'Stores and the store dropdown', path: '/reports', text: 'There are two stores: LS Tech Stores and Gelco Stores. The dropdown in the top bar only filters what you view; it does not decide where stock is created or shipped from. Inward, Transfer and Outward have their own store fields.' },
-];
+]);
 const SCREENS = [...new Map(GUIDE.map((g) => [g.path, g.label])).keys(), '/notifications'];
 const SCREEN_LABEL = { '/': 'Home', '/clients': 'Clients', '/catalog': 'Catalog', '/inward': 'Inward', '/outward': 'Outward', '/transfer': 'Transfer', '/reports': 'Stock Summary', '/reports/search': 'Search & Trace', '/reports/analytics': 'Analytics', '/reports/alerts': 'Dead & Low Stock', '/reports/daily': 'Daily Report', '/requests': 'Requests', '/notifications': 'Notifications', '/gelco-docs': 'Docs', '/settings': 'Settings' };
 

@@ -211,7 +211,7 @@ export function AssistantCard() {
     <Card className="gap-5 p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-1">
-          <h2 className="flex items-center gap-2 text-base font-semibold"><span className="grid size-6 place-items-center rounded-md bg-foreground text-background"><ChipMark className="size-4" /></span> LS AI</h2>
+          <h2 className="flex items-center gap-2 text-base font-semibold"><span className="grid size-6 place-items-center rounded-md bg-foreground text-background"><ChipMark className="size-4" /></span> {BRAND.ai}</h2>
           <p className="max-w-xl text-sm text-muted-foreground">
             An assistant for {BRAND.short.toUpperCase()} inventory, clients and tasks. Admin only. It routes each question with a decision model and answers from fixed, read-only look-ups.
           </p>

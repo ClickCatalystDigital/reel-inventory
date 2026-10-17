@@ -6,6 +6,7 @@ const express = require('express');
 const multer = require('multer');
 const { queryAll, queryOne, execute, readBatch, nowIST } = require('../db/schema');
 const ah = require('../utils/asyncHandler');
+const brand = require('../utils/brand');
 const r2 = require('../utils/r2');
 const { PO_DOC_TYPES } = require('../utils/poStages');
 const { progress } = require('../utils/poProgress');
@@ -120,7 +121,7 @@ staff.post('/:poId/lines/:lineId/reserve', editorsOnly, ah(async (req, res) => {
   const pick = [];
   let got = 0;
   for (const r of free) { if (got >= want) break; pick.push(r.reel_number); got += r.quantity; }
-  if (!pick.length) return res.status(400).json({ error: `No free ${line.item_code} stock at LS Tech Stores` });
+  if (!pick.length) return res.status(400).json({ error: `No free ${line.item_code} stock at ${brand.mainStore}` });
   const r = await execute(`UPDATE reels SET reserved_po_item_id = ?, reserved_at = ?, reserved_by = ?
     WHERE reel_number IN (${pick.map(() => '?').join(',')}) AND reserved_po_item_id IS NULL AND status = 'In Stock' AND store_code = 'primary'`,
     [line.id, nowIST(), req.user.username, ...pick]);

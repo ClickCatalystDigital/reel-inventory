@@ -18,6 +18,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
 import { PdfOverlay } from "@/components/layout/PdfOverlay";
+import { BRAND } from "@/lib/brand";
 
 interface Item {
   item_code: string;
@@ -350,7 +351,7 @@ export default function InwardPage() {
                   ))}
                 </SelectContent>
               </Select>
-              {procItemId !== "none" && <p className="text-xs text-muted-foreground">Received into LS Tech Stores and reserved for the customer POs waiting on this order, earliest due first.</p>}
+              {procItemId !== "none" && <p className="text-xs text-muted-foreground">Received into {BRAND.mainStore} and reserved for the customer POs waiting on this order, earliest due first.</p>}
             </div>
           )}
 

@@ -5,6 +5,10 @@ const express = require('express');
 const router = express.Router();
 const ah = require('../utils/asyncHandler');
 const A = require('../utils/assistant');
+const brand = require('../utils/brand');
+
+// Demo: every answer passes the made-up-name swap too, so a model echoing a real name never shows it (identity on live).
+router.use((req, res, next) => { const json = res.json.bind(res); res.json = (b) => json(brand.deep(b)); next(); });
 
 // The key is write-only: responses carry `hasKey` + the last 4 characters, never the key.
 async function payload() {

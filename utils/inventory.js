@@ -1,5 +1,6 @@
 const { queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, nowIST } = require('../db/schema');
 const { procItemFor, allocateReceived } = require('./procurement');
+const brand = require('./brand');
 
 // Rows per multi-row INSERT / IN() list — keeps bound variables far below SQLite's limit.
 const CHUNK = 400;
@@ -10,7 +11,7 @@ const marks = (n) => Array(n).fill('?').join(',');
 // written, then the new reels are reserved to the customer POs waiting on it.
 async function executeInward(item_code, num_reels, num_boxes, notes, store_code = 'primary', procItemId = null, user = null) {
   if (procItemId) {
-    if (store_code !== 'primary') throw new Error('Procurement orders are received into LS Tech Stores');
+    if (store_code !== 'primary') throw new Error(`Procurement orders are received into ${brand.mainStore}`);
     await procItemFor(procItemId, item_code);
   }
   const item = await queryOne('SELECT * FROM items WHERE item_code = ?', [item_code]);

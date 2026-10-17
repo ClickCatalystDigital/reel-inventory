@@ -32,7 +32,7 @@ const ROLE_OPTIONS = [
 ];
 
 const TAB_STORAGE: SettingsTab = { key: "storage", label: "Storage", caption: "Database & files", icon: Database };
-const TAB_AI: SettingsTab = { key: "ai", label: "AI", caption: "LS AI assistant", icon: ChipMark as unknown as SettingsTab["icon"] };
+const TAB_AI: SettingsTab = { key: "ai", label: "AI", caption: `${BRAND.ai} assistant`, icon: ChipMark as unknown as SettingsTab["icon"] };
 const TAB_HUMANS: SettingsTab = { key: "humans", label: "Humans", caption: "Users & access", icon: Users };
 
 interface AppUser {
@@ -111,7 +111,7 @@ export default function SettingsPage() {
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-xl font-bold">Settings</h1>
-          <p className="text-sm text-muted-foreground">Storage, the LS AI assistant, and the people who use the app</p>
+          <p className="text-sm text-muted-foreground">Storage, the {BRAND.ai} assistant, and the people who use the app</p>
         </div>
         {!DEMO && (
           <Button asChild variant="outline" size="sm">
@@ -165,7 +165,7 @@ export default function SettingsPage() {
                 <Card className="p-5 text-center text-muted-foreground">Loading users...</Card>
               ) : (
                 <>
-                  {showLS && <UsersCard title="LS Users" users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
+                  {showLS && <UsersCard title={`${BRAND.short} users`} users={lsUsers} onSaved={loadUsers} onDeleted={loadUsers} />}
                   {showLS && <UsersCard title="Clients" users={clientUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                   {showGelco && <UsersCard title={`${BRAND.partner} users`} users={gelcoUsers} companies={companies} onSaved={loadUsers} onDeleted={loadUsers} />}
                 </>

@@ -46,7 +46,7 @@ async function customerRhythm({ today = istDateString() } = {}) {
   const by = new Map();
   for (const r of rows.rows) {
     const g = keyOf.get(r.customer_name); const key = g ? g.key : E.normalizeCustomer(r.customer_name);
-    if (g?.internal || key === 'gelco stores') continue;
+    if (g?.internal || key === E.PARTNER_KEY) continue;
     let c = by.get(key); if (!c) by.set(key, (c = { key, customer: g ? g.label : r.customer_name, dates: new Set() }));
     c.dates.add(r.d);
   }

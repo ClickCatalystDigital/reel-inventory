@@ -7,6 +7,7 @@
 const { queryAll, queryOne, readBatch, istDateString, istDayBounds } = require('../db/schema');
 const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
+const brand = require('./brand');
 const ST = require('./assistantStats');
 
 const n = (x) => Number(x || 0).toLocaleString('en-IN');
@@ -17,7 +18,7 @@ const bounds = (p) => (p && p.from ? { from: `${p.from} 00:00:00`, to: `${p.to} 
 const col = (key, label, type = 'text') => ({ key, label, type });
 const table = (o) => ({ rows: [], total: o.rows ? o.rows.length : 0, ...o });
 
-const TOOLS = [
+const TOOLS = brand.deep([
   {
     key: 'search_items', label: 'Find items in the catalog', entity: null,
     about: 'Find items in the catalog by code or description, e.g. "do we have 22pF disc caps", "what is the SPQ of BLDC CARD", "list MLCC items".',
@@ -136,10 +137,10 @@ const TOOLS = [
         if (!g) merged.set(k, (g = { customer: grp ? grp.label : r.customer_name, reels: 0, qty: 0, invoices: 0, last: '' }));
         g.reels += Number(r.reels); g.qty += Number(r.qty); g.invoices += Number(r.invoices); if (String(r.last_date) > g.last) g.last = String(r.last_date);
       }
-      const rows = [...merged.entries()].filter(([k]) => k !== 'gelco stores').map(([, g]) => ({ customer: g.customer, reels: g.reels, qty: g.qty, invoices: g.invoices, last_date: g.last.slice(0, 10) })).sort((a, b) => b.qty - a.qty);
+      const rows = [...merged.entries()].filter(([k]) => k !== E.PARTNER_KEY).map(([, g]) => ({ customer: g.customer, reels: g.reels, qty: g.qty, invoices: g.invoices, last_date: g.last.slice(0, 10) })).sort((a, b) => b.qty - a.qty);
       return table({ title: `Shipments by customer — ${p.label}`, summary: rows.length ? `${plural(rows.length, 'customer')} · ${n(rows.reduce((a, r) => a + r.qty, 0))} pcs shipped.` : 'No shipments in this period.',
         columns: [col('customer', 'Customer'), col('reels', 'Reels', 'int'), col('qty', 'Quantity', 'int'), col('invoices', 'Invoices', 'int'), col('last_date', 'Last shipment', 'date')], rows: rows.slice(0, CAP), total: rows.length,
-        note: 'Spellings of the same customer are combined. Internal "Gelco Stores" movements are not customers and are excluded.', link: { path: '/notifications', label: 'Open Notifications' } });
+        note: brand.text('Spellings of the same customer are combined. Internal "Gelco Stores" movements are not customers and are excluded.'), link: { path: '/notifications', label: 'Open Notifications' } });
     },
   },
   {
@@ -403,10 +404,10 @@ const TOOLS = [
       else summary = quietOnly ? (rows.length ? `${plural(rows.length, 'customer')} look quiet — no order for more than twice their usual gap.` : 'No customer looks quiet right now.') : `${plural(quiet.length, 'customer')} look quiet out of ${rows.length}.`;
       return table({ title: c.customer ? `Ordering pattern — ${c.customer.label}` : quietOnly ? 'Customers gone quiet' : 'Customer ordering pattern', summary,
         columns: [col('customer', 'Customer'), col('orders', 'Order days', 'int'), col('last_order', 'Last order', 'date'), col('days_since', 'Days since', 'int'), col('usual_gap', 'Usual gap (days)', 'int'), col('status', 'Status')], rows: rows.slice(0, CAP).map(map), total: rows.length, truncated: rows.length > CAP,
-        note: 'Usual gap = median days between a customer\'s order days (needs 3+ order days). Quiet = no order for more than twice that gap (min 21 days); with fewer orders only 45+ days of silence is flagged. Shipment history starts in April 2026. Internal Gelco Stores movements are excluded.', link: { path: '/notifications', label: 'Open Notifications' } });
+        note: brand.text('Usual gap = median days between a customer\'s order days (needs 3+ order days). Quiet = no order for more than twice that gap (min 21 days); with fewer orders only 45+ days of silence is flagged. Shipment history starts in April 2026. Internal Gelco Stores movements are excluded.'), link: { path: '/notifications', label: 'Open Notifications' } });
     },
   },
-];
+]);
 
 const BY_KEY = Object.fromEntries(TOOLS.map((t) => [t.key, t]));
 module.exports = { TOOLS, BY_KEY };

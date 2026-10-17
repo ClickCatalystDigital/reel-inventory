@@ -1,5 +1,6 @@
 import { House, Users, ClipboardCheck, Landmark, FolderOpen, LayoutGrid, PackagePlus, PackageMinus, ArrowLeftRight, ClipboardList, FileText, Warehouse } from "lucide-react";
 import { isNavLinkVisible, GELCO_DOCS_ROLES, GELCO_STOCKS_ROLES } from "./role-allowlist";
+import { BRAND } from "@/lib/brand";
 
 // The primary links shown in both the desktop nav-links bar and the mobile
 // bottom-nav on every "full chrome" page. Home and Clients are the CRM pages
@@ -35,7 +36,7 @@ export function getVisibleNavLinks(role: string | undefined) {
     isNavLinkVisible(role, l.href)
   );
   // Staff also have the CRM Docs page (/docs), so the Gelco upload page is named for what it is there.
-  if (role && (GELCO_DOCS_ROLES as readonly string[]).includes(role)) links.push(role === "gelco_manager" ? DOCS_LINK : { ...DOCS_LINK, label: "Gelco Docs" });
+  if (role && (GELCO_DOCS_ROLES as readonly string[]).includes(role)) links.push(role === "gelco_manager" ? DOCS_LINK : { ...DOCS_LINK, label: `${BRAND.partner} Docs` });
   if (role && (GELCO_STOCKS_ROLES as readonly string[]).includes(role)) links.push(STOCKS_LINK);
   return links;
 }
