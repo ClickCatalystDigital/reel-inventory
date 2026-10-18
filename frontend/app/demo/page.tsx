@@ -33,6 +33,14 @@ export default function DemoPage() {
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
+  const [passOpen, setPassOpen] = useState(false);
+  const [pin, setPin] = useState("");
+  async function usePass(pass: string) {
+    setBusy("pass"); setError("");
+    try { await post("/api/demo/pass", { pass }); setStep("roles"); }
+    catch (e) { setError(e instanceof Error ? e.message : "Something went wrong"); setPin(""); }
+    finally { setBusy(null); }
+  }
 
   useEffect(() => {
     // Owner pass (utils/demo.js): /demo#pass=… goes straight to the roles. The secret is wiped from the address bar
@@ -145,6 +153,18 @@ export default function DemoPage() {
                 {busy === "form" ? <Loader2 className="animate-spin" /> : <ArrowRight />} Continue
               </Button>
               <p className="text-xs text-muted-foreground">We use these details only to follow up about this system.</p>
+              {/* Owner pass (utils/demo.js): a PIN skips the form and lifts the assistant's limit for this browser. */}
+              {passOpen ? (
+                <div className="flex items-center gap-2 border-t pt-3">
+                  <Input type="password" inputMode="numeric" autoComplete="off" aria-label="Demo pass" placeholder="Demo pass" maxLength={12} value={pin}
+                    onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (pin) usePass(pin); } }} className="h-9 w-36" autoFocus />
+                  <Button type="button" variant="outline" size="sm" disabled={!pin || busy === "pass"} onClick={() => usePass(pin)}>
+                    {busy === "pass" ? <Loader2 className="animate-spin" /> : "Enter"}
+                  </Button>
+                </div>
+              ) : (
+                <button type="button" onClick={() => setPassOpen(true)} className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Have a demo pass?</button>
+              )}
             </form>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">

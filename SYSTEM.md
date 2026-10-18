@@ -340,7 +340,7 @@ Same code as lstechnologies.in, deployed as a second Worker (`wrangler.demo.json
   - **Partner store worker:** ships from the Partner Store straight away (the reset approves the day).
   - **Customer portal:** Brightline's stock and `SYS-4` part-dispatched (drafts and other customers hidden).
   - Not in the demo: uploads and file downloads (no bucket), Settings changes, the AI beyond two questions per visitor.
-  - Owner pass: `https://electronics-erp.ahromlabs.com/demo#pass=<DEMO_PASS>` (Worker secret, 24+ characters). The page posts it once to `POST /api/demo/pass`, which sets `demo_lead` to an HMAC of the secret: that browser skips the form, is never saved as a lead, and asks the AI without a limit. The part after `#` never reaches a server. Change the secret to cancel every pass (`utils/demo.js`).
+  - Owner pass: a short PIN, the Worker secret `DEMO_PASS` (4+ characters). Type it under **Have a demo pass?** on `/demo`, or open `/demo#pass=<PIN>`. `POST /api/demo/pass` sets `demo_lead` to an HMAC of the PIN: that browser skips the form, is never saved as a lead, and asks the AI without a limit. Wrong tries are capped at 5 per visitor IP and 200 in all per day (`demo_pass_tries` in the leads DB). Change the secret to cancel every pass (`utils/demo.js`).
 
 ## 6e. Orders — PO production stage, dispatch lots, customer portal (added 2026-10-14)
 

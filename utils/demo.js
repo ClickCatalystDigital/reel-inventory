@@ -44,11 +44,21 @@ const COOKIE = { httpOnly: true, secure: true, sameSite: 'strict', path: '/' };
 const leadToken = (req) => req.cookies?.demo_lead || null;
 const hasLead = (req) => !!leadToken(req);
 
-// Owner pass: the owner's own browser opens /demo#pass=<DEMO_PASS> (a Worker secret, 24+ characters). The page trades it
-// once at POST /api/demo/pass for a demo_lead cookie holding an HMAC of the secret (never the secret itself): that
-// browser skips the form, is never saved as a lead, and asks the assistant without a limit. No DEMO_PASS, no pass.
+// Owner pass: a short PIN (the Worker secret DEMO_PASS, 4+ characters), typed under "Have a demo pass?" on /demo or
+// opened as /demo#pass=<PIN>. POST /api/demo/pass trades it for a demo_lead cookie holding an HMAC of the PIN (never the
+// PIN itself): that browser skips the form, is never saved as a lead, and asks the assistant without a limit. A short PIN
+// is guessable, so wrong tries are capped: 5 per visitor IP and 200 in all per day. No DEMO_PASS, no pass.
 // Same as savistar-ops and shanti-ops.
-const passKey = () => (process.env.DEMO_PASS && process.env.DEMO_PASS.length >= 24 ? process.env.DEMO_PASS : null);
+const passKey = () => (process.env.DEMO_PASS && process.env.DEMO_PASS.length >= 4 ? process.env.DEMO_PASS : null);
+const PASS_TRIES_PER_IP = 5, PASS_TRIES_PER_DAY = 200;
+const utcDay = () => new Date().toISOString().slice(0, 10);
+async function passLocked(ip) {
+  const r = await (await readyLeads()).execute({ sql: 'SELECT COALESCE(SUM(n), 0) AS total, COALESCE(SUM(CASE WHEN ip = ? THEN n END), 0) AS mine FROM demo_pass_tries WHERE day = ?', args: [ip, utcDay()] });
+  return Number(r.rows[0].mine) >= PASS_TRIES_PER_IP || Number(r.rows[0].total) >= PASS_TRIES_PER_DAY;
+}
+async function passFailed(ip) {
+  await (await readyLeads()).execute({ sql: 'INSERT INTO demo_pass_tries (ip, day, n) VALUES (?, ?, 1) ON CONFLICT (ip, day) DO UPDATE SET n = n + 1', args: [ip, utcDay()] });
+}
 const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && timingSafeEqual(x, y); };
 const ownerPassToken = () => (passKey() ? `pass.${createHmac('sha256', passKey()).update('demo-owner-pass').digest('base64url')}` : null);
 const isOwnerPass = (req) => !!ownerPassToken() && !!leadToken(req) && same(leadToken(req), ownerPassToken());
@@ -60,6 +70,8 @@ async function leadsTable(db) {
   for (const col of ['token TEXT', 'ai_used INTEGER NOT NULL DEFAULT 0']) {
     await db.execute(`ALTER TABLE demo_leads ADD COLUMN ${col}`).catch(() => {}); // already there
   }
+  // wrong owner-pass tries, per visitor IP per day (passLocked below)
+  await db.execute('CREATE TABLE IF NOT EXISTS demo_pass_tries (ip TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, day))');
 }
 
 // Questions this visitor has left (0 when unknown).
@@ -108,12 +120,17 @@ router.get('/ai', async (req, res, next) => {
   try { res.json({ enabled: !!aiKey(), pass: isOwnerPass(req), left: aiKey() ? await aiLeft(req) : 0, limit: AI_QUESTIONS }); } catch (err) { next(err); }
 });
 
-// The owner pass (above). The secret arrives in the POST body from the page's #pass=…, never in a URL. A wrong pass changes nothing.
-router.post('/pass', (req, res) => {
-  const given = req.body?.pass;
-  if (!passKey() || typeof given !== 'string' || !same(given, passKey())) return res.status(403).json({ error: 'That pass is not valid.' });
-  res.cookie('demo_lead', ownerPassToken(), { ...COOKIE, maxAge: 365 * 24 * 60 * 60 * 1000 });
-  res.json({ ok: true });
+// The owner pass (above). The PIN arrives in a POST body (typed, or from the page's #pass=…), never in a URL.
+// Wrong tries are counted and capped.
+router.post('/pass', async (req, res, next) => {
+  try {
+    const ip = req.headers['cf-connecting-ip'] || 'unknown';
+    if (await passLocked(ip)) return res.status(429).json({ error: 'Too many tries. Try again tomorrow.' });
+    const given = req.body?.pass;
+    if (!passKey() || typeof given !== 'string' || !same(given, passKey())) { await passFailed(ip); return res.status(403).json({ error: 'That pass is not valid.' }); }
+    res.cookie('demo_lead', ownerPassToken(), { ...COOKIE, maxAge: 365 * 24 * 60 * 60 * 1000 });
+    res.json({ ok: true });
+  } catch (err) { next(err); }
 });
 
 router.post('/lead', async (req, res, next) => {
