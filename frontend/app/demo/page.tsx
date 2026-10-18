@@ -82,7 +82,10 @@ export default function DemoPage() {
     {/* Slim header: who made this and where to read more (not the full ahromlabs.com navbar, so the form stays the focus). */}
     <header className="border-b">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 text-sm">
-        <a href="https://ahromlabs.com" className="font-semibold tracking-tight">Ahrom Labs</a>
+        <a href="https://ahromlabs.com" title="Ahrom Labs" className="inline-flex items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element -- a 1 KB static mark; next/image adds nothing here */}
+          <img src="/ahrom-labs-mark.webp" alt="Ahrom Labs" width={28} height={28} className="size-7 dark:invert" />
+        </a>
         <nav className="flex items-center gap-4 text-muted-foreground sm:gap-6">
           <a href="https://ahromlabs.com/industries/electronics-component-trading" className="hover:text-foreground">How it was built</a>
           <a href="https://ahromlabs.com/#contact" className="hover:text-foreground">Contact</a>

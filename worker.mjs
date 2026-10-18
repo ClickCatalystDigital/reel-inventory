@@ -52,7 +52,8 @@ export default {
 
     // Pages are static files, but still gated here: the login page and favicon are
     // public, everything else needs a valid session and a page the role may open.
-    if (pathname !== '/login' && pathname !== '/favicon.ico' && !isDemoPage) {
+    // The Ahrom Labs mark on the /demo header is public too.
+    if (pathname !== '/login' && pathname !== '/favicon.ico' && pathname !== '/ahrom-labs-mark.webp' && !isDemoPage) {
       const user = userFromHeaders((h) => request.headers.get(h));
       if (!user) return Response.redirect(new URL(demo ? '/demo' : '/login', request.url), 302);
       const rule = ROLE_PAGE_ALLOWLIST[user.role];
