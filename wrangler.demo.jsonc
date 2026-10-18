@@ -21,7 +21,7 @@
   "ratelimits": [
     { "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
   ],
-  // Secrets (wrangler secret put -c wrangler.demo.jsonc): TURSO_AUTH_TOKEN (lsdemo group token),
+  // Secrets (wrangler secret put -c wrangler.demo.jsonc): DEMO_PASS (owner pass, 24+ chars, /demo#pass=…), TURSO_AUTH_TOKEN (lsdemo group token),
   // SESSION_SECRET (its own, never the live one). Never the live deployment's values.
   "vars": {
     "DEMO_MODE": "1",

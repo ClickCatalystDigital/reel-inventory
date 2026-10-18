@@ -35,7 +35,12 @@ export default function DemoPage() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    fetch("/api/demo/roles")
+    // Owner pass (utils/demo.js): /demo#pass=… goes straight to the roles. The secret is wiped from the address bar
+    // and is only ever sent in a POST body.
+    const pass = new URLSearchParams(window.location.hash.slice(1)).get("pass");
+    if (pass) history.replaceState(null, "", window.location.pathname);
+    (pass ? fetch("/api/demo/pass", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pass }) }).catch(() => null) : Promise.resolve(null))
+      .then(() => fetch("/api/demo/roles"))
       .then((r) => r.json())
       .then((d) => {
         setRoles(d.roles || []);

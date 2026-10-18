@@ -70,7 +70,7 @@ export function AssistantWidget() {
   const [defaults, setDefaults] = useState<string[]>(DEFAULT_STARTERS);
   const [teaser, setTeaser] = useState(false);
   // Public demo: free questions left for this visitor (null until known), and the "that was your free questions" overlay.
-  const [demoAi, setDemoAi] = useState<{ enabled: boolean; left: number; limit: number } | null>(null);
+  const [demoAi, setDemoAi] = useState<{ enabled: boolean; left: number; limit: number; pass?: boolean } | null>(null);
   const [limitOpen, setLimitOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
@@ -168,7 +168,7 @@ export function AssistantWidget() {
           setLimitOpen(true);
           track("electronics_demo_ai_limit");
         }
-        if (DEMO && res.ok) { setDemoAi((d) => (d ? { ...d, left: Math.max(0, d.left - 1) } : d)); track("electronics_demo_ai_question"); }
+        if (DEMO && res.ok) { setDemoAi((d) => (d && !d.pass ? { ...d, left: Math.max(0, d.left - 1) } : d)); track("electronics_demo_ai_question"); }
         if (!res.ok || !data?.reply) {
           setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", error: { text: data?.error || "Something went wrong. Please try again.", link: data?.link, linkLabel: data?.linkLabel } }]);
         } else {
@@ -253,7 +253,7 @@ export function AssistantWidget() {
         </span>
         <p className="flex-1 text-sm font-semibold tracking-tight">
           {BRAND.ai}
-          {DEMO && demoAi && <span className="ml-2 text-[11px] font-normal text-muted-foreground">{demoAi.left} of {demoAi.limit} free questions left</span>}
+          {DEMO && demoAi && <span className="ml-2 text-[11px] font-normal text-muted-foreground">{demoAi.pass ? "Owner pass · no limit" : `${demoAi.left} of ${demoAi.limit} free questions left`}</span>}
         </p>
         <button type="button" onClick={reset} disabled={busy || !msgs.length} aria-label="New conversation" title="New conversation" className="grid size-8 place-items-center rounded-lg text-muted-foreground transition-colors hover:bg-muted hover:text-foreground disabled:opacity-30">
           <RotateCcw className="size-4" />

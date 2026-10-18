@@ -2,7 +2,7 @@
 // leaves their details on /demo, then signs in as one of the sample logins below without a password.
 // Same flow as SB Ops' demo (shanti-ops: app/demo, server/api/demo, middleware.js demoGuard).
 const express = require('express');
-const { randomBytes } = require('node:crypto');
+const { randomBytes, createHmac, timingSafeEqual } = require('node:crypto');
 const { createClient } = require('@libsql/client/web');
 const { queryOne } = require('../db/schema');
 const { sign } = require('./auth');
@@ -44,6 +44,15 @@ const COOKIE = { httpOnly: true, secure: true, sameSite: 'strict', path: '/' };
 const leadToken = (req) => req.cookies?.demo_lead || null;
 const hasLead = (req) => !!leadToken(req);
 
+// Owner pass: the owner's own browser opens /demo#pass=<DEMO_PASS> (a Worker secret, 24+ characters). The page trades it
+// once at POST /api/demo/pass for a demo_lead cookie holding an HMAC of the secret (never the secret itself): that
+// browser skips the form, is never saved as a lead, and asks the assistant without a limit. No DEMO_PASS, no pass.
+// Same as savistar-ops and shanti-ops.
+const passKey = () => (process.env.DEMO_PASS && process.env.DEMO_PASS.length >= 24 ? process.env.DEMO_PASS : null);
+const same = (a, b) => { const x = Buffer.from(String(a)), y = Buffer.from(String(b)); return x.length === y.length && timingSafeEqual(x, y); };
+const ownerPassToken = () => (passKey() ? `pass.${createHmac('sha256', passKey()).update('demo-owner-pass').digest('base64url')}` : null);
+const isOwnerPass = (req) => !!ownerPassToken() && !!leadToken(req) && same(leadToken(req), ownerPassToken());
+
 async function leadsTable(db) {
   await db.execute(`CREATE TABLE IF NOT EXISTS demo_leads (
     id INTEGER PRIMARY KEY AUTOINCREMENT, name TEXT NOT NULL, company TEXT NOT NULL, email TEXT NOT NULL,
@@ -55,6 +64,7 @@ async function leadsTable(db) {
 
 // Questions this visitor has left (0 when unknown).
 async function aiLeft(req) {
+  if (isOwnerPass(req)) return AI_QUESTIONS; // shown as "no limit"
   const token = leadToken(req);
   if (!token || token === '1') return 0;
   const r = await (await readyLeads()).execute({ sql: 'SELECT ai_used FROM demo_leads WHERE token = ?', args: [token] });
@@ -62,6 +72,7 @@ async function aiLeft(req) {
 }
 // Takes one question atomically; false when none are left.
 async function takeAiQuestion(req) {
+  if (isOwnerPass(req)) return true;
   const token = leadToken(req);
   if (!token || token === '1') return false;
   const r = await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used + 1 WHERE token = ? AND ai_used < ?', args: [token, AI_QUESTIONS] });
@@ -69,6 +80,7 @@ async function takeAiQuestion(req) {
 }
 // Gives it back when the answer failed (OpenRouter down, etc.), so a visitor never loses one to an error.
 async function returnAiQuestion(req) {
+  if (isOwnerPass(req)) return;
   const token = leadToken(req);
   if (token && token !== '1') await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used - 1 WHERE token = ? AND ai_used > 0', args: [token] });
 }
@@ -93,7 +105,15 @@ router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLea
 
 // The widget asks this on load: hidden when the demo has no AI key, locked when left is 0.
 router.get('/ai', async (req, res, next) => {
-  try { res.json({ enabled: !!aiKey(), left: aiKey() ? await aiLeft(req) : 0, limit: AI_QUESTIONS }); } catch (err) { next(err); }
+  try { res.json({ enabled: !!aiKey(), pass: isOwnerPass(req), left: aiKey() ? await aiLeft(req) : 0, limit: AI_QUESTIONS }); } catch (err) { next(err); }
+});
+
+// The owner pass (above). The secret arrives in the POST body from the page's #pass=…, never in a URL. A wrong pass changes nothing.
+router.post('/pass', (req, res) => {
+  const given = req.body?.pass;
+  if (!passKey() || typeof given !== 'string' || !same(given, passKey())) return res.status(403).json({ error: 'That pass is not valid.' });
+  res.cookie('demo_lead', ownerPassToken(), { ...COOKIE, maxAge: 365 * 24 * 60 * 60 * 1000 });
+  res.json({ ok: true });
 });
 
 router.post('/lead', async (req, res, next) => {
