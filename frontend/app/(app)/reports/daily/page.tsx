@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { api } from "@/lib/api";
+import { api, downloadUrl } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
@@ -63,9 +63,7 @@ export default function DailyReportPage() {
     const params = new URLSearchParams(storeQueryParam(selectedStore));
     if (date) params.set("date", date);
     const qs = params.toString();
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/labels/daily-report${qs ? "?" + qs : ""}`;
-    showToast("PDF download started");
+    downloadUrl(`/api/labels/daily-report${qs ? "?" + qs : ""}`, "Preparing PDF...");
   }
 
   const inwardReels = report?.inward.reduce((s, r) => s + (r.reel_count || 0), 0) || 0;

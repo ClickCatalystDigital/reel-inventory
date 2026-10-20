@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { api } from "@/lib/api";
+import { api, downloadUrl } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { askText } from "@/components/layout/AskDialog";
 import { formatDate, formatQty } from "@/lib/format";
@@ -89,18 +89,12 @@ export default function SearchTracePage() {
     if (dateTo) params.set("date_to", dateTo);
     const sp = storeQueryParam(selectedStore);
     if (sp) params.set("store", selectedStore);
-    // Triggers a file download from the Express API, not a page navigation —
-    // router.push()/redirect() don't apply here.
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/dashboard/export${params.toString() ? "?" + params : ""}`;
-    showToast("CSV download started");
+    downloadUrl(`/api/dashboard/export${params.toString() ? "?" + params : ""}`, "Preparing CSV...");
   }
 
   function exportStockCSV() {
     const sp = storeQueryParam(selectedStore);
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/dashboard/export-stock${sp ? "?" + sp : ""}`;
-    showToast("Stock export started");
+    downloadUrl(`/api/dashboard/export-stock${sp ? "?" + sp : ""}`, "Preparing stock CSV...");
   }
 
   async function deleteSelected() {
@@ -209,7 +203,24 @@ export default function SearchTracePage() {
             columns={[
               {
                 key: "select",
-                label: "",
+                label: (pageRows: SearchResultRow[]) => {
+                  const all = pageRows.length > 0 && pageRows.every((r) => selected.has(r.reel_number));
+                  const some = !all && pageRows.some((r) => selected.has(r.reel_number));
+                  return (
+                    <input
+                      type="checkbox"
+                      aria-label="Select all reels on this page"
+                      title="Select all on this page"
+                      checked={all}
+                      ref={(el) => { if (el) el.indeterminate = some; }}
+                      onChange={(e) => setSelected((prev) => {
+                        const next = new Set(prev);
+                        for (const r of pageRows) if (e.target.checked) next.add(r.reel_number); else next.delete(r.reel_number);
+                        return next;
+                      })}
+                    />
+                  );
+                },
                 render: (r) => (
                   <input
                     type="checkbox"
@@ -236,9 +247,17 @@ export default function SearchTracePage() {
               { label: "Outwarded", render: (r) => (r.outward_history.at(-1) ? formatDate(r.outward_history.at(-1)!.outward_date) : "—") },
             ]}
           />
-          <Button variant="destructive" size="sm" className="mt-3" onClick={deleteSelected}>
-            Delete Selected
-          </Button>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            {selected.size > 0 && (
+              <span className="text-sm text-muted-foreground">
+                {selected.size} selected ·{" "}
+                <button className="underline hover:text-foreground" onClick={() => setSelected(new Set())}>Clear</button>
+              </span>
+            )}
+            <Button variant="destructive" size="sm" onClick={deleteSelected}>
+              Delete Selected
+            </Button>
+          </div>
         </Card>
       )}
     </div>

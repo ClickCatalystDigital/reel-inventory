@@ -1,3 +1,4 @@
+import { toast } from "sonner";
 import { showToast } from "./toast";
 
 // Direct port of public/js/app.js's api(). Same contract: pass a plain object
@@ -25,11 +26,11 @@ export async function api<T = unknown>(url: string, options: ApiOptions = {}): P
   }
 }
 
-// Saves a PDF response as a file. Throws (no file saved) on an error status or an empty/non-PDF body,
-// so a failed generation never turns into a silent 0 KB download.
-export async function downloadFile(res: Response, filename: string): Promise<void> {
+// Saves a file response (PDF or CSV). Throws (no file saved) on an error status or an empty/error body,
+// so a failed generation never turns into a silent 0 KB download. `filename` falls back to the server's.
+export async function downloadFile(res: Response, filename?: string): Promise<void> {
   const blob = await res.blob();
-  if (!res.ok || blob.size === 0 || !blob.type.includes("pdf")) {
+  if (!res.ok || blob.size === 0 || /json|html/.test(blob.type)) {
     let msg = `Download failed (${res.status})`;
     try { msg = JSON.parse(await blob.text()).error || msg; } catch {}
     throw new Error(msg);
@@ -37,10 +38,22 @@ export async function downloadFile(res: Response, filename: string): Promise<voi
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = filename;
+  a.download = filename || /filename="?([^";]+)/.exec(res.headers.get("content-disposition") || "")?.[1] || "download";
   document.body.appendChild(a);
   a.click();
   a.remove();
   // Revoking right after click() can cancel the save before the browser reads the blob → 0 KB file.
   setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}
+
+// GET a report/export and save it, with a toast either way. For links that used to be window.location.href = url,
+// which left the app for a raw JSON error page when the server failed.
+export async function downloadUrl(url: string, startedMsg = "Preparing download..."): Promise<void> {
+  const t = toast.loading(startedMsg);
+  try {
+    await downloadFile(await fetch(url));
+    toast.success("Downloaded", { id: t });
+  } catch (err) {
+    toast.error(err instanceof Error ? err.message : "Download failed", { id: t });
+  }
 }

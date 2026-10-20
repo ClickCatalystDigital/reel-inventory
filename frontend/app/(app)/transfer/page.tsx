@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CameraOff, FileDown, PenLine } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, downloadUrl } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
@@ -140,9 +140,7 @@ export default function TransferPage() {
     if (dateTo) params.set("date_to", dateTo);
     const sp = storeQueryParam(selectedStore);
     if (sp) params.set("store", selectedStore);
-    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
-    window.location.href = `/api/labels/transfer-report?${params}`;
-    showToast("PDF download started");
+    downloadUrl(`/api/labels/transfer-report?${params}`, "Preparing PDF...");
   }
 
   // Changing From Store invalidates every eligibility check the current cart was
