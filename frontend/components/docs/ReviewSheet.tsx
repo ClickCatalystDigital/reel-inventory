@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useState } from "react";
 import { ExternalLink, Paperclip, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -128,8 +129,10 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
   });
   const remove = () => run(async () => {
     if (!inv) return;
-    const msg = inv.status === "pushed" ? "This was pushed to Tally. Deleting here only archives the CRM record — it will NOT remove the voucher from Tally. Continue?" : "Delete this record permanently?";
-    if (!confirm(msg)) return;
+    const pushed = inv.status === "pushed";
+    if (!(await askConfirm(pushed
+      ? { title: "Archive this record?", description: "It was already pushed to Tally. This only archives it here — the voucher stays in Tally.", confirmLabel: "Archive", destructive: true }
+      : { title: "Delete this record?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     const r = await api<{ soft: boolean }>(`/api/invoices/${inv.id}`, { method: "DELETE" });
     showToast(r.soft ? "Archived (was in Tally)" : "Deleted", "success"); onClose(); docs.changed();
   });

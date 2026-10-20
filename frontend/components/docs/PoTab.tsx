@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Plus, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,9 +90,9 @@ export function PoTab() {
       // api() already toasted
     }
   }
-  const quickDispatch = (id: number) => { if (confirm(`Mark as dispatched today (${today})?`)) act(`/api/po/${id}/dispatch`, { dispatch_date: today }, "PO dispatched"); };
+  const quickDispatch = async (id: number) => { if (await askConfirm({ title: `Mark this PO as dispatched today (${today})?`, confirmLabel: "Mark dispatched" })) act(`/api/po/${id}/dispatch`, { dispatch_date: today }, "PO dispatched"); };
   async function remove(id: number) {
-    if (!confirm("Delete this Purchase Order permanently?")) return;
+    if (!(await askConfirm({ title: "Delete this Purchase Order?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/po/${id}`, { method: "DELETE" });
       showToast("Deleted", "success");

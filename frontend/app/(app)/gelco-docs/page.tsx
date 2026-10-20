@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
@@ -66,7 +67,7 @@ export default function GelcoDocsPage() {
   }
 
   async function deleteDoc(id: number) {
-    if (!window.confirm("Delete this document? This cannot be undone.")) return;
+    if (!(await askConfirm({ title: "Delete this document?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/gelco-docs/${id}`, { method: "DELETE" });
       showToast("Document deleted");

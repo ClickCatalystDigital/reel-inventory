@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
 import { BookOpen, Database, UserPlus, Users } from "lucide-react";
 import { api } from "@/lib/api";
@@ -255,7 +256,7 @@ function UserRow({
   }
 
   async function remove() {
-    if (!window.confirm(`Delete user "${user.username}"? This cannot be undone.`)) return;
+    if (!(await askConfirm({ title: `Delete user "${user.username}"?`, description: "They can no longer log in. This cannot be undone.", confirmLabel: "Delete user", destructive: true }))) return;
     setBusy(true);
     try {
       await api(`/api/settings/users/${user.id}`, { method: "DELETE" });

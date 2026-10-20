@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
 import { ExternalLink, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -85,7 +86,7 @@ function ViewPo({ id, onClose, companyOptions, itemOptions }: { id: number; onCl
     if (await call("POST", `/api/po/${id}/dispatch`, { dispatch_date: head.expected }, "PO dispatched", false)) onClose();
   };
   const cancel = async () => {
-    if (!confirm("Cancel this PO? This cannot be undone.")) return;
+    if (!(await askConfirm({ title: "Cancel this PO?", description: "This cannot be undone.", confirmLabel: "Cancel PO", destructive: true }))) return;
     if (await call("POST", `/api/po/${id}/cancel`, undefined, "PO cancelled", false)) onClose();
   };
 

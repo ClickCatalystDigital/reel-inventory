@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useState } from "react";
 import { Search } from "lucide-react";
 import { api } from "@/lib/api";
@@ -202,7 +203,7 @@ export default function CatalogPage() {
   }
 
   async function deleteItem(itemCode: string) {
-    if (!window.confirm(`Delete ${itemCode}? This cannot be undone.`)) return;
+    if (!(await askConfirm({ title: `Delete ${itemCode}?`, description: "It is removed from the catalog.", confirmLabel: "Delete item", destructive: true }))) return;
     try {
       // encodeURIComponent converts the slash into %2F so Express treats it as text!
       await api(`/api/items/${encodeURIComponent(itemCode)}`, { method: "DELETE" });

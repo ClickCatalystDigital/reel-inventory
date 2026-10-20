@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -69,7 +70,7 @@ export function DayDialog({ target, onClose, onOpenTask, onChanged, onJumpToMont
   }
 
   async function remove(id: number) {
-    if (!target || !window.confirm("Permanently delete this task?")) return;
+    if (!target || !(await askConfirm({ title: "Delete this task?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/tasks/${id}`, { method: "DELETE" });
       await load(target);

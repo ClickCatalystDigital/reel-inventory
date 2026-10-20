@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { Fragment, useCallback, useEffect, useMemo, useState } from "react";
 import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -251,7 +252,7 @@ function OrderSheet({ id, canEdit, onClose, onChanged, onOpenPo }: { id: number 
   };
   const save = (status?: string) => run(() => api(`/api/procurement/${o!.id}`, { method: "PUT", body: { ...head, ...(status ? { status } : {}), items: o!.items.map((i) => ({ id: i.id, qty_ordered: Number(qty[i.id]) })) } }), status === "ordered" ? "Marked as ordered" : "Saved");
   const stage = (itemId: number, s: string) => run(() => api(`/api/procurement/${o!.id}/items/${itemId}/stage`, { method: "PUT", body: { stage: s } }), `Stage set to ${s}`);
-  const cancel = () => { if (confirm("Cancel this order? The customer POs waiting on it go back to 'Not planned'.")) run(() => api(`/api/procurement/${o!.id}/cancel`, { method: "POST", body: {} }), "Order cancelled"); };
+  const cancel = async () => { if (await askConfirm({ title: "Cancel this procurement order?", description: "The customer POs waiting on it go back to 'Not planned'.", confirmLabel: "Cancel order", destructive: true })) run(() => api(`/api/procurement/${o!.id}/cancel`, { method: "POST", body: {} }), "Order cancelled"); };
   const total = useMemo(() => o?.items.reduce((s, i) => s + (i.unit_cost || 0) * i.qty_ordered, 0) || 0, [o]);
 
   return (

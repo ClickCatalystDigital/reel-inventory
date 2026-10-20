@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { Plus, Trash2 } from "lucide-react";
@@ -100,7 +101,7 @@ export default function ClientsPage() {
   const allSelected = filtered.length > 0 && filtered.every((c) => selected.has(c.id));
 
   async function removeOne(c: Client) {
-    if (!window.confirm(`Permanently delete ${c.poc_name} and all their notes and tasks?`)) return;
+    if (!(await askConfirm({ title: `Delete ${c.poc_name}?`, description: "Their notes and tasks are deleted too. This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/clients/${c.id}`, { method: "DELETE" });
       showToast("Client removed");
@@ -113,7 +114,7 @@ export default function ClientsPage() {
 
   async function removeSelected() {
     const ids = [...selected];
-    if (!ids.length || !window.confirm(`Permanently delete ${ids.length} client(s) and all their notes and tasks?`)) return;
+    if (!ids.length || !(await askConfirm({ title: `Delete ${ids.length} client(s)?`, description: "Their notes and tasks are deleted too. This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api("/api/clients/bulk-delete", { method: "POST", body: { ids } });
       showToast(`${ids.length} client(s) removed`);

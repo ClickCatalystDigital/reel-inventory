@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useState } from "react";
 import { Check, ChevronsUpDown, Loader2, Search } from "lucide-react";
 import { api } from "@/lib/api";
@@ -177,7 +178,7 @@ export function AssistantCard() {
   }
 
   async function removeKey() {
-    if (window.confirm("Remove the saved OpenRouter key? The assistant stops working until a new key is saved.")) await put({ key: "" }, "Key removed");
+    if (await askConfirm({ title: "Remove the saved OpenRouter key?", description: "The assistant stops working until a new key is saved.", confirmLabel: "Remove key", destructive: true })) await put({ key: "" }, "Key removed");
   }
 
   async function runTest() {

@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { Check, CheckCircle2, ExternalLink, Mail, Phone, RotateCcw, Trash2 } from "lucide-react";
@@ -121,7 +122,7 @@ export function TaskSheet({ taskId, onClose, onChanged, isApprover, assignees }:
   });
 
   const remove = () => run(async () => {
-    if (!window.confirm("Permanently delete this task?")) return;
+    if (!(await askConfirm({ title: "Delete this task?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     await api(`/api/tasks/${task!.id}`, { method: "DELETE" });
     showToast("Task deleted");
     onChanged();

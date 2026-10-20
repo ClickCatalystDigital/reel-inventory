@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useState } from "react";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -91,7 +92,7 @@ export default function OrdersPage() {
   }
 
   async function deleteLot(id: number) {
-    if (!confirm("Delete this dispatch row?")) return;
+    if (!(await askConfirm({ title: "Delete this dispatch row?", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/orders/dispatches/${id}`, { method: "DELETE" });
       reload();

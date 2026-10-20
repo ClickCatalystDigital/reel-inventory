@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
 import { Download, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -89,7 +90,7 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
     }
   }
   async function release(lineId: number) {
-    if (!po || !confirm("Release the reels reserved for this line? They become free stock again.")) return;
+    if (!po || !(await askConfirm({ title: "Release the reserved reels?", description: "They become free stock again and can be shipped to anyone.", confirmLabel: "Release", destructive: true }))) return;
     setBusy(true);
     try {
       const r = await api<{ message: string }>(`/api/orders/${po.id}/lines/${lineId}/release`, { method: "POST", body: {} });
@@ -103,7 +104,7 @@ export function PoSheet({ poId, canEdit, onClose, onChanged }: { poId: number | 
   }
 
   async function deleteDoc(id: number) {
-    if (!confirm("Delete this document?")) return;
+    if (!(await askConfirm({ title: "Delete this document?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     try {
       await api(`/api/orders/docs/${id}`, { method: "DELETE" });
       changed();

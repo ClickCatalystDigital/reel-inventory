@@ -564,7 +564,7 @@ export default function OutwardPage() {
   }
 
   async function undoOutward(outwardId: number, reelNumber: string) {
-    if (!window.confirm(`Undo outward for ${reelNumber}?\n\nThis will:\n• Delete the outward record\n• Restore reel to In Stock`)) return;
+    if (!(await askConfirm({ title: `Undo outward for ${reelNumber}?`, description: "The outward record is deleted and the reel goes back to In Stock.", confirmLabel: "Undo outward", destructive: true }))) return;
     try {
       const result = await api<{ message: string }>("/api/outward/undo", { method: "POST", body: { outward_id: outwardId } });
       showToast(result.message);

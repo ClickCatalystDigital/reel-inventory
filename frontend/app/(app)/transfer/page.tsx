@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Camera, CameraOff, FileDown, PenLine } from "lucide-react";
 import { api, downloadUrl } from "@/lib/api";
@@ -383,7 +384,7 @@ export default function TransferPage() {
   }
 
   async function undoTransfer(transferId: number, label: string) {
-    if (!window.confirm(`Undo transfer of ${label}?`)) return;
+    if (!(await askConfirm({ title: `Undo transfer of ${label}?`, description: "The reel goes back to the store it came from.", confirmLabel: "Undo transfer", destructive: true }))) return;
     try {
       const result = await api<{ message: string }>("/api/transfer/undo", { method: "POST", body: { transfer_id: transferId } });
       showToast(result.message);

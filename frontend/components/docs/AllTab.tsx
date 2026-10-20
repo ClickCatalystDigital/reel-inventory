@@ -1,5 +1,6 @@
 "use client";
 
+import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowLeft, FileText, Landmark, ClipboardList, Pencil, Plus, Search, SlidersHorizontal, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -87,10 +88,12 @@ export function AllTab() {
 
   async function remove(list: Row[]) {
     const pushed = list.some((d) => !d._po && d.status === "pushed");
-    const msg = list.length === 1
-      ? list[0]._po ? "Delete this Purchase Order permanently?" : pushed ? "This was pushed to Tally. Deleting here only archives the CRM record — it will NOT remove the voucher from Tally. Continue?" : "Delete this record permanently?"
-      : pushed ? `Delete ${list.length} selected record(s)? Some invoices were pushed to Tally and will be ARCHIVED; the rest will be permanently deleted. Continue?` : `Permanently delete ${list.length} selected record(s)?`;
-    if (!confirm(msg)) return;
+    const one = list.length === 1;
+    const title = one ? (list[0]._po ? "Delete this Purchase Order?" : pushed ? "Archive this record?" : "Delete this record?") : `Delete ${list.length} selected record(s)?`;
+    const description = pushed
+      ? one ? "It was already pushed to Tally. This only archives it here — the voucher stays in Tally." : "Invoices already pushed to Tally are only archived here (their vouchers stay in Tally); the rest are deleted permanently."
+      : "This cannot be undone.";
+    if (!(await askConfirm({ title, description, confirmLabel: one && pushed && !list[0]._po ? "Archive" : "Delete", destructive: true }))) return;
     let archived = 0, del = 0, failed = 0;
     for (const d of list) {
       try {
