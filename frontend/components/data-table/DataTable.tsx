@@ -6,7 +6,8 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 export interface DataTableColumn<T> {
-  label: ReactNode;
+  /** a function gets the rows on the current page (e.g. a select-all-on-page checkbox) */
+  label: ReactNode | ((pageRows: T[]) => ReactNode);
   key?: string;
   render: (row: T) => ReactNode;
   /** applied to both the header and body cells (e.g. "hidden md:table-cell" to drop a column on phones) */
@@ -105,7 +106,7 @@ export function DataTable<T>({
           <TableHeader>
             <TableRow>
               {columns.map((c, i) => (
-                <TableHead key={c.key ?? i} className={c.className}>{c.label}</TableHead>
+                <TableHead key={c.key ?? i} className={c.className}>{typeof c.label === "function" ? c.label(rows) : c.label}</TableHead>
               ))}
             </TableRow>
           </TableHeader>

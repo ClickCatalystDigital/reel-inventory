@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Plus } from "lucide-react";
+import { Package, Plus, Tag } from "lucide-react";
 import { api, downloadFile } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
@@ -19,6 +19,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { Fab } from "@/components/layout/Fab";
 import { PdfOverlay } from "@/components/layout/PdfOverlay";
 import { BRAND } from "@/lib/brand";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 interface Item {
   item_code: string;
@@ -67,6 +68,8 @@ export default function InwardPage() {
   const [result, setResult] = useState<InwardResult | null>(null);
   const [recent, setRecent] = useState<Reel[]>([]);
   const [selected, setSelected] = useState<Set<string>>(new Set());
+  // Reprint choice when the selected reels sit in boxes: box labels or reel labels (was a browser confirm()).
+  const [reprintBoxes, setReprintBoxes] = useState<string[] | null>(null);
   const [overlay, setOverlay] = useState<{ active: boolean; message: string }>({ active: false, message: "" });
 
   const formRef = useRef<HTMLDivElement>(null);
@@ -204,16 +207,15 @@ export default function InwardPage() {
     if (!selected.size) return showToast("Select at least one reel", "error");
     const rows = recent.filter((r) => selected.has(r.reel_number));
     const boxNumbers = [...new Set(rows.map((r) => r.box_number).filter((b): b is string => !!b))];
-    if (boxNumbers.length > 0) {
-      const printBoxes = window.confirm(
-        `Selected reels belong to ${boxNumbers.length} box(es).\n\nOK = Download Box Labels\nCancel = Download Reel Labels`
-      );
-      if (printBoxes) {
-        await downloadPDF("/api/labels/generate-box", { box_numbers: boxNumbers }, "box_labels_reprint");
-        return;
-      }
-    }
+    if (boxNumbers.length > 0) return setReprintBoxes(boxNumbers);
     await downloadPDF("/api/labels/generate", { reel_numbers: [...selected] }, "labels_reprint");
+  }
+
+  async function reprintAs(kind: "box" | "reel") {
+    const boxes = reprintBoxes ?? [];
+    setReprintBoxes(null);
+    if (kind === "box") await downloadPDF("/api/labels/generate-box", { box_numbers: boxes }, "box_labels_reprint");
+    else await downloadPDF("/api/labels/generate", { reel_numbers: [...selected] }, "labels_reprint");
   }
 
   async function undoSelected() {
@@ -430,7 +432,24 @@ export default function InwardPage() {
           columns={[
             {
               key: "select",
-              label: "",
+              label: (pageRows: Reel[]) => {
+                const all = pageRows.length > 0 && pageRows.every((r) => selected.has(r.reel_number));
+                const some = !all && pageRows.some((r) => selected.has(r.reel_number));
+                return (
+                  <input
+                    type="checkbox"
+                    aria-label="Select all reels on this page"
+                    title="Select all on this page"
+                    checked={all}
+                    ref={(el) => { if (el) el.indeterminate = some; }}
+                    onChange={(e) => setSelected((prev) => {
+                      const next = new Set(prev);
+                      for (const r of pageRows) if (e.target.checked) next.add(r.reel_number); else next.delete(r.reel_number);
+                      return next;
+                    })}
+                  />
+                );
+              },
               render: (r) => (
                 <input
                   type="checkbox"
@@ -448,7 +467,13 @@ export default function InwardPage() {
             { label: "Date & Time", render: (r) => formatDateTime(r.inward_date) },
           ]}
         />
-        <div className="mt-3 flex flex-wrap gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          {selected.size > 0 && (
+            <span className="text-sm text-muted-foreground">
+              {selected.size} selected ·{" "}
+              <button className="underline hover:text-foreground" onClick={() => setSelected(new Set())}>Clear</button>
+            </span>
+          )}
           <Button variant="ghost" size="sm" onClick={reprintSelected}>
             Reprint Selected Labels
           </Button>
@@ -466,6 +491,31 @@ export default function InwardPage() {
         }}
         icon={<Plus className="size-6" />}
       />
+      <Dialog open={!!reprintBoxes} onOpenChange={(o) => !o && setReprintBoxes(null)}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Which labels do you want to print?</DialogTitle>
+            <DialogDescription>
+              The {selected.size} selected reel{selected.size === 1 ? "" : "s"} {selected.size === 1 ? "is" : "are"} packed in {reprintBoxes?.length} box{reprintBoxes?.length === 1 ? "" : "es"}.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Button variant="outline" className="h-auto flex-col gap-1 py-4" onClick={() => reprintAs("box")}>
+              <Package className="size-5" />
+              <span className="font-semibold">Box labels</span>
+              <span className="text-xs font-normal text-muted-foreground">{reprintBoxes?.length} label{reprintBoxes?.length === 1 ? "" : "s"}, one per box</span>
+            </Button>
+            <Button variant="outline" className="h-auto flex-col gap-1 py-4" onClick={() => reprintAs("reel")}>
+              <Tag className="size-5" />
+              <span className="font-semibold">Reel labels</span>
+              <span className="text-xs font-normal text-muted-foreground">{selected.size} label{selected.size === 1 ? "" : "s"}, one per reel</span>
+            </Button>
+          </div>
+          <DialogFooter>
+            <Button variant="ghost" onClick={() => setReprintBoxes(null)}>Cancel</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <PdfOverlay active={overlay.active} message={overlay.message} />
     </div>
   );
