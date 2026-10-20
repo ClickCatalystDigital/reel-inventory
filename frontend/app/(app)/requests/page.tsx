@@ -319,7 +319,11 @@ function EditFields({
             </div>
           </div>
           <div className="space-y-1.5">
-            <Label>Reels — uncheck to remove from this approval</Label>
+            <div className="flex items-center gap-3">
+              <Label>Reels — uncheck to remove from this approval</Label>
+              <button type="button" className="text-xs underline text-muted-foreground hover:text-foreground" onClick={() => setChecked(Object.fromEntries(reels.map((rn) => [rn, true])))}>All</button>
+              <button type="button" className="text-xs underline text-muted-foreground hover:text-foreground" onClick={() => setChecked({})}>None</button>
+            </div>
             <div className="flex flex-wrap gap-3 pt-1">
               {reels.map((rn) => (
                 <label key={rn} className="flex cursor-pointer items-center gap-1.5 text-xs">

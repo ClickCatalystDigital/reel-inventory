@@ -114,14 +114,16 @@ router.post('/', editors, ah(async (req, res) => {
   const order = await execute(`INSERT INTO procurement_orders (number, supplier, status, expected_date, notes, created_by, created_at, updated_by, updated_at)
     VALUES (?, ?, 'draft', ?, ?, ?, ?, ?, ?)`, [number, supplier, date(req.body.expected_date), String(req.body.notes || '').trim() || null, req.user.username, now, req.user.username, now]);
   const procId = order.lastId;
-  // ponytail: one insert per item for its id (orders have a handful of items); allocations go in one batch.
+  // Items in one batch (its results carry each new row id), then allocations + supplier in a second: two round trips
+  // however many items, so a big order from "To procure" can't hit the Workers subrequest limit.
+  const inserted = await batch(items.map((it, n) => [`INSERT INTO procurement_items (proc_id, item_code, qty_ordered, stage, stage_updated_by, stage_updated_at, unit_cost, currency)
+      VALUES (?, ?, ?, 'EQ', ?, ?, ?, ?)`, [procId, codes[n], int(it.qty), req.user.username, now, it.unit_cost === '' || it.unit_cost == null ? null : Number(it.unit_cost), String(it.currency || '').trim() || null]]));
   const stmts = [];
-  for (const [n, it] of items.entries()) {
-    const r = await execute(`INSERT INTO procurement_items (proc_id, item_code, qty_ordered, stage, stage_updated_by, stage_updated_at, unit_cost, currency)
-      VALUES (?, ?, ?, 'EQ', ?, ?, ?, ?)`, [procId, codes[n], int(it.qty), req.user.username, now, it.unit_cost === '' || it.unit_cost == null ? null : Number(it.unit_cost), String(it.currency || '').trim() || null]);
-    for (const a of it.allocations || []) stmts.push(['INSERT INTO procurement_allocations (proc_item_id, po_item_id, qty) VALUES (?, ?, ?)', [r.lastId, Number(a.po_item_id), int(a.qty)]]);
+  items.forEach((it, n) => {
+    const itemId = Number(inserted[n].lastInsertRowid);
+    for (const a of it.allocations || []) stmts.push(['INSERT INTO procurement_allocations (proc_item_id, po_item_id, qty) VALUES (?, ?, ?)', [itemId, Number(a.po_item_id), int(a.qty)]]);
     stmts.push(['UPDATE items SET supplier = ? WHERE item_code = ?', [supplier, codes[n]]]);
-  }
+  });
   await batch(stmts);
   res.json({ success: true, id: procId, number });
 }));

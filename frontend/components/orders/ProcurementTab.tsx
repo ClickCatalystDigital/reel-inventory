@@ -72,7 +72,15 @@ export function ProcurementTab({ canEdit, onOpenPo }: { canEdit: boolean; onOpen
           ) : (
             <table className="w-full text-sm">
               <thead className="bg-muted/40 text-left text-[11px] text-muted-foreground uppercase">
-                <tr>{canEdit && <th className="w-8 p-2" />}<th className="p-2">Item</th><th className="p-2 text-right">Still needed</th><th className="hidden p-2 text-right sm:table-cell">Free at LS</th><th className="hidden p-2 md:table-cell">Waiting POs</th></tr>
+                <tr>{canEdit && (
+                  <th className="w-8 p-2">
+                    <Checkbox
+                      aria-label="Select all items"
+                      checked={short.every((g) => picked.has(g.item_code)) ? true : short.some((g) => picked.has(g.item_code)) ? "indeterminate" : false}
+                      onCheckedChange={(v) => setPicked(new Set(v === true ? short.map((g) => g.item_code) : []))}
+                    />
+                  </th>
+                )}<th className="p-2">Item</th><th className="p-2 text-right">Still needed</th><th className="hidden p-2 text-right sm:table-cell">Free at LS</th><th className="hidden p-2 md:table-cell">Waiting POs</th></tr>
               </thead>
               <tbody>
                 {short.map((g) => (
