@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, Check, PenLine } from "lucide-react";
 import { api, downloadFile } from "@/lib/api";
 import { showToast } from "@/lib/toast";
+import { askConfirm } from "@/components/layout/AskDialog";
 import { formatQty, formatDateTime, nowISTString } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
@@ -517,7 +518,13 @@ export default function OutwardPage() {
       for (const [item_code, reels] of Object.entries(byItem)) {
         try {
           let r = await send(item_code, reels, false);
-          if (r.status === 409 && canOverride && window.confirm(`${r.data.error}\n\nShip these reels on this shipment anyway? Their reservation is used up.`)) {
+          if (r.status === 409 && canOverride && await askConfirm({
+            title: `${item_code}: reserved for another order`,
+            description: `${r.data.error}\n\nShipping them here uses up that reservation, and the other order will need stock again.`,
+            confirmLabel: "Ship anyway",
+            cancelLabel: "Don't ship these",
+            destructive: true,
+          })) {
             r = await send(item_code, reels, true);
           }
           if (r.status >= 400) throw new Error(r.data.error || "failed");

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { Package, Plus, Tag } from "lucide-react";
 import { api, downloadFile } from "@/lib/api";
 import { showToast } from "@/lib/toast";
+import { askConfirm, askText } from "@/components/layout/AskDialog";
 import { formatQty, formatDateTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
@@ -155,7 +156,7 @@ export default function InwardPage() {
     e.preventDefault();
     if (!itemCode) return showToast("Select an item", "error");
     if (!numReels || numReels < 1) return showToast("Enter a valid number of reels or quantity", "error");
-    if (warning && !window.confirm(`${warning}\n\nProceed with ${numReels} reel(s)?`)) return;
+    if (warning && !(await askConfirm({ title: "Quantity doesn't make whole reels", description: `${warning}\n\nCheck the quantity before receiving.`, confirmLabel: `Inward ${numReels} reel(s) anyway`, cancelLabel: "Go back" }))) return;
     if (perBox > 0 && numReels % perBox !== 0) {
       return showToast(`${numReels} reels is not evenly divisible by ${perBox} per box`, "error");
     }
@@ -220,9 +221,15 @@ export default function InwardPage() {
 
   async function undoSelected() {
     if (!selected.size) return showToast("Select at least one reel", "error");
-    const password = window.prompt(
-      `Undo inward for ${selected.size} reel(s)?\n\nThis will mark them as Deleted and clean up empty boxes.\nOutwarded reels will be skipped.\n\nEnter password to confirm:`
-    );
+    const password = await askText({
+      title: `Undo inward for ${selected.size} reel(s)?`,
+      description: "They will be marked Deleted and any box left empty is removed. Reels already outwarded are skipped.",
+      inputLabel: "Password",
+      password: true,
+      required: true,
+      confirmLabel: "Undo inward",
+      destructive: true,
+    });
     if (!password) return;
     try {
       const result = await api<{ message: string }>("/api/inward/undo", {

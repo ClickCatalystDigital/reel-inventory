@@ -4,6 +4,7 @@ import { Check } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
+import { askText } from "@/components/layout/AskDialog";
 import { formatDateTime } from "@/lib/format";
 import { useSelectedStore } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
@@ -159,7 +160,7 @@ function RequestCard({
   }
 
   async function reject() {
-    const reason = window.prompt("Reject reason (optional):");
+    const reason = await askText({ title: `Reject request #${r.id}?`, inputLabel: "Reason (optional)", placeholder: "Shown to the person who sent it", confirmLabel: "Reject", destructive: true });
     if (reason === null) return;
     try {
       await api(`/api/requests/${r.id}/reject`, { method: "POST", body: { reject_reason: reason } });

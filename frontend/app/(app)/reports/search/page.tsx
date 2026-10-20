@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
+import { askText } from "@/components/layout/AskDialog";
 import { formatDate, formatQty } from "@/lib/format";
 import { useSelectedStore, storeQueryParam } from "@/lib/store-context";
 import { Button } from "@/components/ui/button";
@@ -110,10 +111,15 @@ export default function SearchTracePage() {
         "/api/dashboard/delete-preview",
         { method: "POST", body: { reel_numbers: reelNumbers } }
       );
-      const confirmMsg = `You are about to delete ${preview.total} reel(s):\n\n• In Stock: ${preview.in_stock}\n• Outwarded: ${preview.outwarded}\n• Already Deleted: ${preview.already_deleted}\n• Total Quantity: ${formatQty(
-        preview.total_quantity
-      )}\n\nEnter password to confirm:`;
-      const password = window.prompt(confirmMsg);
+      const password = await askText({
+        title: `Delete ${preview.total} reel(s)?`,
+        description: `In Stock: ${preview.in_stock}\nOutwarded: ${preview.outwarded}\nAlready Deleted: ${preview.already_deleted}\nTotal Quantity: ${formatQty(preview.total_quantity)}`,
+        inputLabel: "Password",
+        password: true,
+        required: true,
+        confirmLabel: "Delete reels",
+        destructive: true,
+      });
       if (!password) return;
       const result = await api<{ message: string }>("/api/dashboard/delete", { method: "POST", body: { reel_numbers: reelNumbers, password } });
       showToast(result.message);

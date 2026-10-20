@@ -5,6 +5,7 @@ import { PageShell } from "@/components/layout/PageShell";
 import { AssistantWidget } from "@/components/assistant/AssistantWidget";
 import { DemoBanner } from "@/components/demo/DemoBanner";
 import { DEMO } from "@/lib/brand";
+import { AskHost } from "@/components/layout/AskDialog";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -16,6 +17,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       </div>
       <BottomNav />
       <DailyGateOverlay />
+      <AskHost />
       {/* LS AI chat bubble: renders only for the admin role (the API enforces it too) */}
       {DEMO && <DemoBanner />}
       {/* In the demo the bubble appears only when the demo has its own AI key, with two questions per visitor. */}
