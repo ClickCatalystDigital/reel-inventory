@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Camera, CameraOff, Check, PenLine } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, downloadFile } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime, nowISTString } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
@@ -447,15 +447,9 @@ export default function OutwardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ customer_name: customer, invoice_number: invoice, reels, notes: notesVal }),
       });
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `packing_list_${invoice}_${Date.now()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadFile(res, `packing_list_${invoice}_${Date.now()}.pdf`);
     } catch {
-      // best-effort — matches legacy's console.error-only handling
+      showToast("Packing list could not be downloaded — reprint it from Recent Outwards", "error");
     }
   }
 
@@ -464,13 +458,7 @@ export default function OutwardPage() {
     try {
       await api(`/api/sales-invoices/${encodeURIComponent(invoice)}`, { method: "POST" });
       const res = await fetch(`/api/sales-invoices/${encodeURIComponent(invoice)}/pdf`);
-      if (!res.ok) throw new Error();
-      const url = URL.createObjectURL(await res.blob());
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `invoice_${invoice}.pdf`;
-      a.click();
-      URL.revokeObjectURL(url);
+      await downloadFile(res, `invoice_${invoice}.pdf`);
     } catch {
       showToast("Invoice could not be generated — download it later from the Outward list", "error");
     }

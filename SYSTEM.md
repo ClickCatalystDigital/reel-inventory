@@ -383,6 +383,10 @@ Gelco shipments now get a Tally-style tax invoice (layout of Tally's Sales_10023
 - **Status** (`utils/poProgress.js`, one place for Orders, overlay, portal): per line ordered / dispatched (outwards with that `po_id`, matched by item) / reserved / in procurement / still needed → `Completed`, `Dispatch` (part shipped, rest reserved), `Ready` (reserved covers it), least-advanced procurement stage, or `Not planned`. PO status = least advanced line. Portal shows each line's status, progress bar and steps (no stock figures, suppliers or costs).
 - Demo seed reserves stock and creates a procurement order.
 
+## 6i. Safe PDF downloads (added 2026-10-20)
+
+- **0 KB PDF fix**: every PDF download goes through `lib/api.ts` `downloadFile()` — it refuses an error status / empty / non-PDF body (toast instead of a broken file) and revokes the blob URL after 60 s, not right after `click()` (revoking immediately could cancel the save → 0 KB file). `POST /api/labels/generate-box` reads all boxes in one `IN (...)` query; it used to run one query per box, so "select all" past ~50 boxes hit the Workers subrequest limit.
+
 ## 7. Config / environment
 
 `wrangler.jsonc` holds non-secret config: `TURSO_URL` (var), the `BUCKET` R2 binding (`impax-ls`, private — the client's own Cloudflare account, pinned via `account_id`), `LOGIN_LIMITER` rate-limit binding, Assets config, and bundler `alias`es (`pdfkit` → standalone build, `qrcode` → server build, `iconv-lite` → `shims/iconv-lite.js`; each exists because the default resolution breaks on Workers).

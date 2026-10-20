@@ -8,7 +8,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { DataTable } from "@/components/data-table/DataTable";
-import { api } from "@/lib/api";
+import { api, downloadFile } from "@/lib/api";
 import { formatQty } from "@/lib/format";
 import { showToast } from "@/lib/toast";
 import { BRAND } from "@/lib/brand";
@@ -21,13 +21,11 @@ interface Invoice { invoice_no: string; invoice_date: string; customer_name: str
 
 async function downloadPdf(no: string) {
   const res = await fetch(`/api/sales-invoices/${encodeURIComponent(no)}/pdf`);
-  if (!res.ok) return showToast("Could not build the invoice PDF", "error");
-  const url = URL.createObjectURL(await res.blob());
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `invoice_${no}.pdf`;
-  a.click();
-  URL.revokeObjectURL(url);
+  try {
+    await downloadFile(res, `invoice_${no}.pdf`);
+  } catch {
+    showToast("Could not build the invoice PDF", "error");
+  }
 }
 
 // Tax invoices issued for partner-store shipments (same number as the packing list). Other customers'

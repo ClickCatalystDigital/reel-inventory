@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { Plus } from "lucide-react";
-import { api } from "@/lib/api";
+import { api, downloadFile } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatQty, formatDateTime } from "@/lib/format";
 import { useAuth } from "@/lib/auth";
@@ -191,16 +191,10 @@ export default function InwardPage() {
     setOverlay({ active: true, message: "Generating PDF..." });
     try {
       const res = await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const blob = await res.blob();
-      const link = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = link;
-      a.download = `${prefix}_${Date.now()}.pdf`;
-      a.click();
-      URL.revokeObjectURL(link);
+      await downloadFile(res, `${prefix}_${Date.now()}.pdf`);
       showToast("PDF downloaded");
-    } catch {
-      showToast("Failed to generate PDF", "error");
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Failed to generate PDF", "error");
     } finally {
       setOverlay({ active: false, message: "" });
     }

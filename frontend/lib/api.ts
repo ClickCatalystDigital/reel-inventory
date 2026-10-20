@@ -24,3 +24,23 @@ export async function api<T = unknown>(url: string, options: ApiOptions = {}): P
     throw err;
   }
 }
+
+// Saves a PDF response as a file. Throws (no file saved) on an error status or an empty/non-PDF body,
+// so a failed generation never turns into a silent 0 KB download.
+export async function downloadFile(res: Response, filename: string): Promise<void> {
+  const blob = await res.blob();
+  if (!res.ok || blob.size === 0 || !blob.type.includes("pdf")) {
+    let msg = `Download failed (${res.status})`;
+    try { msg = JSON.parse(await blob.text()).error || msg; } catch {}
+    throw new Error(msg);
+  }
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  // Revoking right after click() can cancel the save before the browser reads the blob → 0 KB file.
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

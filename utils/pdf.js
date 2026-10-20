@@ -145,19 +145,18 @@ router.post('/generate-box', ah(async (req, res) => {
     return res.status(400).json({ error: 'box_numbers array is required' });
   }
 
-  const boxes = [];
-  for (const bn of box_numbers) {
-    const box = await queryAll(`
-      SELECT b.box_number, b.item_code, b.reel_count, i.description,
-        GROUP_CONCAT(r.reel_number) as reel_list
-      FROM boxes b
-      JOIN items i ON b.item_code = i.item_code
-      LEFT JOIN reels r ON r.box_number = b.box_number
-      WHERE b.box_number = ?
-      GROUP BY b.box_number
-    `, [bn]);
-    if (box.length) boxes.push(box[0]);
-  }
+  // One query for all boxes (a query per box blew the 50-subrequest limit on big reprints), kept in request order.
+  const rows = await queryAll(`
+    SELECT b.box_number, b.item_code, b.reel_count, i.description,
+      GROUP_CONCAT(r.reel_number) as reel_list
+    FROM boxes b
+    JOIN items i ON b.item_code = i.item_code
+    LEFT JOIN reels r ON r.box_number = b.box_number
+    WHERE b.box_number IN (${box_numbers.map(() => '?').join(',')})
+    GROUP BY b.box_number
+  `, box_numbers);
+  const byNumber = new Map(rows.map((r) => [r.box_number, r]));
+  const boxes = [...new Set(box_numbers)].map((bn) => byNumber.get(bn)).filter(Boolean);
 
   if (!boxes.length) return res.status(404).json({ error: 'No boxes found' });
 
@@ -171,12 +170,13 @@ router.post('/generate-box', ah(async (req, res) => {
   sendPdf(doc, res);
 
   const qrY = (LABEL_H - QR_SIZE) / 2;
+  const qrBuffers = await Promise.all(boxes.map((b) => generateQRBuffer(b.box_number)));
 
   for (let i = 0; i < boxes.length; i++) {
     if (i > 0) doc.addPage();
     const box = boxes[i];
 
-    const qrBuffer = await generateQRBuffer(box.box_number);
+    const qrBuffer = qrBuffers[i];
 
     doc.image(qrBuffer, PAD, qrY, { width: QR_SIZE, height: QR_SIZE });
 
