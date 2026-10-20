@@ -1,6 +1,6 @@
 "use client";
 
-import { Check } from "lucide-react";
+import { ArrowDownToLine, ArrowLeftRight, ArrowUpFromLine, Check, Clock, Pencil, User, X, type LucideIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
@@ -45,7 +45,21 @@ interface RequestItem {
   payload: RequestPayload;
 }
 
-const TYPE_LABEL: Record<ReqType, string> = { inward: "📥 Inward", transfer: "🔄 Transfer", outward: "📤 Outward" };
+const TYPE_META: Record<ReqType, { label: string; icon: LucideIcon }> = {
+  inward: { label: "Inward", icon: ArrowDownToLine },
+  transfer: { label: "Transfer", icon: ArrowLeftRight },
+  outward: { label: "Outward", icon: ArrowUpFromLine },
+};
+
+// One label/value cell of a request's details grid.
+function Field({ label, children, wide }: { label: string; children: React.ReactNode; wide?: boolean }) {
+  return (
+    <div className={wide ? "col-span-2 sm:col-span-3" : undefined}>
+      <div className="text-[11px] uppercase tracking-wide text-muted-foreground">{label}</div>
+      <div className="font-medium break-words">{children}</div>
+    </div>
+  );
+}
 const BORDER_CLASS: Record<ReqStatus, string> = {
   pending: "border-l-warning",
   approved: "border-l-success",
@@ -147,7 +161,7 @@ function RequestCard({
   const [editing, setEditing] = useState(false);
   const p = r.payload;
   const isPending = status === "pending";
-  const storeTag = p.store_code ? ` | Store: ${p.store_code}` : "";
+  const Type = TYPE_META[r.type];
 
   async function approve() {
     try {
@@ -173,15 +187,16 @@ function RequestCard({
 
   return (
     <div className={cn("mb-3 rounded-md border border-l-[3px] border-border bg-card p-4", BORDER_CLASS[status])}>
-      <div className="mb-2.5 flex flex-wrap gap-3 text-xs text-muted-foreground">
-        <span>
-          <strong>#{r.id}</strong>
+      <div className="mb-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 text-xs text-muted-foreground">
+        <span className="inline-flex items-center gap-1.5 rounded-full bg-muted px-2.5 py-1 font-medium text-foreground">
+          <Type.icon className="size-3.5" /> {Type.label} <span className="text-muted-foreground">#{r.id}</span>
         </span>
-        <span>{TYPE_LABEL[r.type]}</span>
-        <span>
-          By <strong>{r.created_by}</strong>
+        <span className="inline-flex items-center gap-1">
+          <User className="size-3.5" /> <strong className="text-foreground">{r.created_by}</strong>
         </span>
-        <span>{formatDateTime(r.created_at)}</span>
+        <span className="inline-flex items-center gap-1">
+          <Clock className="size-3.5" /> {formatDateTime(r.created_at)}
+        </span>
         {!isPending && (
           <span>
             Reviewed by <strong>{r.reviewed_by}</strong> · {formatDateTime(r.reviewed_at)}
@@ -189,31 +204,35 @@ function RequestCard({
         )}
       </div>
 
-      <div className="mb-2.5 rounded border border-border bg-background px-3 py-2 text-xs">
+      <div className="mb-3 grid grid-cols-2 gap-x-4 gap-y-2.5 rounded-md border border-border bg-background px-3 py-2.5 text-sm sm:grid-cols-3">
         {r.type === "inward" && (
           <>
-            <strong>Item:</strong> {p.item_code} | <strong>Reels:</strong> {p.num_reels} | <strong>Boxes:</strong>{" "}
-            {p.num_boxes || 0} | <strong>Notes:</strong> {p.notes || "—"}
-            {storeTag}
+            <Field label="Item">{p.item_code}</Field>
+            <Field label="Reels">{p.num_reels}</Field>
+            <Field label="Boxes">{p.num_boxes || 0}</Field>
+            {p.store_code && <Field label="Store">{p.store_code}</Field>}
           </>
         )}
         {r.type === "transfer" && (
           <>
-            <strong>{p.kind === "box" ? "Box" : "Reel"}:</strong> {p.number} | <strong>From Store:</strong>{" "}
-            {p.from_store || "—"} | <strong>To Store:</strong> {p.to_store} | <strong>Notes:</strong> {p.notes || "—"}
+            <Field label={p.kind === "box" ? "Box" : "Reel"}>{p.number}</Field>
+            <Field label="From store">{p.from_store || "—"}</Field>
+            <Field label="To store">{p.to_store}</Field>
           </>
         )}
         {r.type === "outward" && (() => {
           const reels = p.reel_numbers || (p.reel_number ? [p.reel_number] : []);
           return (
             <>
-              <strong>Item:</strong> {p.item_code || "—"} | <strong>Customer:</strong> {p.customer_name} |{" "}
-              <strong>Invoice:</strong> {p.invoice_number} | <strong>Reels ({reels.length}):</strong>{" "}
-              {reels.map((rn) => rn.replace("REEL-", "")).join(", ")} | <strong>Notes:</strong> {p.notes || "—"}
-              {storeTag}
+              <Field label="Item">{p.item_code || "—"}</Field>
+              <Field label="Customer">{p.customer_name}</Field>
+              <Field label="Invoice">{p.invoice_number}</Field>
+              {p.store_code && <Field label="Store">{p.store_code}</Field>}
+              <Field label={`Reels (${reels.length})`} wide={!p.store_code}>{reels.map((rn) => rn.replace("REEL-", "")).join(", ")}</Field>
             </>
           );
         })()}
+        {p.notes && <Field label="Notes" wide>{p.notes}</Field>}
       </div>
 
       {r.reject_reason && <div className="mb-1.5 text-xs text-destructive">Reason: {r.reject_reason}</div>}
@@ -222,16 +241,18 @@ function RequestCard({
         <EditFields request={r} onCancel={() => setEditing(false)} onSaved={onChanged} />
       )}
 
-      {isPending && (
+      {isPending && !editing && (
         <div className="flex flex-wrap gap-2">
           <Button size="sm" variant="outline" className="text-success" onClick={approve}>
             <Check /> Approve
           </Button>
-          <Button size="sm" variant="ghost" onClick={() => setEditing((v) => !v)}>
-            ✏️ Edit &amp; Approve
-          </Button>
+          {(r.type === "inward" || r.type === "outward") && (
+            <Button size="sm" variant="ghost" onClick={() => setEditing(true)}>
+              <Pencil /> Edit &amp; Approve
+            </Button>
+          )}
           <Button size="sm" variant="destructive" onClick={reject}>
-            ✕ Reject
+            <X /> Reject
           </Button>
         </div>
       )}
@@ -345,7 +366,7 @@ function EditFields({
       </div>
       <div className="flex gap-2">
         <Button size="sm" variant="outline" className="text-success" onClick={editApprove}>
-          Approve {r.type === "inward" ? "Edited" : "Selected"}
+          <Check /> Approve {r.type === "inward" ? "Edited" : "Selected"}
         </Button>
         <Button size="sm" variant="ghost" onClick={onCancel}>
           Cancel
