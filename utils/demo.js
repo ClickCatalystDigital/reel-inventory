@@ -179,4 +179,4 @@ function guard(req, res, next) {
   next();
 }
 
-module.exports = { DEMO, DEMO_ROLES, AI_QUESTIONS, router, guard, takeAiQuestion, returnAiQuestion };
+module.exports = { DEMO, DEMO_ROLES, AI_QUESTIONS, router, guard, takeAiQuestion, returnAiQuestion, isOwnerPass };

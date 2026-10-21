@@ -26,6 +26,8 @@
   "vars": {
     "DEMO_MODE": "1",
     "TURSO_URL": "libsql://ls-demo-pujan.aws-ap-south-1.turso.io",
+    // The owner pass reads and writes golden instead, so its changes survive the nightly reset (db/schema.js).
+    "GOLDEN_TURSO_URL": "libsql://ls-demo-golden-pujan.aws-ap-south-1.turso.io",
     "LEADS_TURSO_URL": "libsql://ls-demo-leads-pujan.aws-ap-south-1.turso.io"
   },
   "alias": {

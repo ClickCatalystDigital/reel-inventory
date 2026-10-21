@@ -1,6 +1,9 @@
-// Nightly reset of the public LS Inventory demo (electronics-erp.ahromlabs.com): delete the demo database and recreate it as a copy of the
-// golden one (Turso "seed from database"), then move its dates up to today. The demo Worker uses a group token, which keeps working
-// for the recreated database. Only ever touches DEMO_DB; never the leads database or anything else.
+// Nightly reset of the public LS Inventory demo (electronics-erp.ahromlabs.com). The owner pass works on the golden database directly (the app's
+// GOLDEN_TURSO_URL), so golden holds the owner's data. Each night: back golden up to <golden>-prev, move golden's dates
+// up to today, then delete the demo database and recreate it as a copy of golden (Turso "seed from database"), which
+// wipes every other visitor's changes. If the date shift fails, golden is put back from the backup.
+// The demo Worker uses a group token, which keeps working for recreated databases. Only ever touches DEMO_DB, GOLDEN_DB
+// and the backup; never the leads database or anything else.
 
 const API = 'https://api.turso.tech/v1';
 const DAY = 86400000;
@@ -9,23 +12,30 @@ const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0
 async function reset(env) {
   const base = `${API}/organizations/${env.TURSO_ORG}/databases`;
   const headers = { authorization: `Bearer ${env.TURSO_API_TOKEN}`, 'content-type': 'application/json' };
-  const del = await fetch(`${base}/${env.DEMO_DB}`, { method: 'DELETE', headers });
-  if (!del.ok && del.status !== 404) return { ok: false, step: 'delete', status: del.status, body: await del.text() };
-  const create = await fetch(base, {
-    method: 'POST', headers,
-    body: JSON.stringify({ name: env.DEMO_DB, group: env.GROUP, seed: { type: 'database', name: env.GOLDEN_DB } }),
-  });
-  if (!create.ok) return { ok: false, step: 'create', status: create.status, body: await create.text() };
-  const { database } = await create.json();
-  // A short-lived token for this database alone, to run the date shift over libsql's HTTP API.
-  const tok = await fetch(`${base}/${env.DEMO_DB}/auth/tokens?expiration=1h&authorization=full-access`, { method: 'POST', headers });
-  if (!tok.ok) return { ok: false, step: 'token', status: tok.status, body: await tok.text() };
-  const { jwt } = await tok.json();
+  // Delete `name` (if there) and recreate it as a copy of `from`.
+  const copy = async (name, from) => {
+    const del = await fetch(`${base}/${name}`, { method: 'DELETE', headers });
+    if (!del.ok && del.status !== 404) throw new Error(`delete ${name}: ${del.status} ${await del.text()}`);
+    const res = await fetch(base, { method: 'POST', headers, body: JSON.stringify({ name, group: env.GROUP, seed: { type: 'database', name: from } }) });
+    if (!res.ok) throw new Error(`create ${name}: ${res.status} ${await res.text()}`);
+  };
+  const backup = `${env.GOLDEN_DB}-prev`;
+  try { await copy(backup, env.GOLDEN_DB); } catch (e) { return { ok: false, step: 'backup', error: e.message }; }
+  let shifted, shiftError;
   try {
-    return { ok: true, ...(await shiftDates(hrana(`https://${database.Hostname}`, jwt), istToday())) };
+    const db = await fetch(`${base}/${env.GOLDEN_DB}`, { headers });
+    if (!db.ok) throw new Error(`golden: ${db.status} ${await db.text()}`);
+    const { database } = await db.json();
+    const tok = await fetch(`${base}/${env.GOLDEN_DB}/auth/tokens?expiration=1h&authorization=full-access`, { method: 'POST', headers });
+    if (!tok.ok) throw new Error(`token: ${tok.status} ${await tok.text()}`);
+    const { jwt } = await tok.json();
+    shifted = await shiftDates(hrana(`https://${database.Hostname}`, jwt), istToday());
   } catch (e) {
-    return { ok: false, step: 'shift', error: e.message };
+    shiftError = e.message;
+    try { await copy(env.GOLDEN_DB, backup); } catch (r) { return { ok: false, step: 'restore golden', error: `${shiftError}; ${r.message}` }; }
   }
+  try { await copy(env.DEMO_DB, env.GOLDEN_DB); } catch (e) { return { ok: false, step: 'demo', error: e.message, shiftError }; }
+  return shiftError ? { ok: false, step: 'shift (golden restored, demo reset)', error: shiftError } : { ok: true, ...shifted };
 }
 
 // libsql's HTTP API (Hrana, /v2/pipeline). read(sqls) → rows per statement. write(sqls) runs them as one transaction:

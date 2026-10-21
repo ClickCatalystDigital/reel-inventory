@@ -2,7 +2,7 @@
 const express = require('express');
 const cookieParser = require('cookie-parser');
 const bcrypt = require('bcryptjs');
-const { queryOne, queryAll } = require('./db/schema');
+const { queryOne, queryAll, onGolden } = require('./db/schema');
 const { sign, userFromHeaders, CLIENT_API_ALLOWLIST, STAFF_ROLES } = require('./utils/auth');
 
 const app = express();
@@ -30,6 +30,9 @@ app.post('/api/login', async (req, res) => {
 
 // Public demo only: lead form, role picker, and the guard below. utils/demo.js.
 const demo = require('./utils/demo');
+// The owner-pass browser works on the golden copy, so its changes survive the nightly reset (db/schema.js). After the
+// body parsers: they read the request stream, which would drop the scope.
+if (demo.DEMO && process.env.GOLDEN_TURSO_URL) app.use((req, res, next) => (demo.isOwnerPass(req) ? onGolden(next) : next()));
 if (demo.DEMO) app.use('/api/demo', demo.router);
 
 app.get('/api/logout', (req, res) => {

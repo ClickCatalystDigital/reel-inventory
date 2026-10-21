@@ -3,11 +3,20 @@
 // can't run on Cloudflare Workers. It talks to Turso over HTTP, so it can't open a local file.
 const { createClient } = require('@libsql/client/web');
 const bcrypt = require('bcryptjs');
+const { AsyncLocalStorage } = require('node:async_hooks');
 
 let db = null;
 
+// Public demo, owner pass: app.js runs that browser's requests inside onGolden(), so they read and write the golden copy
+// (GOLDEN_TURSO_URL, same group token). The nightly reset (workers/demo-reset-cron) copies golden over the visitors'
+// demo database, so the owner's changes are kept and everyone else's are wiped.
+const goldenScope = new AsyncLocalStorage();
+let golden = null;
+const onGolden = (fn) => goldenScope.run(true, fn);
+
 // Lazy so Worker requests can use it without anything having called initDB() first.
 function connect() {
+  if (goldenScope.getStore()) return (golden ??= createClient({ url: process.env.GOLDEN_TURSO_URL, authToken: process.env.TURSO_AUTH_TOKEN, concurrency: 200 }));
   if (!db) {
     if (!process.env.TURSO_URL) throw new Error('TURSO_URL is not set');
     // concurrency: the client's default limiter (20) is shared by every request in the isolate; once it queues, a request ends up waiting on a
@@ -497,4 +506,4 @@ function istDayBounds(dateStr) {
   return { start: `${dateStr} 00:00:00`, end: `${dateStr} 23:59:59` };
 }
 
-module.exports = { initDB, queryAll, queryOne, execute, withTransaction, batch, readBatch, reserveNumbers, healCounters, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };
+module.exports = { onGolden, initDB, queryAll, queryOne, execute, withTransaction, batch, readBatch, reserveNumbers, healCounters, getNextInvoiceNumber, createUser, nowIST, istDateString, istDayBounds };
