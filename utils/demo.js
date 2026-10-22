@@ -113,7 +113,7 @@ async function emailLead(lead) {
 
 const router = express.Router();
 
-router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLead(req) }));
+router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLead(req), owner: isOwnerPass(req) }));
 
 // The widget asks this on load: hidden when the demo has no AI key, locked when left is 0.
 router.get('/ai', async (req, res, next) => {

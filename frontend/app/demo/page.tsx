@@ -30,6 +30,7 @@ async function post(url: string, body: unknown) {
 export default function DemoPage() {
   const [roles, setRoles] = useState<Role[]>([]);
   const [step, setStep] = useState<"loading" | "form" | "roles">("loading");
+  const [owner, setOwner] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -37,7 +38,7 @@ export default function DemoPage() {
   const [pin, setPin] = useState("");
   async function usePass(pass: string) {
     setBusy("pass"); setError("");
-    try { await post("/api/demo/pass", { pass }); setStep("roles"); }
+    try { await post("/api/demo/pass", { pass }); setOwner(true); setStep("roles"); }
     catch (e) { setError(e instanceof Error ? e.message : "Something went wrong"); setPin(""); }
     finally { setBusy(null); }
   }
@@ -52,10 +53,27 @@ export default function DemoPage() {
       .then((r) => r.json())
       .then((d) => {
         setRoles(d.roles || []);
+        setOwner(!!d.owner);
         setStep(d.hasLead ? "roles" : "form");
       })
       .catch(() => setStep("form"));
   }, []);
+
+  // Owner pass, offered on the role list too: a browser that once filled in the visitor form goes
+  // straight there, and before this it had no way to switch to owner mode (its edits were wiped).
+  const passBox = owner ? null : (
+    passOpen ? (
+      <div className="flex items-center gap-2 border-t pt-3">
+        <Input type="password" inputMode="numeric" autoComplete="off" aria-label="Demo pass" placeholder="Demo pass" maxLength={12} value={pin}
+          onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (pin) usePass(pin); } }} className="h-9 w-36" autoFocus />
+        <Button type="button" variant="outline" size="sm" disabled={!pin || busy === "pass"} onClick={() => usePass(pin)}>
+          {busy === "pass" ? <Loader2 className="animate-spin" /> : "Enter"}
+        </Button>
+      </div>
+    ) : (
+      <button type="button" onClick={() => setPassOpen(true)} className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Have a demo pass?</button>
+    )
+  );
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -154,20 +172,13 @@ export default function DemoPage() {
               </Button>
               <p className="text-xs text-muted-foreground">We use these details only to follow up about this system.</p>
               {/* Owner pass (utils/demo.js): a PIN skips the form and lifts the assistant's limit for this browser. */}
-              {passOpen ? (
-                <div className="flex items-center gap-2 border-t pt-3">
-                  <Input type="password" inputMode="numeric" autoComplete="off" aria-label="Demo pass" placeholder="Demo pass" maxLength={12} value={pin}
-                    onChange={(e) => setPin(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); if (pin) usePass(pin); } }} className="h-9 w-36" autoFocus />
-                  <Button type="button" variant="outline" size="sm" disabled={!pin || busy === "pass"} onClick={() => usePass(pin)}>
-                    {busy === "pass" ? <Loader2 className="animate-spin" /> : "Enter"}
-                  </Button>
-                </div>
-              ) : (
-                <button type="button" onClick={() => setPassOpen(true)} className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline">Have a demo pass?</button>
-              )}
+              {passBox}
             </form>
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
+              <p className={`text-xs sm:col-span-2 ${owner ? "font-medium text-primary" : "text-muted-foreground"}`}>
+                {owner ? "Owner mode: your changes in this browser are saved." : "Visitor mode: changes are wiped every night."}
+              </p>
               {roles.map((r) => (
                 <button
                   key={r.username}
@@ -184,6 +195,7 @@ export default function DemoPage() {
                 </button>
               ))}
               {error && <p className="text-sm text-destructive sm:col-span-2">{error}</p>}
+              {passBox && <div className="sm:col-span-2">{passBox}</div>}
             </div>
           )}
         </div>
