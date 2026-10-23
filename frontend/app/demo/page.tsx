@@ -7,6 +7,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { track } from "@/components/demo/DemoAnalytics";
+import { DemoWhatsApp } from "@/components/demo/DemoWhatsApp";
 
 // Public demo entry (demo build only; the Worker serves it when DEMO_MODE=1): a short form, then the visitor
 // picks a sample login. Same flow as SB Ops' /demo. Only things this app does today.
@@ -199,6 +200,9 @@ export default function DemoPage() {
             </div>
           )}
         </div>
+        <p className="mt-4 text-center text-sm text-muted-foreground">
+          Questions? <DemoWhatsApp>WhatsApp Pujan</DemoWhatsApp>
+        </p>
       </div>
     </main>
 
