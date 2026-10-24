@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
-const { generateQRBuffer } = require('./qr');
+const { drawQR } = require('./qr');
 const { queryAll, queryOne, istDateString, nowIST } = require('../db/schema');
 const ah = require('./asyncHandler');
 const { getDailyReportData } = require('./dailyReport');
@@ -72,9 +72,6 @@ router.post('/generate', ah(async (req, res) => {
 
   //     const qrBuffer = await generateQRBuffer(reel.reel_number);
 
-  // Generate all QR buffers in parallel — critical for large inwards
-  const qrBuffers = await Promise.all(reels.map(r => generateQRBuffer(r.reel_number)));
-
   for (let i = 0; i < reels.length; i += 2) {
     if (i > 0) doc.addPage();
 
@@ -84,7 +81,6 @@ router.post('/generate', ah(async (req, res) => {
       const reel = pair[s];
       const xOffset = s * HALF_W;
 
-      const qrBuffer = qrBuffers[i + s];
 
       // const dateStr = reel.inward_date
       //   ? new Date(reel.inward_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
@@ -94,7 +90,7 @@ router.post('/generate', ah(async (req, res) => {
       //   : '';
 
       // QR code - vertically centered
-      doc.image(qrBuffer, xOffset + PAD, qrY, { width: QR_SIZE, height: QR_SIZE });
+      drawQR(doc, reel.reel_number, xOffset + PAD, qrY, QR_SIZE);
 
       // Text area - starts aligned with top of QR
       const textX = xOffset + PAD + QR_SIZE + mm(2);
@@ -170,15 +166,12 @@ router.post('/generate-box', ah(async (req, res) => {
   sendPdf(doc, res);
 
   const qrY = (LABEL_H - QR_SIZE) / 2;
-  const qrBuffers = await Promise.all(boxes.map((b) => generateQRBuffer(b.box_number)));
 
   for (let i = 0; i < boxes.length; i++) {
     if (i > 0) doc.addPage();
     const box = boxes[i];
 
-    const qrBuffer = qrBuffers[i];
-
-    doc.image(qrBuffer, PAD, qrY, { width: QR_SIZE, height: QR_SIZE });
+    drawQR(doc, box.box_number, PAD, qrY, QR_SIZE);
 
     const textX = PAD + QR_SIZE + mm(2);
     const textW = LABEL_W - QR_SIZE - PAD * 2 - mm(2);
