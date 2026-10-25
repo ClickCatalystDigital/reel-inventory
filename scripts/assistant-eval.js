@@ -1,4 +1,4 @@
-// LS AI evaluation: runs a fixed set of questions through the real pipeline in DRY mode (no daily-cap use, no writing
+// Ohm evaluation: runs a fixed set of questions through the real pipeline in DRY mode (no daily-cap use, no writing
 // model) with the REAL Jev model, and compares what it decided against what we expect. Costs a few cents.
 //   node scripts/assistant-eval.js            (needs OPEN_ROUTER_KEY in .env or a key saved in Settings, and SETTINGS_ENC_KEY in .dev.vars)
 // It never writes settings: the key and the data-access consent are overridden in-process (the shared database may hold the REAL key and

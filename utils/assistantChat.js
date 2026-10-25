@@ -1,4 +1,4 @@
-// LS AI — one chat turn. Jev decides (kind / look-up / store / period / guide section); code resolves entities
+// Ohm — one chat turn. Jev decides (kind / look-up / store / period / guide section); code resolves entities
 // (items, customers, POs, users, reel/box numbers) and runs a fixed read-only look-up; the answer is a table the UI
 // renders as-is (mode "show") or a short writing-model summary on top of it (mode "write").
 // Jev only ever CHOOSES between options we give it. It never writes SQL and never supplies a value.
@@ -143,7 +143,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
 
   const settings = await A.getSettings();
   const key = await A.getKey().catch(() => null);
-  if (!key) return { status: 400, body: isAdmin ? { error: 'No OpenRouter key yet. Add one in Settings → AI.', link: '/settings', linkLabel: 'Open Settings' } : { error: 'LS AI is not set up yet. Ask an admin to add the key in Settings → AI.' } };
+  if (!key) return { status: 400, body: isAdmin ? { error: 'No OpenRouter key yet. Add one in Settings → AI.', link: '/settings', linkLabel: 'Open Settings' } : { error: 'Ohm is not set up yet. Ask an admin to add the key in Settings → AI.' } };
 
   let usage = null;
   if (!dry) {
@@ -159,7 +159,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
   };
   const upstreamError = (e) => {
     const up = e.upstream || { status: 502, error: e.message };
-    return { status: [401, 402, 429].includes(up.status) ? up.status : 502, body: isAdmin ? { error: up.error, link: up.link, linkLabel: up.linkLabel } : { error: [401, 402].includes(up.status) ? 'LS AI is unavailable right now. Please tell an admin.' : up.error } };
+    return { status: [401, 402, 429].includes(up.status) ? up.status : 502, body: isAdmin ? { error: up.error, link: up.link, linkLabel: up.linkLabel } : { error: [401, 402].includes(up.status) ? 'Ohm is unavailable right now. Please tell an admin.' : up.error } };
   };
 
   // ---- Jev call 1: what is this, which look-up, which store/period, which guide section ----

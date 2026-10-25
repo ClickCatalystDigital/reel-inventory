@@ -297,6 +297,8 @@ Favicon route added to `MIGRATED_PAGE_PATHS` (was 404ing for unrestricted roles)
 
 ## 6c. LS AI assistant — Settings (Part 1) + chat bubble (Part 2) (added 2026-10-06)
 
+**Renamed Ohm (2026-10-25).** The assistant is shown as **Ohm** on the live site and in the demo (`brand.ai` in `utils/brand.js` and `frontend/lib/brand.ts`; it was "LS AI" live and "Inventory AI" in the demo, so the `LS AI` swap rule is gone). Display name only: routes, tables, settings keys and `lsai_*` localStorage keys are unchanged. Notes below still say LS AI. The name matches ahromlabs.com/ai-assistant (Atelier AI, Ember, Ohm).
+
 Admin-only assistant modelled on SB Ops' OPS AI; **Both parts are built.** Plan: Jev (OpenRouter decision model `typesafe/jev-1.13`, `POST /api/alpha/decisions` — choice / noul / score questions over a string-or-JSON `state`, ~$0.00002 per call) routes each question to fixed read-only look-ups; code does the maths; a writing model is optional.
 
 - **Access (updated 2026-10-06):** the chat, briefing, starters and thumbs (`/chat`, `/briefing`, `/starters`, `/feedback`) are open to LS Tech staff — `admin`, `manager`, `user` — via the guard in `app.js`; **Gelco roles and clients get 403 on everything**. Settings/models/test/misses (key, credit, consent, cap) stay `admin` only, as does the Settings → AI tab. Ordinary `user` accounts are scoped in code: tasks answers show only their own tasks, the approvals look-up is refused, and their briefing shows their own overdue tasks and no approvals count; `dry` runs are admin-only. Non-admins never see links to Settings/billing in error messages. The daily question cap is global (shared by all staff).

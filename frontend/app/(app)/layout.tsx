@@ -18,7 +18,7 @@ export default function AppLayout({ children }: { children: React.ReactNode }) {
       <BottomNav />
       <DailyGateOverlay />
       <AskHost />
-      {/* LS AI chat bubble: renders only for the admin role (the API enforces it too) */}
+      {/* Ohm chat bubble: renders only for the admin role (the API enforces it too) */}
       {DEMO && <DemoBanner />}
       {/* In the demo the bubble appears only when the demo has its own AI key, with two questions per visitor. */}
       <AssistantWidget />

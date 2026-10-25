@@ -1,4 +1,4 @@
-// LS AI — the read-only look-ups. Each tool: { key, label, about (what Jev reads to choose it), entity, run(ctx) }.
+// Ohm — the read-only look-ups. Each tool: { key, label, about (what Jev reads to choose it), entity, run(ctx) }.
 // The model only CHOOSES a tool; every value used in SQL is a bound parameter resolved by code (utils/assistantEntities.js).
 // Data quirks encoded here, not left to a model: Deleted reels excluded; reels.quantity is 0 once Outwarded/Deleted (shipped qty
 // comes from outwards.quantity_shipped); primary = LS Tech Stores, secondary = Gelco Stores; low stock = fewer than 5 in-stock

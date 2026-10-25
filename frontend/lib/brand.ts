@@ -5,5 +5,5 @@
 export const DEMO = process.env.NEXT_PUBLIC_DEMO === "1";
 
 export const BRAND = DEMO
-  ? { app: "Inventory Ops", ai: "Inventory AI", company: "Acme Components", short: "Acme", partner: "Partner store", partnerStore: "Partner Store", mainStore: "Main Store" }
-  : { app: "LS Tech", ai: "LS AI", company: "LS Technologies", short: "LS Tech", partner: "Gelco", partnerStore: "Gelco Stores", mainStore: "LS Tech Stores" };
+  ? { app: "Inventory Ops", ai: "Ohm", company: "Acme Components", short: "Acme", partner: "Partner store", partnerStore: "Partner Store", mainStore: "Main Store" }
+  : { app: "LS Tech", ai: "Ohm", company: "LS Technologies", short: "LS Tech", partner: "Gelco", partnerStore: "Gelco Stores", mainStore: "LS Tech Stores" };

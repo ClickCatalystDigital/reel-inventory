@@ -4,15 +4,15 @@
 const DEMO = process.env.DEMO_MODE === '1';
 
 const brand = DEMO
-  ? { app: 'Inventory Ops', ai: 'Inventory AI', company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store', mainStore: 'Main Store' }
-  : { app: 'LS TECH', ai: 'LS AI', company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores', mainStore: 'LS Tech Stores' };
+  ? { app: 'Inventory Ops', ai: 'Ohm', company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store', mainStore: 'Main Store' }
+  : { app: 'LS TECH', ai: 'Ohm', company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores', mainStore: 'LS Tech Stores' };
 
 // The AI assistant's prompts, guide and example questions are written with the real names. In the demo they read
 // with the made-up ones instead (longest names first). Identity on the live site.
 const SWAPS = [
   [/Gelco Electronics/g, 'Brightline Appliances'], [/Gelco POs/g, 'Brightline POs'], [/with Gelco\b/g, 'with Brightline'], [/does Gelco order/g, 'does Brightline order'],
   [/Gelco Stores/g, 'Partner Store'], [/Gelco (Manager|Worker)/g, (m, r) => `partner store ${r.toLowerCase()}`], [/gelco stores/g, 'partner store'], [/\bGelco\b/g, 'Partner store'], [/\bGELCO\b/g, 'PARTNER STORE'],
-  [/LS Tech Stores/g, 'Main Store'], [/L ?S Technologies/gi, 'Acme Components'], [/LS TECH\b/g, 'Inventory Ops'], [/LS Tech\b/g, 'Acme'], [/LS AI\b/g, 'Inventory AI'],
+  [/LS Tech Stores/g, 'Main Store'], [/L ?S Technologies/gi, 'Acme Components'], [/LS TECH\b/g, 'Inventory Ops'], [/LS Tech\b/g, 'Acme'],
   [/\bpranav\b/gi, 'manager'], [/\bzakir\b/gi, 'manager'], [/\bsahil\b/gi, 'store'], [/\bSansui\b/gi, 'Voltix'], [/\bRotomotive\b/gi, 'Orbit Power'],
   [/BLDC CARD/g, 'PCBA-BLDC-01'], [/P0055838/g, 'SYS-2'],
 ];

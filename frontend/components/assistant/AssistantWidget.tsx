@@ -54,7 +54,7 @@ function Thinking() {
   );
 }
 
-// LS AI: floating chat bubble (bottom-right) for LS Tech staff. Answers come from fixed read-only look-ups;
+// Ohm: floating chat bubble (bottom-right) for LS Tech staff. Answers come from fixed read-only look-ups;
 // the conversation lives in this component (nothing is stored server-side except a one-line question log).
 export function AssistantWidget() {
   const { user } = useAuth();
@@ -187,7 +187,7 @@ export function AssistantWidget() {
   );
 
   // Thumbs on an answer: logged server-side (no new table); a thumbs-down also removes the question from "your usual" and lands in
-  // Settings → LS AI → "Questions it couldn't answer".
+  // Settings → Ohm → "Questions it couldn't answer".
   const rate = useCallback((id: number, question: string, tool: string | undefined, good: boolean) => {
     setMsgs((m) => m.map((x) => (x.id === id ? { ...x, fb: good } : x)));
     fetch("/api/assistant/feedback", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ question, tool, good }) }).catch(() => {});

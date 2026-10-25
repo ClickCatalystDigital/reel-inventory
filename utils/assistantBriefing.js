@@ -1,4 +1,4 @@
-// LS AI — the time-aware briefing shown when the bubble is opened. Pure code over the same queries the Reports screens use:
+// Ohm — the time-aware briefing shown when the bubble is opened. Pure code over the same queries the Reports screens use:
 // no model, no OpenRouter call, no data leaves the Worker (so it works with or without a key or the data-access consent).
 // Morning (before 12:00 IST) recaps YESTERDAY; afternoon and evening show TODAY so far.
 const { queryOne, readBatch, istDateString, nowIST } = require('../db/schema');

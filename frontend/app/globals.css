@@ -59,7 +59,7 @@
   --card-foreground: #1a1a18;
   --popover: #ffffff;
   --popover-foreground: #1a1a18;
-  --primary: #1a1a18; /* ink, matches the nav bar and the LS AI bubble; charts keep their own blue */
+  --primary: #1a1a18; /* ink, matches the nav bar and the Ohm bubble; charts keep their own blue */
   --primary-foreground: #ffffff;
   --primary-hover: #34342f;
   --secondary: #f0f0ea;
@@ -148,7 +148,7 @@
   }
 }
 
-/* LS AI launcher: a slightly domed ink orb (soft top highlight, darker underside, layered drop shadow). */
+/* Ohm launcher: a slightly domed ink orb (soft top highlight, darker underside, layered drop shadow). */
 .lsai-orb {
   background: radial-gradient(circle at 32% 24%, #4a4a45 0%, #1a1a18 62%);
   color: #fff;

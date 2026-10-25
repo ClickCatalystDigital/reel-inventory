@@ -319,7 +319,7 @@ async function initDB() {
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_inward_date ON reels(inward_date)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_reels_store ON reels(store_code)`);
   await connect().execute(`CREATE INDEX IF NOT EXISTS idx_boxes_store ON boxes(store_code)`);
-  // LS AI (admin assistant): settings key/value, per-day question counter, question + settings audit log.
+  // Ohm (admin assistant): settings key/value, per-day question counter, question + settings audit log.
   await connect().execute(`CREATE TABLE IF NOT EXISTS app_settings (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL DEFAULT '',

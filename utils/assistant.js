@@ -1,4 +1,4 @@
-// LS AI — server-side helpers: settings, OpenRouter (credits, models, Jev decisions), daily cap, audit log.
+// Ohm — server-side helpers: settings, OpenRouter (credits, models, Jev decisions), daily cap, audit log.
 // Admin-only feature (see the adminOnly guard in app.js). The OpenRouter key is stored encrypted
 // (utils/secrets.js) and is never sent to the browser or logged.
 const { queryAll, queryOne, execute, batch, nowIST, istDateString } = require('../db/schema');
