@@ -78,7 +78,7 @@ export default function HomePage() {
   useEffect(() => {
     if (!user || greeted.current) return;
     greeted.current = true;
-    if (["admin", "manager", "user"].includes(user.role)) return; // the Ohm bubble greets LS Tech staff instead
+    if (["admin", "manager", "user"].includes(user.role)) return; // the Ohm AI bubble greets LS Tech staff instead
     toast(`${greeting()}, ${capitalize(user.username)}!`);
   }, [user]);
 

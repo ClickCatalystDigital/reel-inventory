@@ -1,4 +1,4 @@
-// Ohm — small, explainable statistics (no models): days of stock cover, customer reorder rhythm, weekday anomaly.
+// Ohm AI — small, explainable statistics (no models): days of stock cover, customer reorder rhythm, weekday anomaly.
 // Everything is plain arithmetic over our own tables so every number can be explained in one sentence. Shipments here only go
 // back to April 2026, so each helper reports how much history it used and refuses to over-claim on thin data.
 const { readBatch, istDateString } = require('../db/schema');

@@ -1,4 +1,4 @@
-// Ohm's mark: a microchip (body + pins) with a small spark in the die. Uses currentColor so it follows the surface it sits on.
+// Ohm AI's mark: a microchip (body + pins) with a small spark in the die. Uses currentColor so it follows the surface it sits on.
 export function ChipMark({ className }: { className?: string }) {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" className={className} aria-hidden>

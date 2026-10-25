@@ -1,4 +1,4 @@
-// Ohm parity: the new/changed look-ups checked against independent SQL (read-only, no cost). node scripts/assistant-parity.js
+// Ohm AI parity: the new/changed look-ups checked against independent SQL (read-only, no cost). node scripts/assistant-parity.js
 require('dotenv').config();
 const S=require('../db/schema'),{BY_KEY}=require('../utils/assistantTools'),E=require('../utils/assistantEntities'),ST=require('../utils/assistantStats');
 let pass=0,fail=0; const ok=(n,c,x='')=>{c?pass++:fail++;console.log((c?'PASS ':'FAIL ')+n+(c?'':'  '+x));};

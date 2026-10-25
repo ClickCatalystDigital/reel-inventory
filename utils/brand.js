@@ -4,8 +4,8 @@
 const DEMO = process.env.DEMO_MODE === '1';
 
 const brand = DEMO
-  ? { app: 'Inventory Ops', ai: 'Ohm', company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store', mainStore: 'Main Store' }
-  : { app: 'LS TECH', ai: 'Ohm', company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores', mainStore: 'LS Tech Stores' };
+  ? { app: 'Inventory Ops', ai: 'Ohm AI', company: 'Acme Components', short: 'Acme', partner: 'Partner store', partnerStore: 'Partner Store', mainStore: 'Main Store' }
+  : { app: 'LS TECH', ai: 'Ohm AI', company: 'LS Technologies', short: 'LS Tech', partner: 'Gelco', partnerStore: 'Gelco Stores', mainStore: 'LS Tech Stores' };
 
 // The AI assistant's prompts, guide and example questions are written with the real names. In the demo they read
 // with the made-up ones instead (longest names first). Identity on the live site.

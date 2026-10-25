@@ -1,4 +1,4 @@
-// Ohm — turning words in a question into exact values: stores, periods, items, customers, POs, users, reel/box
+// Ohm AI — turning words in a question into exact values: stores, periods, items, customers, POs, users, reel/box
 // numbers. Everything here is deterministic code; Jev is only asked to choose between candidates found here.
 const { queryAll, istDateString } = require('../db/schema');
 const brand = require('./brand');

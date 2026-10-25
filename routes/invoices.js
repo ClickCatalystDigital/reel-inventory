@@ -29,7 +29,7 @@ const ownKey = (url) => {
 const canReview = (req) => ['admin', 'manager'].includes(req.user?.role);
 const reviewersOnly = (req, res, next) => (canReview(req) ? next() : res.status(403).json({ error: 'Not authorized' }));
 
-// Settings → AI key first (same OpenRouter account as Ohm); env var for local dev, like ls_crm's.
+// Settings → AI key first (same OpenRouter account as Ohm AI); env var for local dev, like ls_crm's.
 async function openRouterKey() {
   return (await assistant.getKey()) || process.env.OPENROUTER_API_KEY || null;
 }

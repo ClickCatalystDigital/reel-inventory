@@ -1,4 +1,4 @@
-// routes/assistant.js — Ohm API. Settings/models/test/misses are admin-only; chat, briefing, starters and feedback are open to LS Tech staff
+// routes/assistant.js — Ohm AI API. Settings/models/test/misses are admin-only; chat, briefing, starters and feedback are open to LS Tech staff
 // (admin/manager/user) — see the guard in app.js. Gelco roles and clients are blocked.
 // Part 1: settings, models, connection test. The chat endpoint is added in Part 2.
 const express = require('express');

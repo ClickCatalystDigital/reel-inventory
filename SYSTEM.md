@@ -297,7 +297,7 @@ Favicon route added to `MIGRATED_PAGE_PATHS` (was 404ing for unrestricted roles)
 
 ## 6c. LS AI assistant — Settings (Part 1) + chat bubble (Part 2) (added 2026-10-06)
 
-**Renamed Ohm (2026-10-25).** The assistant is shown as **Ohm** on the live site and in the demo (`brand.ai` in `utils/brand.js` and `frontend/lib/brand.ts`; it was "LS AI" live and "Inventory AI" in the demo, so the `LS AI` swap rule is gone). Display name only: routes, tables, settings keys and `lsai_*` localStorage keys are unchanged. Notes below still say LS AI. The name matches ahromlabs.com/ai-assistant (Atelier AI, Ember, Ohm).
+**Renamed Ohm (2026-10-25), then Ohm AI the same day** (to match Atelier AI and Ember AI on ahromlabs.com/ai-assistant). The assistant is shown as **Ohm** on the live site and in the demo (`brand.ai` in `utils/brand.js` and `frontend/lib/brand.ts`; it was "LS AI" live and "Inventory AI" in the demo, so the `LS AI` swap rule is gone). Display name only: routes, tables, settings keys and `lsai_*` localStorage keys are unchanged. Notes below still say LS AI. The name matches ahromlabs.com/ai-assistant (Atelier AI, Ember, Ohm).
 
 Admin-only assistant modelled on SB Ops' OPS AI; **Both parts are built.** Plan: Jev (OpenRouter decision model `typesafe/jev-1.13`, `POST /api/alpha/decisions` — choice / noul / score questions over a string-or-JSON `state`, ~$0.00002 per call) routes each question to fixed read-only look-ups; code does the maths; a writing model is optional.
 
