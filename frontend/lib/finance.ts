@@ -1,6 +1,7 @@
+import { LOCALE } from "@/lib/locale";
 // Shared helpers for the Finance page (ported from ls_crm's finance.html).
 
-export const INR = (n: number | null | undefined) => "₹" + Number(n || 0).toLocaleString("en-IN", { maximumFractionDigits: 0 });
+export const INR = (n: number | null | undefined) => "₹" + Number(n || 0).toLocaleString(LOCALE(), { maximumFractionDigits: 0 });
 
 // Tally dates are plain 'YYYY-MM-DD' calendar days.
 export function finDate(d: string | null | undefined): string {
@@ -8,7 +9,7 @@ export function finDate(d: string | null | undefined): string {
   const s = String(d).trim().slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return String(d);
   const [y, m, day] = s.split("-").map(Number);
-  return new Date(y, m - 1, day).toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return new Date(y, m - 1, day).toLocaleDateString(LOCALE(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export const daysTo = (d: string | null | undefined) => (d ? Math.ceil((new Date(d).getTime() - Date.now()) / 86400000) : 999);

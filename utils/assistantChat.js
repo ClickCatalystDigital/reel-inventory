@@ -8,6 +8,7 @@ const { TOOLS, BY_KEY } = require('./assistantTools');
 const { GUIDE, SCREEN_LABEL, pickSections } = require('./assistantGuide');
 const { istDateString, queryAll, queryOne } = require('../db/schema');
 const brand = require('./brand');
+const { locale } = require('./locale');
 
 const MAX_Q = 600;
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -121,12 +122,12 @@ function compareCard(toolKey, tool, a, b, ctx, prev) {
   for (const r of a.rows) map.set(keyOf(r), { label: r[first.key], route: r.route, a: Number(r[numKey]) || 0, b: 0 });
   for (const r of b.rows) { const k = keyOf(r); const m = map.get(k) || { label: r[first.key], route: r.route, a: 0, b: 0 }; m.b = Number(r[numKey]) || 0; map.set(k, m); }
   const ta = [...map.values()].reduce((x, r) => x + r.a, 0), tb = [...map.values()].reduce((x, r) => x + r.b, 0);
-  const sign = (d) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toLocaleString('en-IN');
+  const sign = (d) => (d > 0 ? '+' : d < 0 ? '−' : '') + Math.abs(d).toLocaleString(locale());
   const rows = [...map.values()].sort((x, y) => Math.max(y.a, y.b) - Math.max(x.a, x.b)).slice(0, 25).map((r) => ({ [first.key]: r.route ? `${r.label} · ${r.route}` : r.label, a: r.a, b: r.b, d: sign(r.a - r.b) }));
   const pct = tb ? ` (${ta >= tb ? '+' : '−'}${Math.abs(Math.round(((ta - tb) / tb) * 100))}%)` : '';
   const unit = numKey === 'qty' ? 'pcs' : 'reels';
   return { type: 'table', tool: toolKey, toolLabel: `${tool.label} · comparison`, params: paramsFor(toolKey, tool, ctx).filter((p) => p.label !== 'Period').concat([{ label: 'Compared', value: `${ctx.period.label} vs ${prev.label}` }]),
-    title: `${tool.label}: ${ctx.period.label} vs ${prev.label}`, summary: `${ctx.period.label}: ${ta.toLocaleString('en-IN')} ${unit} · ${prev.label}: ${tb.toLocaleString('en-IN')} ${unit} — ${ta === tb ? 'no change' : `${ta > tb ? 'up' : 'down'} ${Math.abs(ta - tb).toLocaleString('en-IN')}${pct}`}.`,
+    title: `${tool.label}: ${ctx.period.label} vs ${prev.label}`, summary: `${ctx.period.label}: ${ta.toLocaleString(locale())} ${unit} · ${prev.label}: ${tb.toLocaleString(locale())} ${unit} — ${ta === tb ? 'no change' : `${ta > tb ? 'up' : 'down'} ${Math.abs(ta - tb).toLocaleString(locale())}${pct}`}.`,
     columns: [{ key: first.key, label: first.label, type: 'text' }, { key: 'a', label: 'Now', type: 'int' }, { key: 'b', label: 'Before', type: 'int' }, { key: 'd', label: 'Change', type: 'int' }], rows, total: map.size, truncated: map.size > 25,
     note: a.note || null, link: a.link };
 }

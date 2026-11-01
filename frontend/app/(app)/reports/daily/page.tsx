@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/data-table/DataTable";
 import { FileDown } from "lucide-react";
+import { LOCALE } from "@/lib/locale";
 
 interface ItemQty {
   item_code: string;
@@ -195,7 +196,7 @@ export default function DailyReportPage() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex-1">
-      <div className="text-2xl font-bold">{value.toLocaleString("en-IN")}</div>
+      <div className="text-2xl font-bold">{value.toLocaleString(LOCALE())}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );

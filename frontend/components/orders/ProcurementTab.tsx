@@ -18,6 +18,7 @@ import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { PROC_STAGES } from "@/lib/po-stages";
 import { StageBadge } from "./StageSelect";
+import { LOCALE } from "@/lib/locale";
 
 interface ShortLine { po_item_id: number; po_id: number; po_number: string; company_name: string | null; expected_dispatch_date: string | null; needed: number }
 interface Short { item_code: string; description: string | null; supplier: string | null; free_stock: number; needed: number; lines: ShortLine[] }
@@ -310,7 +311,7 @@ function OrderSheet({ id, canEdit, onClose, onChanged, onOpenPo }: { id: number 
                   </div>
                 </div>
               ))}
-              {total > 0 && <div className="text-right text-xs text-muted-foreground">Order value {total.toLocaleString("en-IN", { maximumFractionDigits: 2 })} {o.items[0]?.currency || ""}</div>}
+              {total > 0 && <div className="text-right text-xs text-muted-foreground">Order value {total.toLocaleString(LOCALE(), { maximumFractionDigits: 2 })} {o.items[0]?.currency || ""}</div>}
               <p className="text-[11px] text-muted-foreground">Receive goods on Inward → &quot;Against procurement order&quot;; they are reserved to the waiting POs, earliest due first.</p>
             </>
           )}

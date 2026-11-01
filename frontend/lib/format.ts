@@ -1,3 +1,4 @@
+import { LOCALE } from "@/lib/locale";
 // Ports of public/js/app.js's formatDate/formatDateTime/formatQty/statusBadge.
 // The IST-naive-string parsing must stay exact: the backend returns naive
 // SQLite datetime strings with no timezone, so "format in browser local time"
@@ -8,13 +9,13 @@ export function formatDate(dateStr: string | null | undefined): string {
   // Date-only values ('2026-10-20', e.g. PO dates) need a time before the offset can be appended.
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr + "T00:00:00" : dateStr.replace(" ", "T");
   const d = new Date(iso + "+05:30");
-  return d.toLocaleDateString("en-IN", { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "short", year: "numeric" });
 }
 
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
   const d = new Date(dateStr.replace(" ", "T") + "+05:30");
-  return d.toLocaleString("en-IN", {
+  return d.toLocaleString(LOCALE(), {
     day: "2-digit",
     month: "short",
     year: "numeric",
@@ -25,7 +26,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
 }
 
 export function formatQty(n: number | null | undefined): string {
-  return (n || 0).toLocaleString("en-IN");
+  return (n || 0).toLocaleString(LOCALE());
 }
 
 export function todayISTDateString(): string {

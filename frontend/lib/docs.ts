@@ -1,3 +1,4 @@
+import { LOCALE } from "@/lib/locale";
 // Shared types + helpers for the Docs page (ported from ls_crm's docs.html and tabs/*.js).
 
 export const DOC_TYPE_LABEL: Record<string, string> = {
@@ -41,7 +42,7 @@ export interface Company { id: number; name: string }
 export interface CatalogItem { item_code: string; description: string | null }
 
 export const money = (v: number | string | null | undefined, digits = 2) =>
-  "₹" + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  "₹" + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
 export const lines = (inv: Pick<Invoice, "line_items">): LineItem[] => {
   if (Array.isArray(inv.line_items)) return inv.line_items;
   try { return JSON.parse(inv.line_items || "[]"); } catch { return []; }

@@ -9,6 +9,7 @@ import { Sales } from "@/components/finance/Sales";
 import { Inventory } from "@/components/finance/Inventory";
 import { Position } from "@/components/finance/Position";
 import { Payables } from "@/components/finance/Payables";
+import { LOCALE } from "@/lib/locale";
 
 // Ported from ls_crm's Finance page: everything is read from the crm_tally_* tables the office-PC
 // Tally agent syncs. Tabs mount on first open (Radix unmounts the hidden ones), like ls_crm's lazy load.
@@ -25,7 +26,7 @@ export default function FinancePage() {
         if (d.voucherSyncDate) {
           const vs = String(d.voucherSyncDate);
           const label = vs.length === 8
-            ? new Date(+vs.slice(0, 4), +vs.slice(4, 6) - 1, +vs.slice(6, 8)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })
+            ? new Date(+vs.slice(0, 4), +vs.slice(4, 6) - 1, +vs.slice(6, 8)).toLocaleDateString(LOCALE(), { day: "numeric", month: "short", year: "numeric" })
             : vs;
           parts.push(`Vouchers from ${label}`);
         }

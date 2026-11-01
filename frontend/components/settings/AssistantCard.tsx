@@ -18,6 +18,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChipMark } from "@/components/assistant/ChipMark";
 import { BRAND } from "@/lib/brand";
+import { LOCALE } from "@/lib/locale";
 
 interface Balance { bought: number; used: number; left: number }
 interface DataAccess { on: boolean; approver_name?: string; approver_role?: string; recorded_by?: string; at?: string }
@@ -280,7 +281,7 @@ export function AssistantCard() {
           <ModelPicker models={models} value={model} onChange={setModel} />
           <p className="text-xs text-muted-foreground">
             {picked
-              ? `${picked.id} · input ${price(picked.in)}, output ${price(picked.out)} per million tokens${picked.context ? ` · reads up to ${picked.context.toLocaleString("en-IN")} tokens` : ""}`
+              ? `${picked.id} · input ${price(picked.in)}, output ${price(picked.out)} per million tokens${picked.context ? ` · reads up to ${picked.context.toLocaleString(LOCALE())} tokens` : ""}`
               : "Used only in “Show, then write” mode and for how-to answers."}
           </p>
         </div>
