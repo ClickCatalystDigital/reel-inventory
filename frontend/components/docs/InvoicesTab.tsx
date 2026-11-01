@@ -138,7 +138,7 @@ function Insights({ d }: { d: Invoice }) {
     sub = qty > 0 ? <>Purchase Value · <b className="text-foreground">{qty.toLocaleString(LOCALE())} pcs</b> (₹{(net / qty).toFixed(2)}/component)</> : "Purchase Value";
   } else if (d.doc_type === "freight_invoice") {
     const kg = Number(d.gross_weight) || 0;
-    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{kg} kg shipment</b> (₹{(net / kg).toFixed(2)}/kg)</> : "Logistics Charges";
+    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{kg} kg{LOCALE() === "en-US" ? ` (${Math.round(kg * 2.20462).toLocaleString("en-US")} lb)` : ""} shipment</b> (₹{(net / kg).toFixed(2)}/kg)</> : "Logistics Charges";
   }
   return (
     <div>
