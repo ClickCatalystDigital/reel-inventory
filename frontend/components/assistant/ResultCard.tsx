@@ -5,10 +5,11 @@ import Link from "next/link";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { safePath, type Reply } from "@/lib/assistant-links";
+import { LOCALE } from "@/lib/locale";
 
 const cell = (v: string | number | null | undefined, type?: string) => {
   if (v === null || v === undefined || v === "") return "—";
-  if (type === "int" && typeof v === "number") return v.toLocaleString("en-IN");
+  if (type === "int" && typeof v === "number") return v.toLocaleString(LOCALE());
   return String(v);
 };
 
@@ -88,7 +89,7 @@ export function ResultCard({ reply, onNavigate }: { reply: Reply; onNavigate?: (
 
       <div className="flex items-center justify-between gap-2 border-t bg-muted/30 px-3 py-2">
         <div className="min-w-0 text-[11px] leading-snug text-muted-foreground">
-          {reply.truncated && <p>Showing {rows.length} of {reply.total?.toLocaleString("en-IN")}.</p>}
+          {reply.truncated && <p>Showing {rows.length} of {reply.total?.toLocaleString(LOCALE())}.</p>}
           {reply.note && <p>{reply.note}</p>}
         </div>
         <div className="flex shrink-0 items-center gap-1">

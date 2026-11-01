@@ -13,10 +13,11 @@ import { formatDate } from "@/lib/format";
 import { INV_TYPES, lines, money, type Invoice } from "@/lib/docs";
 import { Chips, Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
+import { LOCALE } from "@/lib/locale";
 
 const TYPE_LABEL: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: "Bill of Entry" };
 type Stage = "all" | "pending" | "approved" | "pushed" | "rejected";
-const round = (v: number) => "₹" + Math.round(v).toLocaleString("en-IN");
+const round = (v: number) => "₹" + Math.round(v).toLocaleString(LOCALE());
 
 // Purchase + freight invoices: GST credit in the pipeline, cost per piece / per kg, shipment details.
 export function InvoicesTab() {
@@ -134,10 +135,10 @@ function Insights({ d }: { d: Invoice }) {
   let sub: React.ReactNode = d.doc_type === "bill_of_entry" ? "Customs Duty" : "Net Document Value";
   if (d.doc_type === "purchase_invoice") {
     const qty = lines(d).reduce((s, l) => s + (Number(l.qty) || 0), 0);
-    sub = qty > 0 ? <>Purchase Value · <b className="text-foreground">{qty.toLocaleString("en-IN")} pcs</b> (₹{(net / qty).toFixed(2)}/component)</> : "Purchase Value";
+    sub = qty > 0 ? <>Purchase Value · <b className="text-foreground">{qty.toLocaleString(LOCALE())} pcs</b> (₹{(net / qty).toFixed(2)}/component)</> : "Purchase Value";
   } else if (d.doc_type === "freight_invoice") {
     const kg = Number(d.gross_weight) || 0;
-    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{kg} kg shipment</b> (₹{(net / kg).toFixed(2)}/kg)</> : "Logistics Charges";
+    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{kg} kg{LOCALE() === "en-US" ? ` (${Math.round(kg * 2.20462).toLocaleString("en-US")} lb)` : ""} shipment</b> (₹{(net / kg).toFixed(2)}/kg)</> : "Logistics Charges";
   }
   return (
     <div>

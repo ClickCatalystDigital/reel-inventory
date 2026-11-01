@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ChartCanvas } from "@/components/charts/ChartCanvas";
+import { LOCALE } from "@/lib/locale";
 
 interface StockSummaryRow {
   item_code: string;
@@ -134,7 +135,7 @@ export default function StockSummaryPage() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex-1">
-      <div className="text-2xl font-bold">{value.toLocaleString("en-IN")}</div>
+      <div className="text-2xl font-bold">{value.toLocaleString(LOCALE())}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );

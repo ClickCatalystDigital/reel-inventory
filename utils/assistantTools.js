@@ -9,8 +9,9 @@ const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
 const brand = require('./brand');
 const ST = require('./assistantStats');
+const { locale } = require('./locale');
 
-const n = (x) => Number(x || 0).toLocaleString('en-IN');
+const n = (x) => Number(x || 0).toLocaleString(locale());
 const plural = (k, w) => `${n(k)} ${w}${Number(k) === 1 ? '' : 's'}`;
 const CAP = 25;
 const storeSql = (store, col = 'store_code') => (store && store !== 'all' ? { sql: ` AND ${col} = ?`, args: [store] } : { sql: '', args: [] });

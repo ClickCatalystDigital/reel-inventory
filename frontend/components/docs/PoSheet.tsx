@@ -15,6 +15,7 @@ import { cn } from "@/lib/utils";
 import { PO_STATUS_LABEL, docDate, money, type CatalogItem, type Company, type PoFull } from "@/lib/docs";
 import { SectionLabel, StatusPill } from "./bits";
 import { useDocs } from "./context";
+import { LOCALE } from "@/lib/locale";
 
 const TYPE_SHORT: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: "BOE", bank_statement: "Bank" };
 const pdfUrl = (u: string) => u.trim().replace(/^https:\/\/https:\/\//, "https://");
@@ -163,11 +164,11 @@ function ViewPo({ id, onClose, companyOptions, itemOptions }: { id: number; onCl
 
                 {groups.length > 0 && (
                   <>
-                    <SectionLabel>Dispatched — {po.outwards.length} reels · {po.outwards.reduce((s, o) => s + (o.quantity_shipped || 0), 0).toLocaleString("en-IN")} pcs total</SectionLabel>
+                    <SectionLabel>Dispatched — {po.outwards.length} reels · {po.outwards.reduce((s, o) => s + (o.quantity_shipped || 0), 0).toLocaleString(LOCALE())} pcs total</SectionLabel>
                     {groups.map((g) => (
                       <div key={g.inv} className="flex items-center justify-between rounded-md border bg-muted/20 px-3 py-2">
                         <div><div className="text-xs font-bold">Inv: {g.inv}</div><div className="text-[10px] text-muted-foreground">{g.reels} reel{g.reels !== 1 ? "s" : ""} · {docDate(g.date)}</div></div>
-                        <div className="text-sm font-bold">{g.pcs.toLocaleString("en-IN")} pcs</div>
+                        <div className="text-sm font-bold">{g.pcs.toLocaleString(LOCALE())} pcs</div>
                       </div>
                     ))}
                   </>

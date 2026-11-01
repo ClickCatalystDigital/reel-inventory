@@ -1,5 +1,6 @@
 // utils/pdf.js
 const express = require('express');
+const { locale } = require('./locale');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { drawQR } = require('./qr');
@@ -83,10 +84,10 @@ router.post('/generate', ah(async (req, res) => {
 
 
       // const dateStr = reel.inward_date
-      //   ? new Date(reel.inward_date).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })
+      //   ? new Date(reel.inward_date).toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' })
       //   : '—';
       // const timeStr = reel.inward_date
-      //   ? new Date(reel.inward_date).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })
+      //   ? new Date(reel.inward_date).toLocaleTimeString(locale(), { hour: '2-digit', minute: '2-digit' })
       //   : '';
 
       // QR code - vertically centered
@@ -304,7 +305,7 @@ router.post('/packing-list', ah(async (req, res) => {
 
   doc.font('Helvetica-Bold').text('Date:',      MARGIN + 530, metaY);
   doc.font('Helvetica').text(
-    new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    new Date().toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' }),
     MARGIN + 558, metaY
   );
 
@@ -689,7 +690,7 @@ router.get('/transfer-report', ah(async (req, res) => {
 
   doc.font('Helvetica-Bold').text('Generated:', MARGIN + 500, metaY);
   doc.font('Helvetica').text(
-    new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }),
+    new Date().toLocaleDateString(locale(), { day: '2-digit', month: 'short', year: 'numeric' }),
     MARGIN + 560, metaY
   );
   doc.font('Helvetica-Bold').text('Total Reels:', MARGIN + 670, metaY);
@@ -778,7 +779,7 @@ router.get('/transfer-report', ah(async (req, res) => {
 }));
 
 function formatQtyStr(n) {
-  return (n || 0).toLocaleString('en-IN');
+  return (n || 0).toLocaleString(locale());
 }
 
 module.exports = router;

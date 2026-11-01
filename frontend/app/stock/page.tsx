@@ -11,6 +11,7 @@ import { BRAND, DEMO } from "@/lib/brand";
 import { DemoBanner } from "@/components/demo/DemoBanner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortalOrders } from "@/components/orders/PortalOrders";
+import { LOCALE } from "@/lib/locale";
 
 interface StockSummaryRow {
   item_code: string;
@@ -36,7 +37,7 @@ export default function StockPage() {
           .sort((a, b) => a.item_code.localeCompare(b.item_code));
         setRows(inStock);
         setLastUpdated(
-          `As of ${new Date().toLocaleString("en-IN", {
+          `As of ${new Date().toLocaleString(LOCALE(), {
             day: "2-digit",
             month: "short",
             year: "numeric",
@@ -80,7 +81,7 @@ export default function StockPage() {
                   <div className="text-xs text-muted-foreground">Items</div>
                 </div>
                 <div>
-                  <div className="text-2xl font-bold">{rows === null ? "—" : totalReels.toLocaleString("en-IN")}</div>
+                  <div className="text-2xl font-bold">{rows === null ? "—" : totalReels.toLocaleString(LOCALE())}</div>
                   <div className="text-xs text-muted-foreground">Reels In Stock</div>
                 </div>
                 <div>

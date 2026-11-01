@@ -1,3 +1,4 @@
+import { LOCALE } from "@/lib/locale";
 // Shared CRM types + small helpers for the Home and Clients pages (ported from ls_crm's inline scripts).
 
 export interface Task {
@@ -137,11 +138,11 @@ export const capitalize = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : 
 // "5 Oct 2026" from a YYYY-MM-DD string without any timezone shift.
 export function fmtTaskDate(iso: string): string {
   const [y, m, d] = iso.split("-").map(Number);
-  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
+  return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(LOCALE(), { day: "numeric", month: "short", year: "numeric", timeZone: "UTC" });
 }
 
 export const inr = (v: number | null | undefined) =>
-  "₹" + Number(v || 0).toLocaleString("en-IN", { minimumFractionDigits: 2 });
+  "₹" + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: 2 });
 
 export function clientStatusClass(status: string): string {
   if (status === "qualified" || status === "customer") return "bg-success/10 text-success border-success/20";

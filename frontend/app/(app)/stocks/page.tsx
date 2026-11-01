@@ -8,6 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 import { PortalOrders } from "@/components/orders/PortalOrders";
+import { LOCALE } from "@/lib/locale";
 
 interface Store {
   code: string;
@@ -108,7 +109,7 @@ export default function StocksPage() {
 function Stat({ label, value }: { label: string; value: number }) {
   return (
     <div className="flex-1">
-      <div className="text-2xl font-bold">{value.toLocaleString("en-IN")}</div>
+      <div className="text-2xl font-bold">{value.toLocaleString(LOCALE())}</div>
       <div className="text-xs text-muted-foreground">{label}</div>
     </div>
   );
