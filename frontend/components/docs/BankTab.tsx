@@ -11,6 +11,7 @@ import { cn } from "@/lib/utils";
 import { docDate, lines, money, smartTags, type Invoice, type LineItem, type Tag } from "@/lib/docs";
 import { Kpi } from "./bits";
 import { useDocs } from "./context";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 type SortCol = "date" | "description" | "withdrawal" | "deposit";
 const bankOf = (r: Invoice) => r.bank_ledger || "Unassigned";
@@ -110,7 +111,7 @@ export function BankTab() {
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi value={rows.length} label="Statements" />
         <Kpi value={rows.filter((d) => d.status === "pending").length} label="Pending Review" tone="text-warning" />
-        <Kpi value={rows.filter((d) => d.status === "pushed").length} label="In Tally" tone="text-success" />
+        <Kpi value={rows.filter((d) => d.status === "pushed").length} label={NA ? "In Books" : "In Tally"} tone="text-success" />
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Transaction Volume</div>
           <div className="flex gap-4">

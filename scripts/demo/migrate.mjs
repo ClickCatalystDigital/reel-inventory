@@ -7,10 +7,14 @@
 import { createRequire } from 'node:module';
 import { existsSync, readFileSync } from 'node:fs';
 
-const DBS = ['libsql://ls-demo-golden-pujan.aws-ap-south-1.turso.io', 'libsql://ls-demo-pujan.aws-ap-south-1.turso.io'];
+// MARKET=NA: the North American demo's databases (wrangler.us.jsonc), with its own group token (TURSO_GROUP_TOKEN_US).
+const NA = process.env.MARKET === 'NA';
+const DBS = NA
+  ? ['libsql://ls-demo-us-golden-pujan.aws-us-east-1.turso.io', 'libsql://ls-demo-us-pujan.aws-us-east-1.turso.io']
+  : ['libsql://ls-demo-golden-pujan.aws-ap-south-1.turso.io', 'libsql://ls-demo-pujan.aws-ap-south-1.turso.io'];
 if (!process.env.TURSO_GROUP_TOKEN && existsSync('.demo-secrets')) {
   for (const line of readFileSync('.demo-secrets', 'utf8').split('\n')) {
-    const m = /^TURSO_GROUP_TOKEN=(.+)$/.exec(line);
+    const m = (NA ? /^TURSO_GROUP_TOKEN_US=(.+)$/ : /^TURSO_GROUP_TOKEN=(.+)$/).exec(line);
     if (m) process.env.TURSO_GROUP_TOKEN = m[1];
   }
 }

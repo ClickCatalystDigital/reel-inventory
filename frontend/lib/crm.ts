@@ -1,4 +1,4 @@
-import { LOCALE } from "@/lib/locale";
+import { CUR, LOCALE } from "@/lib/market";
 // Shared CRM types + small helpers for the Home and Clients pages (ported from ls_crm's inline scripts).
 
 export interface Task {
@@ -142,7 +142,7 @@ export function fmtTaskDate(iso: string): string {
 }
 
 export const inr = (v: number | null | undefined) =>
-  "₹" + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: 2 });
+  CUR + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: 2 });
 
 export function clientStatusClass(status: string): string {
   if (status === "qualified" || status === "customer") return "bg-success/10 text-success border-success/20";

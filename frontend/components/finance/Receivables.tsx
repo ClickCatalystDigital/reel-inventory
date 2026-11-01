@@ -7,6 +7,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { api } from "@/lib/api";
 import { INR, daysTo, finDate } from "@/lib/finance";
 import { Empty, FinCard, Stat } from "./bits";
+import { books } from "@/lib/market";
 
 export interface Summary { total: number; overdue: number; dueMonth: number; openBills: number; masterSyncEpoch: number | null; voucherSyncDate: string | null }
 interface Bill { company_id: number | null; party_name: string; bill_ref: string; bill_date: string; pending_amt: number; due_date: string | null; overdue_days: number }
@@ -101,19 +102,19 @@ export function Receivables({ summary }: { summary: Summary | null }) {
         <p className="mb-4 text-xs leading-relaxed text-muted-foreground">
           {debtors === null ? "Loading…" : (
             <>
-              Tally ledgers show <strong>{INR(totalT)}</strong> in Sundry Debtor balances. Only <strong>{INR(totalK)}</strong> (
-              {totalT > 0 ? ((totalK / totalT) * 100).toFixed(1) : 100}%) is bill-referenced and tracked here. Remaining <strong>{INR(totalT - totalK)}</strong> are likely opening balances or pre-system entries — no bill reference exists in Tally.
+              {books("Tally ledgers show")} <strong>{INR(totalT)}</strong> {books("in Sundry Debtor balances")}. Only <strong>{INR(totalK)}</strong> (
+              {totalT > 0 ? ((totalK / totalT) * 100).toFixed(1) : 100}%) is bill-referenced and tracked here. Remaining <strong>{INR(totalT - totalK)}</strong> are likely opening balances or pre-system entries — {books("no bill reference exists in Tally")}.
             </>
           )}
         </p>
         <DataTable
-          title="All Sundry Debtors"
+          title={books("All Sundry Debtors")}
           data={d}
           pageSize={10}
           getRowKey={(r) => r.name}
           columns={[
             { label: "Party", render: (r) => r.name },
-            { label: "Tally Balance", render: (r) => INR(r.tally_balance) },
+            { label: books("Tally Balance"), render: (r) => INR(r.tally_balance) },
             { label: "Tracked", render: (r) => (r.tracked_outstanding > 0 ? <span className="text-success">{INR(r.tracked_outstanding)}</span> : <span className="text-muted-foreground">—</span>), className: "hidden sm:table-cell" },
             { label: "Gap", render: (r) => (r.gap > 0 ? <span className={r.gap > 50000 ? "text-warning" : "text-muted-foreground"}>{INR(r.gap)}</span> : "—") },
             {

@@ -9,7 +9,7 @@ import { Sales } from "@/components/finance/Sales";
 import { Inventory } from "@/components/finance/Inventory";
 import { Position } from "@/components/finance/Position";
 import { Payables } from "@/components/finance/Payables";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 // Ported from ls_crm's Finance page: everything is read from the crm_tally_* tables the office-PC
 // Tally agent syncs. Tabs mount on first open (Radix unmounts the hidden ones), like ls_crm's lazy load.

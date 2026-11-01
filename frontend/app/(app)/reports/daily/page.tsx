@@ -11,7 +11,7 @@ import { Input } from "@/components/ui/input";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/data-table/DataTable";
 import { FileDown } from "lucide-react";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 interface ItemQty {
   item_code: string;

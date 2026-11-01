@@ -7,7 +7,8 @@
 
 const API = 'https://api.turso.tech/v1';
 const DAY = 86400000;
-const istToday = () => new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10);
+// The demo's own date: India's, or the US demo's TIME_ZONE (wrangler.us.jsonc).
+const todayIn = (tz) => (tz ? new Intl.DateTimeFormat('en-CA', { timeZone: tz }).format(new Date()) : new Date(Date.now() + 5.5 * 3600e3).toISOString().slice(0, 10));
 
 async function reset(env) {
   const base = `${API}/organizations/${env.TURSO_ORG}/databases`;
@@ -29,7 +30,7 @@ async function reset(env) {
     const tok = await fetch(`${base}/${env.GOLDEN_DB}/auth/tokens?expiration=1h&authorization=full-access`, { method: 'POST', headers });
     if (!tok.ok) throw new Error(`token: ${tok.status} ${await tok.text()}`);
     const { jwt } = await tok.json();
-    shifted = await shiftDates(hrana(`https://${database.Hostname}`, jwt), istToday());
+    shifted = await shiftDates(hrana(`https://${database.Hostname}`, jwt), todayIn(env.TIME_ZONE));
   } catch (e) {
     shiftError = e.message;
     try { await copy(env.GOLDEN_DB, backup); } catch (r) { return { ok: false, step: 'restore golden', error: `${shiftError}; ${r.message}` }; }

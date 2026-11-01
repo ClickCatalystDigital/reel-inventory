@@ -5,7 +5,7 @@ import Link from "next/link";
 import { ArrowUpRight, Check, Copy } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { safePath, type Reply } from "@/lib/assistant-links";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 const cell = (v: string | number | null | undefined, type?: string) => {
   if (v === null || v === undefined || v === "") return "—";

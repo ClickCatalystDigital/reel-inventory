@@ -18,7 +18,8 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChipMark } from "@/components/assistant/ChipMark";
 import { BRAND } from "@/lib/brand";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 interface Balance { bought: number; used: number; left: number }
 interface DataAccess { on: boolean; approver_name?: string; approver_role?: string; recorded_by?: string; at?: string }
@@ -317,7 +318,7 @@ export function AssistantCard() {
             <Input type="number" min={1} max={10000} inputMode="numeric" value={cap} onChange={(e) => setCap(e.target.value)} className="w-32" />
             <Button variant="outline" disabled={busy || cap === String(s.cap)} onClick={() => put({ cap: Number(cap) }, "Daily limit saved")}>Save limit</Button>
           </div>
-          <p className="text-xs text-muted-foreground">A safety cap on total questions per day (resets at midnight IST).</p>
+          <p className="text-xs text-muted-foreground">A safety cap on total questions per day (resets at midnight {NA ? "Central Time" : "IST"}).</p>
         </div>
 
         <div className="space-y-2 rounded-lg border bg-muted/30 p-3">

@@ -1,11 +1,12 @@
-import { LOCALE } from "@/lib/locale";
+import { CUR, LOCALE } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 // Shared types + helpers for the Docs page (ported from ls_crm's docs.html and tabs/*.js).
 
 export const DOC_TYPE_LABEL: Record<string, string> = {
   freight_invoice: "Freight Invoice",
   purchase_invoice: "Purchase Invoice",
   purchase_order: "Purchase Order",
-  bill_of_entry: "Bill of Entry",
+  bill_of_entry: NA ? "Customs Entry" : "Bill of Entry",
   bank_statement: "Bank Statement",
 };
 export const INV_TYPES = ["purchase_invoice", "freight_invoice"];
@@ -42,7 +43,7 @@ export interface Company { id: number; name: string }
 export interface CatalogItem { item_code: string; description: string | null }
 
 export const money = (v: number | string | null | undefined, digits = 2) =>
-  "₹" + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
+  CUR + Number(v || 0).toLocaleString(LOCALE(), { minimumFractionDigits: digits, maximumFractionDigits: digits });
 export const lines = (inv: Pick<Invoice, "line_items">): LineItem[] => {
   if (Array.isArray(inv.line_items)) return inv.line_items;
   try { return JSON.parse(inv.line_items || "[]"); } catch { return []; }
@@ -65,6 +66,7 @@ export type Tag = { text: string; tone: "ref" | "mono" | "warn" | "danger" | "pl
 export function smartTags(desc: string | null | undefined): Tag[] {
   if (!desc) return [];
   const s = String(desc).toUpperCase().replace(/\s+/g, " ").trim();
+  if (NA) return usTags(s);
   const tags: Tag[] = [];
   const bill = s.match(/BILL\s*ID:\s*\[?([A-Z0-9\s_-]+)\]?/i), qc = s.match(/(QC\s*TI\s*[\d\s/]+)/i), against = s.match(/AGAINST\s*([A-Z0-9\s/-]+)/i), inv = s.match(/INV\s*([\d\w_-]+)/i);
   if (bill) tags.push({ text: `Invoice: ${bill[1].trim()}`, tone: "ref" });
@@ -98,6 +100,26 @@ export function smartTags(desc: string | null | undefined): Tag[] {
     }
   }
   if (vendor && !/^\d{2}\.\d{2}\.\d{4}/.test(vendor) && !/^\d+$/.test(vendor)) tags.push({ text: vendor, tone: "party" });
+  return tags;
+}
+
+// MARKET=NA: US bank narrations. ACH ("ACH DEBIT ... ORIG CO NAME:X ... TRACE #n"), wires ("WIRE OUT ... BNF:X ... IMAD:n"),
+// checks, and the tax and customs debits a US importer sees (IRS USATAXPYMT, CBP).
+function usTags(s: string): Tag[] {
+  const tags: Tag[] = [];
+  const ref = s.match(/\bINV(?:OICE)?[\s#:-]*([A-Z0-9][A-Z0-9/-]*)/) || s.match(/\bPO[\s#:-]+([A-Z0-9-]+)/);
+  if (ref) tags.push({ text: `Ref: ${ref[1]}`, tone: "ref" });
+  const trace = s.match(/TRACE\s*#?\s*(\d{6,15})/), fed = s.match(/(?:IMAD|FED ?REF)[\s:#]*([A-Z0-9]{6,})/);
+  if (trace) tags.push({ text: `Trace: ${trace[1]}`, tone: "mono" });
+  if (fed) tags.push({ text: `Fed ref: ${fed[1]}`, tone: "mono" });
+  if (/USATAXPYMT|\bIRS\b/.test(s)) tags.push({ text: "Federal Tax", tone: "warn" });
+  else if (/\bCBP\b|CUSTOMS/.test(s)) tags.push({ text: "Customs Duty", tone: "warn" });
+  else if (/INTEREST CHARGE|LOAN FEE|SERVICE CHARGE/.test(s)) tags.push({ text: "Bank Fee", tone: "danger" });
+  if (/\bACH\b/.test(s)) tags.push({ text: "ACH", tone: "plain" });
+  else if (/\bWIRE\b/.test(s)) tags.push({ text: "Wire", tone: "plain" });
+  else if (/^(?:CHECK|CHK)\b/.test(s)) tags.push({ text: "Check", tone: "plain" });
+  const party = s.match(/(?:ORIG CO NAME|BNF|ORG)[:\s]+(.+?)(?=\s+(?:CO ID|SEC|TRACE|IMAD|OBI|REF|ID)\b|$)/);
+  if (party) tags.push({ text: party[1].trim(), tone: "party" });
   return tags;
 }
 

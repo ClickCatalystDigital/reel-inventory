@@ -1,4 +1,5 @@
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 // Ports of public/js/app.js's formatDate/formatDateTime/formatQty/statusBadge.
 // The IST-naive-string parsing must stay exact: the backend returns naive
 // SQLite datetime strings with no timezone, so "format in browser local time"
@@ -8,13 +9,14 @@ export function formatDate(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
   // Date-only values ('2026-10-20', e.g. PO dates) need a time before the offset can be appended.
   const iso = /^\d{4}-\d{2}-\d{2}$/.test(dateStr) ? dateStr + "T00:00:00" : dateStr.replace(" ", "T");
-  const d = new Date(iso + "+05:30");
-  return d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "short", year: "numeric" });
+  // MARKET=NA stores Central Time wall-clock strings: shown as stored (read as UTC, printed in UTC), so daylight saving never shifts them.
+  const d = new Date(iso + (NA ? "Z" : "+05:30"));
+  return d.toLocaleDateString(LOCALE(), { day: "2-digit", month: "short", year: "numeric", ...(NA && { timeZone: "UTC" }) });
 }
 
 export function formatDateTime(dateStr: string | null | undefined): string {
   if (!dateStr) return "—";
-  const d = new Date(dateStr.replace(" ", "T") + "+05:30");
+  const d = new Date(dateStr.replace(" ", "T") + (NA ? "Z" : "+05:30"));
   return d.toLocaleString(LOCALE(), {
     day: "2-digit",
     month: "short",
@@ -22,6 +24,7 @@ export function formatDateTime(dateStr: string | null | undefined): string {
     hour: "2-digit",
     minute: "2-digit",
     hour12: true,
+    ...(NA && { timeZone: "UTC" }),
   });
 }
 
@@ -29,7 +32,11 @@ export function formatQty(n: number | null | undefined): string {
   return (n || 0).toLocaleString(LOCALE());
 }
 
+// MARKET=NA: Central Time, the zone the server stores (utils/market.js).
+const CT = (): string => new Intl.DateTimeFormat("sv-SE", { timeZone: "America/Chicago", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23" }).format(new Date()).replace(",", "");
+
 export function todayISTDateString(): string {
+  if (NA) return CT().substring(0, 10);
   const istOffset = 5.5 * 60 * 60 * 1000;
   return new Date(Date.now() + istOffset).toISOString().substring(0, 10);
 }
@@ -37,6 +44,7 @@ export function todayISTDateString(): string {
 // Same "YYYY-MM-DD HH:MM:SS" naive-IST format db/schema.js's nowIST() stores —
 // used as the Gelco outward "label" in place of a typed invoice number.
 export function nowISTString(): string {
+  if (NA) return CT();
   const istOffset = 5.5 * 60 * 60 * 1000;
   return new Date(Date.now() + istOffset).toISOString().replace("T", " ").substring(0, 19);
 }

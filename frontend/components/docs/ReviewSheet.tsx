@@ -14,12 +14,18 @@ import { cn } from "@/lib/utils";
 import { lines as parseLines, money, type Invoice, type LineItem } from "@/lib/docs";
 import { Notice, SectionLabel, StatusPill } from "./bits";
 import { useDocs } from "./context";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 interface StockItem { name: string; parent: string | null; base_units: string | null }
 interface Checks { duplicates: { id: number; invoice_no: string | null; status: string }[]; unknownLedgers: string[] }
 type F = { k: string; label: string; req?: boolean; full?: boolean; type?: string };
 
-const CORE: F[] = [
+// MARKET=NA: no GSTIN or CGST/SGST/IGST, one sales tax figure (total_tax), the ship-to state instead of place of supply.
+const CORE: F[] = NA ? [
+  { k: "invoice_no", label: "Document No", req: true }, { k: "invoice_date", label: "Date", req: true },
+  { k: "party_name", label: "Party (supplier)", req: true, full: true }, { k: "place_of_supply", label: "Ship-to State", req: true },
+  { k: "taxable_value", label: "Subtotal", req: true }, { k: "total_tax", label: "Sales Tax" }, { k: "net_amount", label: "Total", req: true },
+] : [
   { k: "invoice_no", label: "Document No", req: true }, { k: "invoice_date", label: "Date", req: true },
   { k: "party_name", label: "Party (supplier)", req: true, full: true }, { k: "party_gstin", label: "Party GSTIN" },
   { k: "buyer_gstin", label: "Buyer GSTIN" }, { k: "place_of_supply", label: "Place of Supply", req: true },
@@ -33,8 +39,10 @@ const BANK: F[] = [
   { k: "closing_balance", label: "Closing Balance", type: "number" }, { k: "total_debit", label: "Total Withdrawals", type: "number" },
   { k: "total_credit", label: "Total Deposits", type: "number" },
 ];
-const BANK_LEDGERS = ["South Indian Bank", "DB BANK", "ICICI Bank", "Cash"];
-const PURCHASE_LEDGERS = ["GST LOCAL PURCHASE 18%", "GST INTRA STATE PURCHASE 18%", "GST Import Purchase 18%"];
+const BANK_LEDGERS = NA ? ["Operating Account", "Payroll Account", "Cash"] : ["South Indian Bank", "DB BANK", "ICICI Bank", "Cash"];
+const PURCHASE_LEDGERS = NA ? ["Inventory Purchases", "Import Purchases", "Freight In"] : ["GST LOCAL PURCHASE 18%", "GST INTRA STATE PURCHASE 18%", "GST Import Purchase 18%"];
+// What the office agent does with an approved document: Tally in India, "the books" in the American demo.
+const BOOKS = NA ? "the books" : "Tally";
 const sel = "h-9 w-full rounded-md border border-input bg-transparent px-2 text-sm disabled:opacity-60";
 
 // The fields shown (and sent back on save) depend on the document type, exactly as in ls_crm.
@@ -77,7 +85,7 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
         setItems(parseLines(d).map((li) => (stamp ? { ...li, kind: li.kind || (d.doc_type === "purchase_invoice" ? "stock" : "expense") } : { ...li })));
         const init: Record<string, string> = {};
         for (const x of fieldsFor(d.doc_type)) init[x.k] = String((d as unknown as Record<string, unknown>)[x.k] ?? "");
-        if (d.doc_type === "bank_statement" && !init.bank_ledger) init.bank_ledger = "South Indian Bank";
+        if (d.doc_type === "bank_statement" && !init.bank_ledger) init.bank_ledger = BANK_LEDGERS[0];
         setF(init);
         if (d.status === "pending") fetch(`/api/invoices/${id}/checks`).then((r) => r.json()).then(setChecks).catch(() => {});
       } catch (e) {
@@ -115,11 +123,11 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
     // A stock line without a Tally item would push a blank item; force a pick first.
     if (t === "purchase_invoice") {
       const blanks = items.filter((li) => li.kind === "stock" && !(li.stock_item_name || "").trim()).length;
-      if (blanks) return showToast(`${blanks} stock line(s) have no Tally item selected — pick one for each before approving.`, "error");
+      if (blanks) return showToast(`${blanks} stock line(s) have no ${NA ? "stock" : "Tally"} item selected — pick one for each before approving.`, "error");
     }
     await save(true); // persist edits + rebuild XML first
     await api(`/api/invoices/${inv.id}/approve`, { method: "POST", body: {} });
-    showToast("Approved — local agent will push to Tally", "success");
+    showToast(NA ? "Approved — it will be posted to the books" : "Approved — local agent will push to Tally", "success");
     onClose(); docs.changed();
   });
   const reject = () => run(async () => {
@@ -131,10 +139,10 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
     if (!inv) return;
     const pushed = inv.status === "pushed";
     if (!(await askConfirm(pushed
-      ? { title: "Archive this record?", description: "It was already pushed to Tally. This only archives it here — the voucher stays in Tally.", confirmLabel: "Archive", destructive: true }
+      ? { title: "Archive this record?", description: NA ? "It was already posted to the books. This only archives it here — the entry stays in the books." : "It was already pushed to Tally. This only archives it here — the voucher stays in Tally.", confirmLabel: "Archive", destructive: true }
       : { title: "Delete this record?", description: "This cannot be undone.", confirmLabel: "Delete", destructive: true }))) return;
     const r = await api<{ soft: boolean }>(`/api/invoices/${inv.id}`, { method: "DELETE" });
-    showToast(r.soft ? "Archived (was in Tally)" : "Deleted", "success"); onClose(); docs.changed();
+    showToast(r.soft ? `Archived (was in ${BOOKS})` : "Deleted", "success"); onClose(); docs.changed();
   });
 
   const field = (x: F) => (
@@ -173,8 +181,8 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
                   </>
                 ) : (
                   <>
-                    {inv.status === "pushed" && <Notice tone="info" title="Pushed to Tally">{inv.pushed_at ? formatDateTime(inv.pushed_at) : ""}</Notice>}
-                    {inv.status === "push_failed" && <Notice tone="danger" title={`Tally push failed${inv.push_error ? " — " + inv.push_error : ""}`}>The local agent will retry, or delete this record.</Notice>}
+                    {inv.status === "pushed" && <Notice tone="info" title={NA ? "Posted to the books" : "Pushed to Tally"}>{inv.pushed_at ? formatDateTime(inv.pushed_at) : ""}</Notice>}
+                    {inv.status === "push_failed" && <Notice tone="danger" title={`${NA ? "Posting" : "Tally push"} failed${inv.push_error ? " — " + inv.push_error : ""}`}>The local agent will retry, or delete this record.</Notice>}
                     {checks?.duplicates.length ? (
                       <Notice tone="warn" title="Possible duplicate">
                         Same supplier &amp; invoice no already exists:{" "}
@@ -183,13 +191,13 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
                         ))}
                       </Notice>
                     ) : null}
-                    {checks?.unknownLedgers.length ? <Notice tone="danger" title="Ledger not in Tally">These won&apos;t import until created in Tally: {checks.unknownLedgers.join(", ")}</Notice> : null}
+                    {checks?.unknownLedgers.length ? <Notice tone="danger" title={`Ledger not in ${BOOKS}`}>These won&apos;t import until created in {BOOKS}: {checks.unknownLedgers.join(", ")}</Notice> : null}
 
                     <div className="grid grid-cols-2 gap-3">{field(fl[0])}</div>
 
                     {(t === "bank_statement" || t === "purchase_invoice" || t === "freight_invoice") && (
                       <>
-                        <SectionLabel>Tally routing</SectionLabel>
+                        <SectionLabel>{NA ? "Accounting" : "Tally routing"}</SectionLabel>
                         {t === "bank_statement" ? (
                           <label className="block space-y-1"><span className="text-xs text-muted-foreground">Bank Account</span>
                             <select className={sel} value={f.bank_ledger} disabled={locked} onChange={(e) => set("bank_ledger", e.target.value)}>
@@ -197,9 +205,9 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
                             </select>
                           </label>
                         ) : (
-                          <label className="block space-y-1"><span className="text-xs text-muted-foreground">Purchase Ledger</span>
+                          <label className="block space-y-1"><span className="text-xs text-muted-foreground">{NA ? "Purchase Account" : "Purchase Ledger"}</span>
                             <select className={sel} value={f.purchase_ledger} disabled={locked} onChange={(e) => set("purchase_ledger", e.target.value)}>
-                              <option value="">Auto (CGST+SGST → Local, IGST → Intra)</option>
+                              <option value="">{NA ? "Auto" : "Auto (CGST+SGST → Local, IGST → Intra)"}</option>
                               {PURCHASE_LEDGERS.map((b) => <option key={b}>{b}</option>)}
                             </select>
                           </label>
@@ -256,12 +264,12 @@ export function ReviewSheet({ id, onClose }: { id: number | null; onClose: () =>
                     {docs.canReview && <Button variant="ghost" size="icon" title="Delete" disabled={busy} onClick={remove}><Trash2 className="size-4 text-destructive" /></Button>}
                     {docs.canReview && <Button variant="outline" className="flex-1 text-destructive" disabled={busy} onClick={reject}>Reject</Button>}
                     <Button variant="outline" className="flex-1" disabled={busy} onClick={() => run(() => save(false))}>Save</Button>
-                    {docs.canReview && <Button className="flex-1" disabled={busy} onClick={approve}>Approve → Tally</Button>}
+                    {docs.canReview && <Button className="flex-1" disabled={busy} onClick={approve}>Approve → {NA ? "Books" : "Tally"}</Button>}
                   </>
                 ) : (
                   <>
                     {docs.canReview && inv.status !== "reading" && <Button variant="outline" className="flex-1 text-destructive" disabled={busy} onClick={remove}>Delete</Button>}
-                    <Button variant="outline" className="flex-1" onClick={onClose}>Close{inv.status === "reading" || inv.status === "extract_failed" ? "" : ` (${inv.status === "push_failed" ? "push failed" : inv.status})`}</Button>
+                    <Button variant="outline" className="flex-1" onClick={onClose}>Close{inv.status === "reading" || inv.status === "extract_failed" ? "" : ` (${inv.status === "push_failed" ? (NA ? "post failed" : "push failed") : NA && inv.status === "pushed" ? "posted" : inv.status})`}</Button>
                   </>
                 )}
               </div>
@@ -305,7 +313,7 @@ function StdLines({ items, setLine, setItems, locked, stockMode, stock }: LinesP
             )}
             {isStock ? (
               <>
-                <label className="block space-y-1"><span className="text-xs text-muted-foreground">From invoice{li.hsn ? ` · HSN ${li.hsn}` : ""}</span>
+                <label className="block space-y-1"><span className="text-xs text-muted-foreground">From invoice{!NA && li.hsn ? ` · HSN ${li.hsn}` : ""}</span>
                   <Input className="text-xs text-muted-foreground" value={li.description || ""} disabled={locked} onChange={(e) => setLine(i, { description: e.target.value })} />
                 </label>
                 <label className="block space-y-1">
@@ -326,7 +334,7 @@ function StdLines({ items, setLine, setItems, locked, stockMode, stock }: LinesP
               <>
                 <label className="block space-y-1"><span className="text-xs text-muted-foreground">Description</span><Input value={li.description || ""} disabled={locked} onChange={(e) => setLine(i, { kind: li.kind, description: e.target.value })} /></label>
                 <div className="grid grid-cols-2 gap-2">
-                  <label className="space-y-1"><span className="text-xs text-muted-foreground">HSN</span><Input value={li.hsn || ""} disabled={locked} onChange={(e) => setLine(i, { kind: li.kind, hsn: e.target.value })} /></label>
+                  {!NA && <label className="space-y-1"><span className="text-xs text-muted-foreground">HSN</span><Input value={li.hsn || ""} disabled={locked} onChange={(e) => setLine(i, { kind: li.kind, hsn: e.target.value })} /></label>}
                   <label className="space-y-1"><span className="text-xs text-muted-foreground">Amount</span><Input type="number" step="any" value={li.amount ?? ""} disabled={locked} onChange={(e) => setLine(i, { kind: li.kind, amount: e.target.value })} /></label>
                 </div>
               </>

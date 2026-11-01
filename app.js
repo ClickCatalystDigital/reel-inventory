@@ -33,11 +33,6 @@ const demo = require('./utils/demo');
 // The owner-pass browser works on the golden copy, so its changes survive the nightly reset (db/schema.js). After the
 // body parsers: they read the request stream, which would drop the scope.
 if (demo.DEMO && process.env.GOLDEN_TURSO_URL) app.use((req, res, next) => (demo.isOwnerPass(req) ? onGolden(next) : next()));
-// Public demo: numbers and dates in the visitor's style (utils/locale.js; the Worker sets the cookie).
-if (demo.DEMO) {
-  const { runIn, fromCookie } = require('./utils/locale');
-  app.use((req, res, next) => runIn(fromCookie(req.headers.cookie), next));
-}
 if (demo.DEMO) app.use('/api/demo', demo.router);
 
 app.get('/api/logout', (req, res) => {

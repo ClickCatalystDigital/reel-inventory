@@ -7,6 +7,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { api } from "@/lib/api";
 import { INR } from "@/lib/finance";
 import { FinCard } from "./bits";
+import { books } from "@/lib/market";
 
 interface StockItem { name: string; parent: string | null; base_units: string | null; closing_qty: string | null; closing_rate: string | null; hsn_code: string | null; gst_applicable: string | null }
 
@@ -55,7 +56,7 @@ export function Inventory() {
       {neg > 0 && (
         <FinCard title="⚠ Negative Stock Alert" tip="Items with negative closing quantity. These must be corrected in Tally before dispatching more — negative stock means consumption entries exist without matching purchase receipts." className="border-l-4 border-l-warning">
           <p className="text-xs text-muted-foreground">
-            {neg} item{neg > 1 ? "s have" : " has"} negative closing quantity — possible data entry issue in Tally. Likely cause: outward entries (sales/production) recorded before matching inward purchase receipts were posted.
+            {neg} item{neg > 1 ? "s have" : " has"} negative closing quantity — possible data entry issue {books("in Tally")}. Likely cause: outward entries (sales/production) recorded before matching inward purchase receipts were posted.
           </p>
         </FinCard>
       )}

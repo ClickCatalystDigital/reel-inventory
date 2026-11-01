@@ -8,7 +8,7 @@ const { TOOLS, BY_KEY } = require('./assistantTools');
 const { GUIDE, SCREEN_LABEL, pickSections } = require('./assistantGuide');
 const { istDateString, queryAll, queryOne } = require('../db/schema');
 const brand = require('./brand');
-const { locale } = require('./locale');
+const { locale, tzLabel } = require('./market');
 
 const MAX_Q = 600;
 const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
@@ -149,7 +149,7 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
   let usage = null;
   if (!dry) {
     usage = await A.useQuestion(settings.cap);
-    if (!usage.ok) return { status: 429, body: { error: `${brand.ai} has used today's ${settings.cap} questions. The limit resets at midnight IST.` } };
+    if (!usage.ok) return { status: 429, body: { error: `${brand.ai} has used today's ${settings.cap} questions. The limit resets at midnight ${tzLabel}.` } };
   } else usage = { used: await A.usedToday(), cap: settings.cap };
 
   const today = istDateString();

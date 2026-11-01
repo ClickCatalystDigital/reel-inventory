@@ -15,9 +15,10 @@ import { BRAND } from "@/lib/brand";
 import { docDate, money } from "@/lib/docs";
 import { Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
-interface InvLine { item_code: string; description: string; hsn_code: string | null; rate: number | null; gst_rate: number | null; qty: number; reels: number; amount: number; cgst: number; sgst: number; total: number }
-interface Invoice { invoice_no: string; invoice_date: string; customer_name: string; created_by: string; updated_by: string | null; taxable: number; cgst: number; sgst: number; round_off: number; total: number; qty: number; missing_rates: number; items?: number; lines?: InvLine[] }
+interface InvLine { item_code: string; description: string; hsn_code: string | null; rate: number | null; gst_rate: number | null; qty: number; reels: number; amount: number; cgst: number; sgst: number; tax?: number; total: number }
+interface Invoice { invoice_no: string; invoice_date: string; customer_name: string; created_by: string; updated_by: string | null; taxable: number; cgst: number; sgst: number; tax?: number; round_off: number; total: number; qty: number; missing_rates: number; items?: number; lines?: InvLine[] }
 
 async function downloadPdf(no: string) {
   const res = await fetch(`/api/sales-invoices/${encodeURIComponent(no)}/pdf`);
@@ -29,7 +30,7 @@ async function downloadPdf(no: string) {
 }
 
 // Tax invoices issued for partner-store shipments (same number as the packing list). Other customers'
-// invoices come from Tally and are uploaded on the other tabs.
+// invoices come from Tally (India) and are uploaded on the other tabs.
 export function SalesTab() {
   const docs = useDocs();
   const [rows, setRows] = useState<Invoice[]>([]);
@@ -48,7 +49,7 @@ export function SalesTab() {
       </div>
       <Card className="gap-3 p-4">
         <p className="text-xs text-muted-foreground">
-          Created automatically with each {BRAND.partnerStore} packing list. Quantities follow the shipment&apos;s outwards; description, HSN, rate and GST are set here.
+          Created automatically with each {BRAND.partnerStore} packing list. Quantities follow the shipment&apos;s outwards; description, {NA ? "HTS code, rate and sales tax" : "HSN, rate and GST"} are set here.
         </p>
         <DataTable
           title="Sales invoices"
@@ -118,7 +119,7 @@ function InvoiceSheet({ no, onClose }: { no: string | null; onClose: () => void 
               <div className="overflow-x-auto rounded-md border">
                 <table className="w-full text-xs">
                   <thead className="bg-muted/40 text-[10px] text-muted-foreground uppercase">
-                    <tr><th className="p-2 text-left">Item / description on invoice</th><th className="p-2 text-left">HSN</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Rate</th><th className="p-2 text-right">GST %</th><th className="p-2 text-right">Total</th></tr>
+                    <tr><th className="p-2 text-left">Item / description on invoice</th><th className="p-2 text-left">{NA ? "HTS" : "HSN"}</th><th className="p-2 text-right">Qty</th><th className="p-2 text-right">Rate</th><th className="p-2 text-right">{NA ? "Tax %" : "GST %"}</th><th className="p-2 text-right">Total</th></tr>
                   </thead>
                   <tbody>
                     {lines.map((l, i) => (
@@ -127,10 +128,10 @@ function InvoiceSheet({ no, onClose }: { no: string | null; onClose: () => void 
                           <div className="mb-1 font-semibold">{l.item_code} <span className="font-normal text-muted-foreground">· {l.reels} reel{l.reels !== 1 ? "s" : ""}</span></div>
                           <Input className="h-8 text-xs" value={l.description} disabled={!docs.canReview} onChange={(e) => set(i, { description: e.target.value })} aria-label="Description" />
                         </td>
-                        <td className="p-2"><Input className="h-8 w-24 text-xs" value={l.hsn_code ?? ""} disabled={!docs.canReview} onChange={(e) => set(i, { hsn_code: e.target.value })} aria-label="HSN" /></td>
+                        <td className="p-2"><Input className="h-8 w-24 text-xs" value={l.hsn_code ?? ""} disabled={!docs.canReview} onChange={(e) => set(i, { hsn_code: e.target.value })} aria-label={NA ? "HTS code" : "HSN"} /></td>
                         <td className="p-2 text-right whitespace-nowrap">{formatQty(l.qty)}</td>
                         <td className="p-2"><Input type="number" step="0.01" min={0} className="ml-auto h-8 w-20 text-right text-xs" value={l.rate ?? ""} disabled={!docs.canReview} onChange={(e) => set(i, { rate: e.target.value === "" ? null : Number(e.target.value) })} aria-label="Rate" /></td>
-                        <td className="p-2"><Input type="number" step="0.01" min={0} className="ml-auto h-8 w-16 text-right text-xs" value={l.gst_rate ?? ""} disabled={!docs.canReview} onChange={(e) => set(i, { gst_rate: e.target.value === "" ? null : Number(e.target.value) })} aria-label="GST %" /></td>
+                        <td className="p-2"><Input type="number" step="0.01" min={0} className="ml-auto h-8 w-16 text-right text-xs" value={l.gst_rate ?? ""} disabled={!docs.canReview} onChange={(e) => set(i, { gst_rate: e.target.value === "" ? null : Number(e.target.value) })} aria-label={NA ? "Tax %" : "GST %"} /></td>
                         <td className="p-2 text-right whitespace-nowrap">{money(l.total)}</td>
                       </tr>
                     ))}
@@ -138,7 +139,7 @@ function InvoiceSheet({ no, onClose }: { no: string | null; onClose: () => void 
                 </table>
               </div>
               <div className="ml-auto w-64 space-y-1 text-xs">
-                {[["Taxable", inv.taxable], ["CGST", inv.cgst], ["SGST", inv.sgst], ["Round off", inv.round_off]].map(([k, v]) => (
+                {(NA ? [["Subtotal", inv.taxable], ["Sales tax", inv.tax ?? 0]] : [["Taxable", inv.taxable], ["CGST", inv.cgst], ["SGST", inv.sgst], ["Round off", inv.round_off]]).map(([k, v]) => (
                   <div key={k as string} className="flex justify-between"><span className="text-muted-foreground">{k}</span><span>{money(v as number)}</span></div>
                 ))}
                 <div className="flex justify-between border-t pt-1 text-sm font-bold"><span>Total</span><span>{money(inv.total)}</span></div>

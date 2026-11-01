@@ -10,7 +10,17 @@ import { cn } from '@/lib/utils';
 
 const HREF = `https://wa.me/919426519798?text=${encodeURIComponent("Hi Pujan, I'm trying the electronics demo and have a question (ref: demo-electronics)")}`;
 
+// North American demo: no WhatsApp; the same spot offers Pujan's booking page (as savistar-ops does).
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
+const BOOKING = "https://calendar.app.google/CuiiSRtJbheEV2U4A";
+
 export function DemoWhatsApp({ children = "WhatsApp", className }: { children?: React.ReactNode; className?: string }) {
+  if (NA) return (
+    <a href={BOOKING} target="_blank" rel="noopener noreferrer" onClick={() => track('electronics_demo_booking')}
+      className={cn('inline-flex items-center gap-1 font-medium text-foreground underline-offset-2 hover:underline', className)}>
+      Book a call
+    </a>
+  );
   return (
     <a href={HREF} target="_blank" rel="noopener noreferrer" title="Questions? WhatsApp Pujan"
       onClick={() => track('electronics_demo_whatsapp')}

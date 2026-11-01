@@ -9,6 +9,8 @@ import { isApproverRole } from "@/lib/crm";
 import { BRAND } from "@/lib/brand";
 import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
+import { CUR } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 interface Item { item_code: string; description: string | null; invoice_name: string | null; hsn_code: string | null; sale_rate: number | null; gst_rate: number | null }
 type Draft = { invoice_name: string; hsn_code: string; sale_rate: string; gst_rate: string };
@@ -66,7 +68,7 @@ export function InvoiceDetails({ itemCodes, onReady }: { itemCodes: string[]; on
       <div className="text-xs font-semibold">
         Invoice details for {BRAND.partnerStore}
         <span className="ml-1 font-normal text-muted-foreground">
-          {missing.length ? `— ${missing.length} item(s) need a rate and HSN before they can move${canEdit ? "" : " (ask an admin or manager)"}` : "— saved on each reel when it moves"}
+          {missing.length ? `— ${missing.length} item(s) need a rate and ${NA ? "HTS code" : "HSN"} before they can move${canEdit ? "" : " (ask an admin or manager)"}` : "— saved on each reel when it moves"}
         </span>
       </div>
       {itemCodes.map((c) => {
@@ -80,17 +82,17 @@ export function InvoiceDetails({ itemCodes, onReady }: { itemCodes: string[]; on
             {editing ? (
               <>
                 <Input className="col-span-2 h-8 text-xs sm:col-span-1" placeholder="Description on invoice" value={d.invoice_name} onChange={(e) => set(c, { invoice_name: e.target.value })} aria-label={`Invoice description for ${c}`} />
-                <Input className="h-8 text-xs" placeholder="HSN" value={d.hsn_code} onChange={(e) => set(c, { hsn_code: e.target.value })} aria-label={`HSN for ${c}`} />
+                <Input className="h-8 text-xs" placeholder={NA ? "HTS code" : "HSN"} value={d.hsn_code} onChange={(e) => set(c, { hsn_code: e.target.value })} aria-label={`${NA ? "HTS code" : "HSN"} for ${c}`} />
                 <Input className="h-8 text-xs" type="number" step="0.01" min={0} placeholder="Rate" value={d.sale_rate} onChange={(e) => set(c, { sale_rate: e.target.value })} aria-label={`Rate for ${c}`} />
-                <Input className="h-8 text-xs" type="number" step="0.01" min={0} placeholder="GST %" value={d.gst_rate} onChange={(e) => set(c, { gst_rate: e.target.value })} aria-label={`GST % for ${c}`} />
+                <Input className="h-8 text-xs" type="number" step="0.01" min={0} placeholder={NA ? "Tax %" : "GST %"} value={d.gst_rate} onChange={(e) => set(c, { gst_rate: e.target.value })} aria-label={`${NA ? "Tax %" : "GST %"} for ${c}`} />
                 <Button size="sm" className="h-8" onClick={() => save(c)}>Save</Button>
               </>
             ) : ok ? (
               <span className="col-span-2 text-muted-foreground sm:col-span-5">
-                {items[c].invoice_name || items[c].description} · HSN {items[c].hsn_code} · ₹{items[c].sale_rate} · GST {items[c].gst_rate ?? 18}%
+                {items[c].invoice_name || items[c].description} · {NA ? "HTS" : "HSN"} {items[c].hsn_code} · {CUR}{items[c].sale_rate} · {NA ? "Sales tax" : "GST"} {items[c].gst_rate ?? (NA ? 8.25 : 18)}%
               </span>
             ) : (
-              <span className="col-span-2 text-warning sm:col-span-5">Missing rate / HSN</span>
+              <span className="col-span-2 text-warning sm:col-span-5">Missing rate / {NA ? "HTS code" : "HSN"}</span>
             )}
           </div>
         );

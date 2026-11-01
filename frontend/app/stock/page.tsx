@@ -11,7 +11,7 @@ import { BRAND, DEMO } from "@/lib/brand";
 import { DemoBanner } from "@/components/demo/DemoBanner";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { PortalOrders } from "@/components/orders/PortalOrders";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 interface StockSummaryRow {
   item_code: string;

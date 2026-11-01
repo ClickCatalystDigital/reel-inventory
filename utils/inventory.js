@@ -1,6 +1,7 @@
 const { queryAll, queryOne, execute, withTransaction, batch, reserveNumbers, healCounters, nowIST } = require('../db/schema');
 const { procItemFor, allocateReceived } = require('./procurement');
 const brand = require('./brand');
+const { NA } = require('./market');
 
 // Rows per multi-row INSERT / IN() list — keeps bound variables far below SQLite's limit.
 const CHUNK = 400;
@@ -179,13 +180,13 @@ async function requireInvoiceDetails(itemCodes) {
   const rows = await queryAll(`SELECT item_code FROM items WHERE item_code IN (${marks(codes.length)}) AND sale_rate IS NOT NULL AND TRIM(COALESCE(hsn_code, '')) != ''`, codes);
   const ok = new Set(rows.map((r) => r.item_code));
   const missing = codes.filter((c) => !ok.has(c));
-  if (missing.length) throw new Error(`Set the invoice rate and HSN for ${missing.join(', ')} before moving it to the partner store`);
+  if (missing.length) throw new Error(`Set the invoice rate and ${NA ? 'HTS code' : 'HSN'} for ${missing.join(', ')} before moving it to the partner store`);
 }
 const snapshotSql = (n) => `UPDATE reels SET
     inv_desc = (SELECT COALESCE(NULLIF(TRIM(invoice_name), ''), description) FROM items WHERE items.item_code = reels.item_code),
     inv_hsn = (SELECT hsn_code FROM items WHERE items.item_code = reels.item_code),
     inv_rate = (SELECT sale_rate FROM items WHERE items.item_code = reels.item_code),
-    inv_gst = (SELECT COALESCE(gst_rate, 18) FROM items WHERE items.item_code = reels.item_code)
+    inv_gst = (SELECT COALESCE(gst_rate, ${NA ? 8.25 : 18}) FROM items WHERE items.item_code = reels.item_code)
   WHERE reel_number IN (${marks(n)})`;
 const clearSql = (n) => `UPDATE reels SET inv_desc = NULL, inv_hsn = NULL, inv_rate = NULL, inv_gst = NULL WHERE reel_number IN (${marks(n)})`;
 

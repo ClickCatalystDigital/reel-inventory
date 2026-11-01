@@ -15,6 +15,7 @@ import { showToast } from "@/lib/toast";
 import { DOC_TYPE_LABEL, PO_STATUS_LABEL, money, type Invoice, type PoRow } from "@/lib/docs";
 import { Chips, Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 // One list over both tables: crm_invoices rows and crm_purchase_orders rows (flagged _po).
 type Row = (Invoice & { _po?: false }) | (PoRow & { _po: true; net_amount?: undefined; party_name?: undefined; doc_type?: undefined; invoice_no?: undefined; original_filename?: undefined; deleted_at?: undefined });
@@ -91,7 +92,8 @@ export function AllTab() {
     const one = list.length === 1;
     const title = one ? (list[0]._po ? "Delete this Purchase Order?" : pushed ? "Archive this record?" : "Delete this record?") : `Delete ${list.length} selected record(s)?`;
     const description = pushed
-      ? one ? "It was already pushed to Tally. This only archives it here — the voucher stays in Tally." : "Invoices already pushed to Tally are only archived here (their vouchers stay in Tally); the rest are deleted permanently."
+      ? NA ? (one ? "It was already posted to the books. This only archives it here — the entry stays in the books." : "Invoices already posted to the books are only archived here (their entries stay in the books); the rest are deleted permanently.")
+        : one ? "It was already pushed to Tally. This only archives it here — the voucher stays in Tally." : "Invoices already pushed to Tally are only archived here (their vouchers stay in Tally); the rest are deleted permanently."
       : "This cannot be undone.";
     if (!(await askConfirm({ title, description, confirmLabel: one && pushed && !list[0]._po ? "Archive" : "Delete", destructive: true }))) return;
     let archived = 0, del = 0, failed = 0;
@@ -114,7 +116,7 @@ export function AllTab() {
       <div className="grid gap-3 md:grid-cols-[1fr_1fr_1fr_1.4fr]">
         <Kpi value={m.backlog} label="Approval Backlog" sub={`${money(m.backlogVal)} total`} tone="text-warning" />
         <Kpi value={m.blocked} label="Ingestion Blocked" sub={m.blocked === 1 ? "1 actionable issue" : `${m.blocked} issues pending`} tone="text-destructive" />
-        <Kpi value={m.ready} label="Ready For Tally" sub={`${money(m.readyVal)} staged`} tone="text-success" />
+        <Kpi value={m.ready} label={NA ? "Ready To Post" : "Ready For Tally"} sub={`${money(m.readyVal)} staged`} tone="text-success" />
         <div className="rounded-xl border bg-card p-4">
           <div className="mb-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">Queue Mix by Classification</div>
           {Object.entries(m.types).map(([t, n]) => (
@@ -215,9 +217,9 @@ export function AllTab() {
 }
 
 const TYPES = [
-  { key: "invoice", name: "Invoice", sub: "Purchase / freight → Tally", icon: FileText },
-  { key: "bank_statement", name: "Bank statement", sub: "Transactions → Tally", icon: Landmark },
-  { key: "purchase_order", name: "Purchase order", sub: "Own lifecycle · no Tally", icon: ClipboardList },
+  { key: "invoice", name: "Invoice", sub: NA ? "Purchase / freight → books" : "Purchase / freight → Tally", icon: FileText },
+  { key: "bank_statement", name: "Bank statement", sub: NA ? "Transactions → books" : "Transactions → Tally", icon: Landmark },
+  { key: "purchase_order", name: "Purchase order", sub: NA ? "Own lifecycle · not posted" : "Own lifecycle · no Tally", icon: ClipboardList },
 ] as const;
 
 // "What are you adding?" → Upload PDF (AI) / Enter manually / (PO) Generate.

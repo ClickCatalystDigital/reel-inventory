@@ -3,6 +3,7 @@
 // can't run on Cloudflare Workers. It talks to Turso over HTTP, so it can't open a local file.
 const { createClient } = require('@libsql/client/web');
 const bcrypt = require('bcryptjs');
+const { wallClock } = require('../utils/market');
 const { AsyncLocalStorage } = require('node:async_hooks');
 
 let db = null;
@@ -487,19 +488,14 @@ async function createUser(username, password, role = 'user') {
 }
 
 function nowIST() {
-  // Returns current time as IST string for storage
-  const now = new Date();
-  // IST = UTC + 5:30
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  const ist = new Date(now.getTime() + istOffset);
-  return ist.toISOString().replace('T', ' ').substring(0, 19);
+  // Current wall-clock time in the market's zone (IST in India, Central Time for MARKET=NA), the naive string every row stores.
+  return wallClock();
 }
 
 // Returns 'YYYY-MM-DD' for the given moment in IST — never use SQLite's date('now', ...)
 // for day-boundary logic, it's UTC-based while every stored timestamp here is naive IST.
 function istDateString(d = new Date()) {
-  const istOffset = 5.5 * 60 * 60 * 1000;
-  return new Date(d.getTime() + istOffset).toISOString().substring(0, 10);
+  return wallClock(d).substring(0, 10);
 }
 
 function istDayBounds(dateStr) {

@@ -106,7 +106,7 @@ router.put('/:itemCode/invoice', ah(async (req, res) => {
   if (!CATALOG_ADMINS.includes(req.user.role)) return res.status(403).json({ error: 'Not authorized' });
   const { invoice_name, hsn_code, sale_rate, gst_rate } = req.body;
   const rate = sale_rate === '' || sale_rate == null ? null : Number(sale_rate);
-  const gst = gst_rate === '' || gst_rate == null ? 18 : Number(gst_rate);
+  const gst = gst_rate === '' || gst_rate == null ? (require('../utils/market').NA ? 8.25 : 18) : Number(gst_rate);
   if ((rate != null && (!Number.isFinite(rate) || rate < 0)) || !Number.isFinite(gst) || gst < 0) return res.status(400).json({ error: 'Invalid rate' });
   const r = await execute('UPDATE items SET invoice_name = ?, hsn_code = ?, sale_rate = ?, gst_rate = ? WHERE item_code = ?',
     [String(invoice_name || '').trim() || null, String(hsn_code || '').trim() || null, rate, gst, req.params.itemCode]);

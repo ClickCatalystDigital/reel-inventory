@@ -3,11 +3,15 @@
 import type { ReactNode } from "react";
 import { cn } from "@/lib/utils";
 import { statusTone } from "@/lib/docs";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
+
+// MARKET=NA has no Tally: an invoice the office agent "pushed" reads as posted to the books.
+const US_STATUS: Record<string, string> = { pushed: "posted", push_failed: "post failed", in_tally: "In books" };
 
 export function StatusPill({ status, label }: { status: string; label?: string }) {
   return (
     <span className={cn("inline-block rounded-md border px-2 py-0.5 text-[10px] font-bold tracking-wide uppercase", statusTone(status))}>
-      {label ?? (status === "in_tally" ? "In Tally" : status.replace("_", " "))}
+      {label ?? ((NA && US_STATUS[status]) || (status === "in_tally" ? "In Tally" : status.replace("_", " ")))}
     </span>
   );
 }

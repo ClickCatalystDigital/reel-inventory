@@ -1,6 +1,6 @@
 // utils/pdf.js
 const express = require('express');
-const { locale } = require('./locale');
+const { locale } = require('./market');
 const router = express.Router();
 const PDFDocument = require('pdfkit');
 const { drawQR } = require('./qr');

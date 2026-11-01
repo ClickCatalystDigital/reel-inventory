@@ -1,0 +1,13 @@
+{
+  // The North American demo's reset (electronics-erp-us.ahromlabs.com). Deploy from this folder: npx wrangler deploy -c wrangler.us.jsonc
+  "name": "ls-inventory-demo-reset-us",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-05",
+  "account_id": "5d8cf246f656006b81d99d734e8c0f40",
+  // workers.dev URL only for a manual run: POST with header x-trigger-key (TRIGGER_KEY).
+  "workers_dev": true,
+  // 09:15 UTC = 03:15 or 04:15 US Central, overnight for North American visitors.
+  "triggers": { "crons": ["15 9 * * *"] },
+  // Not secret. TURSO_API_TOKEN (Turso platform token) and TRIGGER_KEY are Worker secrets.
+  "vars": { "TURSO_ORG": "pujan", "GROUP": "lsdemous", "DEMO_DB": "ls-demo-us", "GOLDEN_DB": "ls-demo-us-golden", "TIME_ZONE": "America/Chicago" }
+}

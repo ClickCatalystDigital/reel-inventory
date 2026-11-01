@@ -18,7 +18,7 @@ import { showToast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { PROC_STAGES } from "@/lib/po-stages";
 import { StageBadge } from "./StageSelect";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 interface ShortLine { po_item_id: number; po_id: number; po_number: string; company_name: string | null; expected_dispatch_date: string | null; needed: number }
 interface Short { item_code: string; description: string | null; supplier: string | null; free_stock: number; needed: number; lines: ShortLine[] }

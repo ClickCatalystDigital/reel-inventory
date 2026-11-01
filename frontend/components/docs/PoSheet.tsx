@@ -15,9 +15,10 @@ import { cn } from "@/lib/utils";
 import { PO_STATUS_LABEL, docDate, money, type CatalogItem, type Company, type PoFull } from "@/lib/docs";
 import { SectionLabel, StatusPill } from "./bits";
 import { useDocs } from "./context";
-import { LOCALE } from "@/lib/locale";
+import { CUR, LOCALE } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
-const TYPE_SHORT: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: "BOE", bank_statement: "Bank" };
+const TYPE_SHORT: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: NA ? "Entry" : "BOE", bank_statement: "Bank" };
 const pdfUrl = (u: string) => u.trim().replace(/^https:\/\/https:\/\//, "https://");
 const Field = ({ label, children, className }: { label: React.ReactNode; children: React.ReactNode; className?: string }) => (
   <div className={cn("space-y-1", className)}><Label className="text-xs text-muted-foreground">{label}</Label>{children}</div>
@@ -155,7 +156,7 @@ function ViewPo({ id, onClose, companyOptions, itemOptions }: { id: number; onCl
                     </Field>
                     <div className="grid grid-cols-2 gap-2">
                       <Field label="Qty (NOS)"><Input type="number" min={1} defaultValue={it.quantity_ordered || ""} disabled={!editable} className="font-bold" onBlur={(e) => e.target.value !== String(it.quantity_ordered) && saveLine(it.id, "quantity_ordered", e.target.value)} /></Field>
-                      <Field label="Unit Price (₹)"><Input type="number" step="0.01" placeholder="—" defaultValue={it.unit_price ?? ""} disabled={!editable} onBlur={(e) => e.target.value !== String(it.unit_price ?? "") && saveLine(it.id, "unit_price", e.target.value)} /></Field>
+                      <Field label={`Unit Price (${CUR})`}><Input type="number" step="0.01" placeholder="—" defaultValue={it.unit_price ?? ""} disabled={!editable} onBlur={(e) => e.target.value !== String(it.unit_price ?? "") && saveLine(it.id, "unit_price", e.target.value)} /></Field>
                     </div>
                     {editable && <Button variant="outline" size="sm" className="w-full text-destructive" onClick={() => call("DELETE", `/api/po/${id}/items/${it.id}`, undefined)}>Remove</Button>}
                   </div>
@@ -277,7 +278,7 @@ function NewPo({ onClose, companyOptions, itemOptions }: { onClose: () => void; 
           <div key={i} className="grid grid-cols-[1fr_70px_80px_auto] items-center gap-2">
             <SearchPicker options={itemOptions} value={l.item_code} onChange={(v) => setRows((s) => s.map((x, j) => (j === i ? { ...x, item_code: v } : x)))} placeholder="— Item —" searchPlaceholder="Search items…" />
             <Input type="number" min={1} placeholder="Qty" value={l.qty} onChange={(e) => setRows((s) => s.map((x, j) => (j === i ? { ...x, qty: e.target.value } : x)))} />
-            <Input type="number" step="0.01" placeholder="₹" value={l.price} onChange={(e) => setRows((s) => s.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} />
+            <Input type="number" step="0.01" placeholder={CUR} value={l.price} onChange={(e) => setRows((s) => s.map((x, j) => (j === i ? { ...x, price: e.target.value } : x)))} />
             <Button variant="ghost" size="icon" title="Remove" onClick={() => setRows((s) => s.filter((_, j) => j !== i))}><X className="size-4" /></Button>
           </div>
         ))}

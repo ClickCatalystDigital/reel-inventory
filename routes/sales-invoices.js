@@ -9,9 +9,11 @@ const ah = require('../utils/asyncHandler');
 const brand = require('../utils/brand');
 const { STAFF_ROLES } = require('../utils/auth');
 const buildInvoicePdf = require('../utils/invoicePdf');
+const { NA } = require('../utils/market');
 
 const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
-const DEFAULT_GST = 18;
+// gst_rate holds the line's tax %: GST split CGST/SGST in India, one sales tax rate for MARKET=NA (Texas 8.25%).
+const DEFAULT_GST = NA ? 8.25 : 18;
 const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
 
 router.use((req, res, next) => {
@@ -52,6 +54,7 @@ async function ensure(no, user) {
 // Amounts for one invoice from its saved rows and its shipped quantities. Rows whose reels were all undone
 // (qty 0) are left out; shipped items with no saved row yet count as "no rate".
 function compute(head, rows, shipped) {
+  if (NA) return computeUS(head, rows, shipped);
   const saved = Object.fromEntries(rows.map((l) => [l.item_code, l]));
   const lines = shipped.map((s) => {
     const l = saved[s.item_code] || { item_code: s.item_code, description: s.item_code, hsn_code: null, rate: null, gst_rate: DEFAULT_GST };
@@ -69,6 +72,18 @@ function compute(head, rows, shipped) {
     taxable, cgst, sgst, round_off: r2(total - (taxable + cgst + sgst)), total,
     qty: lines.reduce((s, l) => s + l.qty, 0),
   };
+}
+
+// MARKET=NA: one sales tax per line at its rate, no split, total to the cent.
+function computeUS(head, rows, shipped) {
+  const saved = Object.fromEntries(rows.map((l) => [l.item_code, l]));
+  const lines = shipped.map((s) => {
+    const l = saved[s.item_code] || { item_code: s.item_code, description: s.item_code, hsn_code: null, rate: null, gst_rate: DEFAULT_GST };
+    const amount = r2(s.qty * (l.rate || 0)), tax = r2((amount * (l.gst_rate ?? DEFAULT_GST)) / 100);
+    return { ...l, qty: s.qty, reels: s.reels, amount, tax, total: r2(amount + tax) };
+  });
+  const taxable = r2(lines.reduce((s, l) => s + l.amount, 0)), tax = r2(lines.reduce((s, l) => s + l.tax, 0));
+  return { ...head, lines, missing_rates: lines.filter((l) => !l.rate).length, taxable, tax, round_off: 0, total: r2(taxable + tax), qty: lines.reduce((s, l) => s + l.qty, 0) };
 }
 
 async function load(no) {

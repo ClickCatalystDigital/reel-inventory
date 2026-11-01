@@ -13,13 +13,15 @@ import { formatDate } from "@/lib/format";
 import { INV_TYPES, lines, money, type Invoice } from "@/lib/docs";
 import { Chips, Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
-import { LOCALE } from "@/lib/locale";
+import { CUR, LOCALE } from "@/lib/market";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
-const TYPE_LABEL: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: "Bill of Entry" };
+const TYPE_LABEL: Record<string, string> = { purchase_invoice: "Purchase", freight_invoice: "Freight", bill_of_entry: NA ? "Customs Entry" : "Bill of Entry" };
 type Stage = "all" | "pending" | "approved" | "pushed" | "rejected";
-const round = (v: number) => "₹" + Math.round(v).toLocaleString(LOCALE());
+const lb = (kg: number | null | undefined) => (kg ? `${Math.round(kg * 2.20462).toLocaleString("en-US")} LB` : "—");
+const round = (v: number) => CUR + Math.round(v).toLocaleString(LOCALE());
 
-// Purchase + freight invoices: GST credit in the pipeline, cost per piece / per kg, shipment details.
+// Purchase + freight invoices: GST credit in the pipeline (India) or value ready to post (MARKET=NA), cost per piece / per kg, shipment details.
 export function InvoicesTab() {
   const docs = useDocs();
   const [all, setAll] = useState<Invoice[]>([]);
@@ -51,9 +53,11 @@ export function InvoicesTab() {
     <div className="space-y-4">
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <Kpi value={pending.length} label="Pending Approval" sub={round(pending.reduce((s, d) => s + (Number(d.net_amount) || 0), 0))} tone="text-warning" />
-        <Kpi value={round(cgst + sgst + igst)} label="GST Recoverable" sub="Input Credit Available" tone="text-success" />
+        {NA ? (
+          <Kpi value={round(all.filter((d) => d.status === "approved").reduce((s, d) => s + (Number(d.net_amount) || 0), 0))} label="Ready To Post" sub="Approved, not yet in the books" tone="text-success" />
+        ) : <Kpi value={round(cgst + sgst + igst)} label="GST Recoverable" sub="Input Credit Available" tone="text-success" />}
         {errors > 0 && <Kpi value={errors} label="Need Attention" sub="Stalled pipelines" tone="text-destructive" className="border-destructive/40" />}
-        <div className="rounded-xl border bg-card p-4">
+        {!NA && <div className="rounded-xl border bg-card p-4">
           <div className="mb-2 text-[10px] font-semibold tracking-wide text-muted-foreground uppercase">GST Input Credit Ledger (Pipeline)</div>
           <div className="flex gap-4">
             {[["CGST", cgst], ["SGST", sgst], ["IGST", igst]].filter(([, v]) => (v as number) > 0).map(([l, v]) => (
@@ -61,7 +65,7 @@ export function InvoicesTab() {
             ))}
             {cgst + sgst + igst === 0 && <div className="text-xs text-muted-foreground">No credits in pipeline</div>}
           </div>
-        </div>
+        </div>}
       </div>
 
       <Card className="gap-3 p-4">
@@ -96,7 +100,7 @@ export function InvoicesTab() {
             </label>
             <div className="text-xs">
               <div className="mb-1 text-muted-foreground">Stage</div>
-              <Chips<Stage> value={stage} onChange={setStage} options={[{ value: "all", label: "All" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "pushed", label: "Pushed" }, { value: "rejected", label: "Rejected" }]} />
+              <Chips<Stage> value={stage} onChange={setStage} options={[{ value: "all", label: "All" }, { value: "pending", label: "Pending" }, { value: "approved", label: "Approved" }, { value: "pushed", label: NA ? "Posted" : "Pushed" }, { value: "rejected", label: "Rejected" }]} />
             </div>
           </div>
         )}
@@ -114,7 +118,7 @@ export function InvoicesTab() {
                   <div className="font-semibold">{d.party_name || "—"}</div>
                   <div className="mt-0.5 flex items-center gap-1.5">
                     <span className="rounded border px-1 text-[9px] font-bold text-muted-foreground uppercase">{TYPE_LABEL[d.doc_type || ""] || d.doc_type}</span>
-                    {d.party_gstin && <span className="font-mono text-[10px] text-muted-foreground">{d.party_gstin}</span>}
+                    {!NA && d.party_gstin && <span className="font-mono text-[10px] text-muted-foreground">{d.party_gstin}</span>}
                   </div>
                 </div>
               ),
@@ -135,10 +139,10 @@ function Insights({ d }: { d: Invoice }) {
   let sub: React.ReactNode = d.doc_type === "bill_of_entry" ? "Customs Duty" : "Net Document Value";
   if (d.doc_type === "purchase_invoice") {
     const qty = lines(d).reduce((s, l) => s + (Number(l.qty) || 0), 0);
-    sub = qty > 0 ? <>Purchase Value · <b className="text-foreground">{qty.toLocaleString(LOCALE())} pcs</b> (₹{(net / qty).toFixed(2)}/component)</> : "Purchase Value";
+    sub = qty > 0 ? <>Purchase Value · <b className="text-foreground">{qty.toLocaleString(LOCALE())} pcs</b> ({CUR}{(net / qty).toFixed(2)}/component)</> : "Purchase Value";
   } else if (d.doc_type === "freight_invoice") {
     const kg = Number(d.gross_weight) || 0;
-    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{kg} kg{LOCALE() === "en-US" ? ` (${Math.round(kg * 2.20462).toLocaleString("en-US")} lb)` : ""} shipment</b> (₹{(net / kg).toFixed(2)}/kg)</> : "Logistics Charges";
+    sub = kg > 0 ? <>Logistics Charges · <b className="text-foreground">{NA ? `${Math.round(kg * 2.20462).toLocaleString("en-US")} lb` : `${kg} kg`} shipment</b> ({CUR}{NA ? (net / (kg * 2.20462)).toFixed(2) : (net / kg).toFixed(2)}/{NA ? "lb" : "kg"})</> : "Logistics Charges";
   }
   return (
     <div>
@@ -163,7 +167,7 @@ function Shipment({ d, all }: { d: Invoice; all: Invoice[] }) {
         <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-1">
           <span className="text-muted-foreground">MAWB</span><span>{d.mawb_no}</span>
           <span className="text-muted-foreground">Flight</span><span>{v("flight_no")}</span>
-          <span className="text-muted-foreground">Gross Weight</span><span>{v("gross_weight")} KG</span>
+          <span className="text-muted-foreground">Gross Weight</span><span>{NA ? lb(d.gross_weight || log?.gross_weight) : `${v("gross_weight")} KG`}</span>
           <span className="text-muted-foreground">Route</span><span>{v("origin_airport")} → {v("dest_airport")}</span>
         </div>
       </PopoverContent>

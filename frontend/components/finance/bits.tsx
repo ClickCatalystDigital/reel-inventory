@@ -4,14 +4,15 @@ import type { ReactNode } from "react";
 import { Card } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
 import { PERIODS, type Period } from "@/lib/finance";
+import { books } from "@/lib/market";
 
 // "i" hint next to a card title (native tooltip).
 export function Hint({ tip }: { tip: string }) {
   return (
     <span
       tabIndex={0}
-      title={tip}
-      aria-label={tip}
+      title={books(tip)}
+      aria-label={books(tip)}
       className="inline-flex size-4 shrink-0 cursor-help items-center justify-center rounded-full border text-[10px] font-bold text-muted-foreground"
     >
       i

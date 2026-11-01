@@ -6,6 +6,7 @@ const router = express.Router();
 const ah = require('../utils/asyncHandler');
 const A = require('../utils/assistant');
 const brand = require('../utils/brand');
+const { wallClock } = require('../utils/market');
 
 // Demo: every answer passes the made-up-name swap too, so a model echoing a real name never shows it (identity on live).
 router.use((req, res, next) => { const json = res.json.bind(res); res.json = (b) => json(brand.deep(b)); next(); });
@@ -129,7 +130,7 @@ router.post('/feedback', ah(async (req, res) => {
 // Questions the assistant could not answer (unclear, no look-up, said "the data doesn't have that") or that were thumbed down — the to-do list for improving it.
 router.get('/misses', ah(async (req, res) => {
   const { queryAll } = require('../db/schema');
-  const since = new Date(Date.now() + 5.5 * 3600e3 - 30 * 86400e3).toISOString().replace('T', ' ').slice(0, 19);
+  const since = wallClock(new Date(Date.now() - 30 * 86400e3));
   const rows = await queryAll(
     `SELECT MIN(question) AS question, kind, COALESCE(tool, '') AS tool, COUNT(*) AS n, MAX(at) AS last_at FROM assistant_log
      WHERE ok = 0 AND at >= ? AND (kind IN ('unclear', 'data', 'feedback')) GROUP BY LOWER(TRIM(question)), kind ORDER BY n DESC, last_at DESC LIMIT 30`, [since]);
@@ -143,7 +144,7 @@ router.get('/starters', ah(async (req, res) => {
     `SELECT MIN(question) AS q, COUNT(*) AS n FROM assistant_log WHERE asked_by = ? AND kind = 'data' AND tool IS NOT NULL AND ok = 1 AND at >= ?
        AND LOWER(TRIM(question)) NOT IN (SELECT LOWER(TRIM(question)) FROM assistant_log WHERE asked_by = ? AND kind = 'feedback' AND ok = 0)
      GROUP BY LOWER(TRIM(question)) HAVING COUNT(*) >= 2 ORDER BY n DESC, MAX(at) DESC LIMIT 3`,
-    [req.user.username, new Date(Date.now() + 5.5 * 3600e3 - 60 * 86400e3).toISOString().replace('T', ' ').slice(0, 19), req.user.username]
+    [req.user.username, wallClock(new Date(Date.now() - 60 * 86400e3)), req.user.username]
   );
   res.json({ usual: rows.map((r) => r.q), defaults: require('../utils/assistantChat').STARTERS });
 }));

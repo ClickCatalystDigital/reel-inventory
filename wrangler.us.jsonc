@@ -1,0 +1,39 @@
+{
+  // North American demo: electronics-erp-us.ahromlabs.com. Same as wrangler.demo.jsonc, with MARKET=NA ($, US dates,
+  // Central Time; utils/market.js) and its own databases in the US (lsdemous group). Deploy with `npm run deploy:demo-us`.
+  // Lives in the Ahrom Labs Cloudflare account (where ahromlabs.com is), not LS Technologies'.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "ls-inventory-demo-us",
+  "account_id": "5d8cf246f656006b81d99d734e8c0f40",
+  "main": "worker.mjs",
+  "compatibility_date": "2026-10-05",
+  "compatibility_flags": ["nodejs_compat", "global_fetch_strictly_public"], // public fetch: utils/demo.js calls ahromlabs.com (same zone)
+  "observability": { "enabled": true },
+  "routes": [{ "pattern": "electronics-erp-us.ahromlabs.com", "custom_domain": true }],
+  "placement": { "region": "aws:us-east-1" },
+  // Built with NEXT_PUBLIC_DEMO=1 and NEXT_PUBLIC_MARKET=NA: see the deploy:demo-us script.
+  "assets": {
+    "directory": "./frontend/out",
+    "binding": "ASSETS",
+    "run_worker_first": ["/*", "!/_next/*"]
+  },
+  // No R2 bucket: the demo refuses uploads (utils/demo.js).
+  "ratelimits": [
+    { "name": "LOGIN_LIMITER", "namespace_id": "1001", "simple": { "limit": 10, "period": 60 } }
+  ],
+  // Secrets (wrangler secret put -c wrangler.demo.jsonc): DEMO_PASS (owner-pass PIN, 4+ characters), TURSO_AUTH_TOKEN (lsdemous group token),
+  // SESSION_SECRET (its own, never the live one). Never the live deployment's values.
+  "vars": {
+    "DEMO_MODE": "1",
+    "MARKET": "NA",
+    "TURSO_URL": "libsql://ls-demo-us-pujan.aws-us-east-1.turso.io",
+    // The owner pass reads and writes golden instead, so its changes survive the nightly reset (db/schema.js).
+    "GOLDEN_TURSO_URL": "libsql://ls-demo-us-golden-pujan.aws-us-east-1.turso.io",
+    "LEADS_TURSO_URL": "libsql://ls-demo-us-leads-pujan.aws-us-east-1.turso.io"
+  },
+  "alias": {
+    "pdfkit": "pdfkit/js/pdfkit.standalone.js",
+    "qrcode": "qrcode/lib/server.js",
+    "iconv-lite": "./shims/iconv-lite.js"
+  }
+}

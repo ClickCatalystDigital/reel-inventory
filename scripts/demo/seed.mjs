@@ -19,6 +19,14 @@ const { DB_URL, DB_TOKEN } = process.env;
 if (!DB_URL) throw new Error('DB_URL is required (the golden demo database, never the live one)');
 if (/ls-inventory-clickcatalyst/.test(DB_URL)) throw new Error('Refusing to seed the live LS Technologies database');
 
+// MARKET=NA seeds the American company (electronics-erp-us.ahromlabs.com): US customer names, dollar prices, Texas
+// sales tax, US account names. Unset = the Indian company, unchanged. Prices below are written in rupees; NA divides by 84.
+const NA = process.env.MARKET === 'NA';
+const usd = (inr, dp = 4) => (NA ? Math.round((inr / 84) * 10 ** dp) / 10 ** dp : inr); // a unit price
+const tot = (inr) => (NA ? Math.sign(inr) * Math.round(Math.abs(inr) / 84) : inr); // a bill or ledger total; halves away from zero, so -29.5 and 29.5 agree
+const TAX = NA ? 8.25 : 18;
+const [BRIGHT, VOLTIX, KEYSTONE] = NA ? ['Brightline Appliances Inc', 'Voltix Motors Inc', 'Keystone Meters LLC'] : ['Brightline Appliances Pvt Ltd', 'Voltix Motors Ltd', 'Keystone Meters Pvt Ltd'];
+
 // The app reads these at load time.
 process.env.TURSO_URL = DB_URL;
 process.env.TURSO_AUTH_TOKEN = DB_TOKEN || '';
@@ -89,12 +97,12 @@ const productId = Object.fromEntries((await queryAll('SELECT id, category FROM c
 
 // [company, contact, designation, status, industry, product line, severity (3 = watch list)]
 const CUSTOMERS = [
-  ['Brightline Appliances Pvt Ltd', 'Neha Kapoor', 'Purchase Manager', 'customer', 'Home appliances', 'Passives', 1],
-  ['Voltix Motors Ltd', 'Rahul Bansal', 'Supply Chain Head', 'customer', 'EV controllers', 'ICs', 2],
-  ['Northwind Lighting', 'Sana Qureshi', 'Procurement Lead', 'customer', 'LED drivers', 'Passives', 1],
-  ['Orbit Power Systems', 'Imran Shaikh', 'Stores In-charge', 'customer', 'Inverters and UPS', 'Discretes', 3],
-  ['Keystone Meters Pvt Ltd', 'Pooja Iyer', 'Buyer', 'new', 'Energy meters', 'ICs', 1],
-  ['Helios Solar Tech', 'Arvind Rao', 'Purchase Executive', 'lost', 'Solar charge controllers', 'Discretes', 1],
+  [BRIGHT, (NA ? 'Emily Carter' : 'Neha Kapoor'), 'Purchase Manager', 'customer', 'Home appliances', 'Passives', 1],
+  [VOLTIX, (NA ? 'Jason Miller' : 'Rahul Bansal'), 'Supply Chain Head', 'customer', 'EV controllers', 'ICs', 2],
+  ['Northwind Lighting', (NA ? 'Rachel Kim' : 'Sana Qureshi'), 'Procurement Lead', 'customer', 'LED drivers', 'Passives', 1],
+  ['Orbit Power Systems', (NA ? 'Marcus Reed' : 'Imran Shaikh'), 'Stores In-charge', 'customer', 'Inverters and UPS', 'Discretes', 3],
+  [KEYSTONE, (NA ? 'Laura Chen' : 'Pooja Iyer'), 'Buyer', 'new', 'Energy meters', 'ICs', 1],
+  ['Helios Solar Tech', (NA ? 'Daniel Ortiz' : 'Arvind Rao'), 'Purchase Executive', 'lost', 'Solar charge controllers', 'Discretes', 1],
 ];
 const NEXT = { customer: ["Check next month's call-off", 3], new: ['Send line card and price list', 0], lost: ['Ask again after their Q4 budget', 30] };
 const contact = {};
@@ -103,7 +111,7 @@ for (const [company_name, poc_name, designation, status, industry, product, seve
   const [title, due] = NEXT[status];
   const r = await api('owner', 'POST', '/api/clients', {
     company_name, poc_name, designation, status, industry, severity, product_id: productId[product],
-    email: `${poc_name.split(' ')[0].toLowerCase()}@${company_name.split(' ')[0].toLowerCase()}.example`, phone: '9800000000',
+    email: `${poc_name.split(' ')[0].toLowerCase()}@${company_name.split(' ')[0].toLowerCase()}.example`, phone: NA ? '5125550100' : '9800000000',
     note: `Buys ${industry.toLowerCase()} components; prefers monthly call-offs against a yearly PO.`,
     next_touchpoint: day(due), next_touchpoint_title: title, next_touchpoint_assignee: 'manager',
   });
@@ -114,31 +122,31 @@ for (const row of await queryAll('SELECT co.id company_id, co.name FROM crm_cont
 await execute('UPDATE crm_companies SET created_at = ?, updated_at = ?', [clock, clock]); // column default is the real time
 // The customer login belongs to Brightline: it sees only Brightline's items and POs (utils/visibility.js).
 const [customerUser] = await queryAll("SELECT id FROM users WHERE username = 'customer'");
-await execute('INSERT INTO user_companies (user_id, company_id) VALUES (?, ?)', [customerUser.id, companyId['Brightline Appliances Pvt Ltd']]);
+await execute('INSERT INTO user_companies (user_id, company_id) VALUES (?, ?)', [customerUser.id, companyId[BRIGHT]]);
 
 // --- 5. Catalog with invoice details (rate + HSN are required before anything moves to the partner store) ---
 // [code, description, reel size, category, customers who may see it, HSN, sale rate ₹/pc, supplier]
 const SUP = 'Eastbridge Components Trading', SUP2 = 'Lotus Semicon Distributors';
 const ITEMS = [
-  ['BC857B', 'PNP transistor SOT-23', 3000, 'Transistor', ['Brightline Appliances Pvt Ltd'], '8541', 0.42, SUP],
-  ['BC847C', 'NPN transistor SOT-23', 3000, 'Transistor', ['Brightline Appliances Pvt Ltd'], '8541', 0.4, SUP],
+  ['BC857B', 'PNP transistor SOT-23', 3000, 'Transistor', [BRIGHT], '8541', 0.42, SUP],
+  ['BC847C', 'NPN transistor SOT-23', 3000, 'Transistor', [BRIGHT], '8541', 0.4, SUP],
   ['1N4148W', 'Switching diode SOD-123', 3000, 'Diode', [], '8541', 0.35, SUP],
-  ['SS34', 'Schottky diode 3A 40V SMA', 1800, 'Diode', ['Voltix Motors Ltd'], '8541', 1.9, SUP],
-  ['CC0603-104K', 'MLCC 100nF 50V X7R 0603', 4000, 'MLCC', ['Brightline Appliances Pvt Ltd'], '8532', 0.18, SUP],
+  ['SS34', 'Schottky diode 3A 40V SMA', 1800, 'Diode', [VOLTIX], '8541', 1.9, SUP],
+  ['CC0603-104K', 'MLCC 100nF 50V X7R 0603', 4000, 'MLCC', [BRIGHT], '8532', 0.18, SUP],
   ['CC0805-106K', 'MLCC 10uF 25V X5R 0805', 4000, 'MLCC', [], '8532', 0.95, SUP],
-  ['RC0603-10K', 'Resistor 10k 1% 0603', 5000, 'RESISTOR', ['Brightline Appliances Pvt Ltd'], '8533', 0.06, SUP],
-  ['RC1206-0R1', 'Current-sense resistor 0.1R 1206', 5000, 'RESISTOR', ['Voltix Motors Ltd'], '8533', 1.1, SUP],
+  ['RC0603-10K', 'Resistor 10k 1% 0603', 5000, 'RESISTOR', [BRIGHT], '8533', 0.06, SUP],
+  ['RC1206-0R1', 'Current-sense resistor 0.1R 1206', 5000, 'RESISTOR', [VOLTIX], '8533', 1.1, SUP],
   ['EC-470U35', 'Electrolytic cap 470uF 35V 10x16', 500, 'Electrolytic Capacitor', ['Northwind Lighting'], '8532', 6.2, SUP2],
   ['TAN-22U16', 'SMD tantalum 22uF 16V case B', 2000, 'SMD Tan Cap', [], '8532', 3.4, SUP2],
   ['MOV-14D471', 'Varistor 14D471K', 1000, 'MOV', ['Northwind Lighting'], '8533', 2.4, SUP2],
-  ['STM32G030', 'MCU 32-bit ARM Cortex-M0+ TSSOP20', 2500, 'IC', ['Voltix Motors Ltd'], '8542', 38.5, SUP2],
+  ['STM32G030', 'MCU 32-bit ARM Cortex-M0+ TSSOP20', 2500, 'IC', [VOLTIX], '8542', 38.5, SUP2],
   ['LM358DR', 'Dual op-amp SOIC-8', 2500, 'IC', [], '8542', 4.6, SUP2],
-  ['PCBA-BLDC-01', 'BLDC fan controller board', 200, 'PCBA', ['Brightline Appliances Pvt Ltd'], '8537', 450, SUP2],
+  ['PCBA-BLDC-01', 'BLDC fan controller board', 200, 'PCBA', [BRIGHT], '8537', 450, SUP2],
 ];
 at(-118);
 for (const [item_code, description, default_spq, category, who, hsn_code, sale_rate, supplier] of ITEMS) {
   await api('owner', 'POST', '/api/items', { item_code, description, default_spq, category, company_ids: who.map((n) => companyId[n]) });
-  await api('owner', 'PUT', `/api/items/${item_code}/invoice`, { hsn_code, sale_rate, gst_rate: 18 });
+  await api('owner', 'PUT', `/api/items/${item_code}/invoice`, { hsn_code, sale_rate: usd(sale_rate), gst_rate: TAX });
   await execute('UPDATE items SET supplier = ?, created_at = ? WHERE item_code = ?', [supplier, clock, item_code]); // no API sets supplier
 }
 
@@ -164,7 +172,7 @@ async function po(customer, orderDay, dueDay, lines, stage) {
   at(orderDay, '12:00:00');
   const p = await api('owner', 'POST', '/api/po', { company_id: companyId[customer], contact_id: contact[customer], order_date: day(orderDay), expected_dispatch_date: day(dueDay), generate_number: true, notes: 'Monthly call-off' });
   const id = p.id ?? p.po?.id;
-  for (const [item_code, quantity_ordered, unit_price] of lines) await api('owner', 'POST', `/api/po/${id}/items`, { item_code, quantity_ordered, unit_price });
+  for (const [item_code, quantity_ordered, unit_price] of lines) await api('owner', 'POST', `/api/po/${id}/items`, { item_code, quantity_ordered, unit_price: usd(unit_price) });
   if (stage !== 'draft') await api('owner', 'POST', `/api/po/${id}/confirm`, {});
   await execute('UPDATE crm_purchase_orders SET created_at = ?, updated_at = ? WHERE id = ?', [clock, clock, id]);
   return id;
@@ -177,8 +185,8 @@ async function ship(d, invoice, customer, poId, lines) {
   }
 }
 // Brightline #1: complete (shipped in full, PO marked dispatched).
-const poBright1 = await po('Brightline Appliances Pvt Ltd', -50, -35, [['BC857B', 9000, 0.42], ['CC0603-104K', 12000, 0.18], ['RC0603-10K', 15000, 0.06]], 'confirmed');
-await ship(-36, 'INV-2601', 'Brightline Appliances Pvt Ltd', poBright1, [['BC857B', 3], ['CC0603-104K', 3], ['RC0603-10K', 3]]);
+const poBright1 = await po(BRIGHT, -50, -35, [['BC857B', 9000, 0.42], ['CC0603-104K', 12000, 0.18], ['RC0603-10K', 15000, 0.06]], 'confirmed');
+await ship(-36, 'INV-2601', BRIGHT, poBright1, [['BC857B', 3], ['CC0603-104K', 3], ['RC0603-10K', 3]]);
 await api('owner', 'POST', `/api/po/${poBright1}/dispatch`, { dispatch_date: day(-36) });
 // Its dispatch reminder and post-dispatch follow-up were done on time, not left overdue.
 const [{ po_number: b1 }] = await queryAll('SELECT po_number FROM crm_purchase_orders WHERE id = ?', [poBright1]);
@@ -188,16 +196,16 @@ for (const [title, d] of [[`Dispatch PO ${b1} %`, -36], [`Post-dispatch follow u
   await api('owner', 'POST', `/api/tasks/${task.id}/done`);
 }
 // Voltix: part shipped; the rest of the MCUs partly reserved, partly on a procurement order.
-const poVoltix = await po('Voltix Motors Ltd', -30, 5, [['STM32G030', 25000, 38.5], ['SS34', 9000, 1.9]], 'confirmed');
-await ship(-12, 'INV-2604', 'Voltix Motors Ltd', poVoltix, [['STM32G030', 2]]);
+const poVoltix = await po(VOLTIX, -30, 5, [['STM32G030', 25000, 38.5], ['SS34', 9000, 1.9]], 'confirmed');
+await ship(-12, 'INV-2604', VOLTIX, poVoltix, [['STM32G030', 2]]);
 // Orbit: diodes shipped in full, op-amps short (procurement). On the watch list for a late payment.
 const poOrbit = await po('Orbit Power Systems', -18, 12, [['1N4148W', 6000, 0.35], ['LM358DR', 10000, 4.6]], 'confirmed');
 await ship(-14, 'INV-2607', 'Orbit Power Systems', poOrbit, [['1N4148W', 2]]);
 at(-9);
 await api('manager', 'POST', `/api/clients/${contact['Orbit Power Systems']}/notes`, { body: 'INV-2607 is past due; hold the op-amp dispatch until it clears.' });
 // Brightline #2: open and part-dispatched; this is what the customer portal shows.
-const poBright2 = await po('Brightline Appliances Pvt Ltd', -20, 10, [['BC857B', 15000, 0.42], ['CC0603-104K', 20000, 0.18], ['PCBA-BLDC-01', 600, 450]], 'confirmed');
-await ship(-6, 'INV-2611', 'Brightline Appliances Pvt Ltd', poBright2, [['BC857B', 2], ['PCBA-BLDC-01', 1]]);
+const poBright2 = await po(BRIGHT, -20, 10, [['BC857B', 15000, 0.42], ['CC0603-104K', 20000, 0.18], ['PCBA-BLDC-01', 600, 450]], 'confirmed');
+await ship(-6, 'INV-2611', BRIGHT, poBright2, [['BC857B', 2], ['PCBA-BLDC-01', 1]]);
 // Northwind: still a draft (not on the customer portal, not planned for).
 const poNorth = await po('Northwind Lighting', -3, 25, [['EC-470U35', 2000, 6.2], ['MOV-14D471', 2000, 2.4]], 'draft');
 
@@ -275,7 +283,7 @@ at(0, '09:30:00');
 await api('store', 'POST', '/api/inward', { item_code: 'LM358DR', num_reels: 4, num_boxes: 0, store_code: 'primary', notes: 'Supplier delivery, awaiting check' });
 at(0, '10:15:00');
 const ss34 = (await queryAll("SELECT reel_number FROM reels WHERE item_code = 'SS34' AND reserved_po_item_id IS NOT NULL ORDER BY reel_number LIMIT 2")).map((r) => r.reel_number);
-await api('store', 'POST', '/api/outward/grouped', { item_code: 'SS34', reel_numbers: ss34, customer_name: 'Voltix Motors Ltd', invoice_number: 'INV-2615', company_id: companyId['Voltix Motors Ltd'], po_id: poVoltix, store_code: 'primary' });
+await api('store', 'POST', '/api/outward/grouped', { item_code: 'SS34', reel_numbers: ss34, customer_name: VOLTIX, invoice_number: 'INV-2615', company_id: companyId[VOLTIX], po_id: poVoltix, store_code: 'primary' });
 at(0, '10:40:00');
 await api('store', 'POST', '/api/transfer', { kind: 'reel', number: reels['MOV-14D471'].pop(), to_store: 'secondary', notes: 'Partner store is out of varistors' });
 
@@ -289,57 +297,62 @@ clock = null;
 const ts = (d, t = '10:00:00') => `${day(d)} ${t}`;
 const SYNC = ts(0, '08:45:00');
 const J = JSON.stringify;
-const ACME_GSTIN = '24AAACA0000A1Z5'; // made up
+const ACME_GSTIN = NA ? null : '24AAACA0000A1Z5'; // made up
+// US account names (the Tally groups in the second column stay: routes/finance.js reads by group).
+const LEDGER = NA ? { 'Demo Bank Current A/c': 'Operating Account', 'Petty Cash': 'Cash', 'Sales - Components': 'Sales', 'Purchase - Import': 'Import Purchases',
+  'Freight Inward': 'Freight In', 'Office Expenses': 'Office Expenses', 'GST Payable': 'Sales Tax Payable' } : {};
+const L = (n) => LEDGER[n] ?? n;
+const BANK = L('Demo Bank Current A/c');
 const bill = (table) => `INSERT INTO ${table} (party_name, bill_ref, voucher_no, bill_date, original_amt, settled_amt, pending_amt, credit_days, due_date, overdue_days, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`;
-const billArgs = ([party, ref, vno, d, orig, paid, credit]) => [party, ref, vno, day(d), orig, paid, orig - paid, credit, day(d + credit), Math.max(0, -(d + credit)), SYNC];
+const billArgs = ([party, ref, vno, d, orig, paid, credit]) => [party, ref, vno, day(d), tot(orig), tot(paid), tot(orig) - tot(paid), credit, day(d + credit), Math.max(0, -(d + credit)), SYNC];
 await batch([
   // Tally sync: masters as epoch seconds, vouchers-from as YYYYMMDD (the reset shifts both).
   ["INSERT OR REPLACE INTO counters (name, value) VALUES ('tally_masters_last_sync', ?)", [Math.floor(Date.parse(`${TODAY}T03:15:00Z`) / 1000)]],
   ["INSERT OR REPLACE INTO counters (name, value) VALUES ('tally_voucher_sync_from', ?)", [Number(day(-180).replace(/-/g, ''))]],
   ...[
-    ['Brightline Appliances Pvt Ltd', 'Sundry Debtors', '-109174.00'], ['Voltix Motors Ltd', 'Sundry Debtors', '-127150.00'],
+    [BRIGHT, 'Sundry Debtors', '-109174.00'], [VOLTIX, 'Sundry Debtors', '-127150.00'],
     ['Orbit Power Systems', 'Sundry Debtors', '-2478.00'], ['Northwind Lighting', 'Sundry Debtors', '0'],
     [SUP, 'Sundry Creditors Import', '187800.00'], [SUP2, 'Sundry Creditors Import', '186500.00'], ['Swift Cargo Movers', 'Sundry Creditors', '0'],
     ['Demo Bank Current A/c', 'Bank Accounts', '-845300.00'], ['Petty Cash', 'Cash-in-Hand', '-14200.00'],
     ['Sales - Components', 'Sales Accounts', '2645000.00'], ['Purchase - Import', 'Purchase Accounts', '-1890000.00'],
     ['Freight Inward', 'Direct Expenses', '-96000.00'], ['Office Expenses', 'Indirect Expenses', '-58000.00'], ['GST Payable', 'Duties & Taxes', '64200.00'],
-  ].map(([n, p, b]) => ['INSERT INTO crm_tally_ledgers (name, parent, closing_balance, synced_at) VALUES (?, ?, ?, ?)', [n, p, b, SYNC]]),
+  ].map(([n, p, b]) => ['INSERT INTO crm_tally_ledgers (name, parent, closing_balance, synced_at) VALUES (?, ?, ?, ?)', [L(n), p, NA ? tot(Number(b)).toFixed(2) : b, SYNC]]),
   // Unpaid customer bills: INV-2607 is overdue (Orbit, watch list); INV-2601 was paid in full.
   ...[
-    ['Voltix Motors Ltd', 'INV-2604', 'S-104', -12, 227150, 100000, 45], ['Orbit Power Systems', 'INV-2607', 'S-107', -14, 2478, 0, 7],
-    ['Brightline Appliances Pvt Ltd', 'INV-2611', 'S-111', -6, 109174, 0, 30],
+    [VOLTIX, 'INV-2604', 'S-104', -12, 227150, 100000, 45], ['Orbit Power Systems', 'INV-2607', 'S-107', -14, 2478, 0, 7],
+    [BRIGHT, 'INV-2611', 'S-111', -6, 109174, 0, 30],
   ].map((b) => [bill('crm_tally_outstanding'), billArgs(b)]),
   ...[
-    ['S-101', -36, 'Brightline Appliances Pvt Ltd', 8071, 'INV-2601', [['BC857B', 9000, 0.42], ['CC0603-104K', 12000, 0.18], ['RC0603-10K', 15000, 0.06]]],
-    ['S-104', -12, 'Voltix Motors Ltd', 227150, 'INV-2604', [['STM32G030', 5000, 38.5]]],
+    ['S-101', -36, BRIGHT, 8071, 'INV-2601', [['BC857B', 9000, 0.42], ['CC0603-104K', 12000, 0.18], ['RC0603-10K', 15000, 0.06]]],
+    ['S-104', -12, VOLTIX, 227150, 'INV-2604', [['STM32G030', 5000, 38.5]]],
     ['S-107', -14, 'Orbit Power Systems', 2478, 'INV-2607', [['1N4148W', 6000, 0.35]]],
-    ['S-111', -6, 'Brightline Appliances Pvt Ltd', 109174, 'INV-2611', [['BC857B', 6000, 0.42], ['PCBA-BLDC-01', 200, 450]]],
-  ].map(([vno, d, party, amt, ref, inv]) => {
-    const net = Math.round(amt / 1.18);
+    ['S-111', -6, BRIGHT, 109174, 'INV-2611', [['BC857B', 6000, 0.42], ['PCBA-BLDC-01', 200, 450]]],
+  ].map(([vno, d, party, inr, ref, inv]) => {
+    const amt = tot(inr), net = Math.round(amt / (1 + TAX / 100));
     return ['INSERT INTO crm_tally_sales_vouchers (voucher_no, date, party_name, amount, narration, ledger_lines, bill_refs, inventory_lines, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [vno, day(d), party, amt, `Sales ${ref}`, J([{ ledger: party, amount: amt }, { ledger: 'Sales - Components', amount: -net }, { ledger: 'GST Payable', amount: net - amt }]),
-       J([{ bill_ref: ref, amount: amt }]), J(inv.map(([item, q, rate]) => ({ item, actual_qty: q, billed_qty: q, rate, amount: Math.round(q * rate * 100) / 100 }))), SYNC]];
+      [vno, day(d), party, amt, `Sales ${ref}`, J([{ ledger: party, amount: amt }, { ledger: L('Sales - Components'), amount: -net }, { ledger: L('GST Payable'), amount: net - amt }]),
+       J([{ bill_ref: ref, amount: amt }]), J(inv.map(([item, q, inrRate]) => { const rate = usd(inrRate); return { item, actual_qty: q, billed_qty: q, rate, amount: Math.round(q * rate * 100) / 100 }; })), SYNC]];
   }),
   ...[
-    ['R-201', 'Receipt', -30, 'Brightline Appliances Pvt Ltd', 8071, 'Against INV-2601', [{ bill_ref: 'INV-2601', amount: 8071 }]],
-    ['R-202', 'Receipt', -3, 'Voltix Motors Ltd', 100000, 'Part payment against INV-2604', [{ bill_ref: 'INV-2604', amount: 100000 }]],
-    ['P-301', 'Payment', -40, SUP, 225000, 'TT remittance against EB/26/0412', []],
-    ['P-302', 'Payment', -19, 'Swift Cargo Movers', 18400, 'Freight and clearing, air shipment', []],
+    ['R-201', 'Receipt', -30, BRIGHT, 8071, 'Against INV-2601', [{ bill_ref: 'INV-2601', amount: tot(8071) }]],
+    ['R-202', 'Receipt', -3, VOLTIX, 100000, 'Part payment against INV-2604', [{ bill_ref: 'INV-2604', amount: tot(100000) }]],
+    ['P-301', 'Payment', -40, SUP, 225000, NA ? `WIRE OUT BNF:${SUP} REF EB/26/0412 IMAD:20261101MMQFMP2K000412` : 'TT remittance against EB/26/0412', []],
+    ['P-302', 'Payment', -19, 'Swift Cargo Movers', 18400, NA ? 'ACH DEBIT ORIG CO NAME:Swift Cargo Movers CO ID:1843 SEC:CCD TRACE #021000021093' : 'Freight and clearing, air shipment', []],
     ['P-303', 'Payment', -7, 'Petty Cash', 5000, 'Cash for office expenses', []],
   ].map(([vno, type, d, party, amt, nar, refs]) => ['INSERT INTO crm_tally_bank_txns (voucher_no, voucher_type, date, party_name, amount, narration, bill_refs, synced_at, bank_ledger) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [vno, type, day(d), party, amt, nar, J(refs), SYNC, 'Demo Bank Current A/c']]),
+    [vno, type, day(d), L(party), tot(amt), nar, J(refs), SYNC, BANK]]),
   ...[
     ['PV-01', -62, SUP, 412800, 'EB/26/0412', 'Transistors, diodes and MLCC, import'],
     ['PV-02', -33, SUP2, 186500, 'LSD/7781', 'MCUs and op-amps, import'],
     ['PV-03', -21, 'Swift Cargo Movers', 18400, 'SCM/1093', 'Freight and clearing'],
   ].map(([vno, d, party, amt, ref, nar]) => ['INSERT INTO crm_tally_purchase_vouchers (voucher_no, date, party_name, amount, narration, ledger_lines, bill_refs, inventory_lines, synced_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [vno, day(d), party, amt, nar, J([{ ledger: 'Purchase - Import', amount: amt }, { ledger: party, amount: -amt }]), J([{ bill_ref: ref, amount: amt }]), '[]', SYNC]]),
+    [vno, day(d), party, tot(amt), nar, J([{ ledger: L('Purchase - Import'), amount: tot(amt) }, { ledger: party, amount: -tot(amt) }]), J([{ bill_ref: ref, amount: tot(amt) }]), '[]', SYNC]]),
   ...[
     [SUP, 'EB/26/0412', 'PV-01', -62, 412800, 225000, 60], [SUP2, 'LSD/7781', 'PV-02', -33, 186500, 0, 45], ['Swift Cargo Movers', 'SCM/1093', 'PV-03', -21, 18400, 18400, 15],
   ].map((b) => [bill('crm_tally_purchase_outstanding'), billArgs(b)]),
   ...ITEMS.map(([code, desc, , category, , hsn, rate]) => ['INSERT INTO crm_tally_stock_items (name, parent, base_units, closing_qty, closing_rate, synced_at, hsn_code, gst_applicable) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-    [`${code} ${desc}`, category, 'Pcs', '0', String(rate), SYNC, hsn, 'Applicable']]),
-  ['INSERT INTO crm_bank_accounts (account_no, bank_ledger, label) VALUES (?, ?, ?)', ['XXXX4410', 'Demo Bank Current A/c', 'Current account']],
+    [`${code} ${desc}`, category, 'Pcs', '0', String(usd(rate)), SYNC, hsn, 'Applicable']]),
+  ['INSERT INTO crm_bank_accounts (account_no, bank_ledger, label) VALUES (?, ?, ?)', ['XXXX4410', BANK, NA ? 'Checking account' : 'Current account']],
 ]);
 // Tally's closing stock = the reels actually in stock.
 await execute(`UPDATE crm_tally_stock_items SET closing_qty = COALESCE((SELECT CAST(SUM(quantity) AS TEXT) FROM reels
@@ -349,8 +362,10 @@ await execute(`UPDATE crm_tally_stock_items SET closing_qty = COALESCE((SELECT C
 const INV_COLS = 'created_at, uploaded_by, original_filename, doc_type, invoice_no, invoice_date, party_name, party_gstin, buyer_gstin, place_of_supply, taxable_value, cgst, sgst, igst, total_tax, net_amount, line_items, status, review_notes, approved_at, pushed_at, purchase_ledger';
 const invRow = (d, by, file, type, no, party, gstin, pos, taxable, igst, lines, status, notes, ledger) =>
   [`INSERT INTO crm_invoices (${INV_COLS}) VALUES (${INV_COLS.split(',').map(() => '?').join(',')})`,
-    [ts(d), by, file, type, no, day(d), party, gstin, ACME_GSTIN, pos, taxable, 0, 0, igst, igst, taxable + igst, J(lines), status, notes,
-     ['approved', 'pushed'].includes(status) ? ts(d + 1) : null, status === 'pushed' ? ts(d + 1, '18:00:00') : null, ledger]];
+    [ts(d), by, file, type, no, day(d), party, NA ? null : gstin, ACME_GSTIN, NA && pos !== 'Import' ? 'Texas' : pos, tot(taxable), 0, 0, NA ? 0 : igst,
+     NA ? (type === 'bill_of_entry' ? tot(igst) : 0) : igst, tot(taxable) + (NA && type !== 'bill_of_entry' ? 0 : tot(igst)),
+     J(lines.map((l) => ({ ...l, rate: l.unit === 'Pcs' ? usd(l.rate) : tot(l.rate), amount: tot(l.amount) }))), status, notes,
+     ['approved', 'pushed'].includes(status) ? ts(d + 1) : null, status === 'pushed' ? ts(d + 1, '18:00:00') : null, ledger && L(ledger)]];
 await batch([
   invRow(-62, 'manager', 'eastbridge-invoice-0412.pdf', 'purchase_invoice', 'EB/26/0412', SUP, null, 'Import', 349830, 62970,
     [{ description: 'BC857B PNP transistor SOT-23', qty: 36000, unit: 'Pcs', rate: 0.21, amount: 7560 }, { description: 'CC0603-104K MLCC 100nF', qty: 60000, unit: 'Pcs', rate: 0.07, amount: 4200 }], 'pushed', null, 'Purchase - Import'),
@@ -362,7 +377,7 @@ await batch([
     [{ description: 'MCUs, air shipment', qty: 1, unit: 'Lot', rate: 52000, amount: 52000 }], 'pending', null, null),
 ]);
 await execute(`INSERT INTO crm_invoices (created_at, uploaded_by, original_filename, doc_type, party_name, status, review_notes, approved_at, bank_ledger, account_no, statement_from, statement_to, opening_balance, closing_balance, total_debit, total_credit)
-  VALUES (?, 'manager', 'bank-statement.pdf', 'bank_statement', 'Demo Bank', 'approved', 'All entries matched.', ?, 'Demo Bank Current A/c', 'XXXX4410', ?, ?, 640000, 845300, 248400, 453700)`, [ts(-1), ts(-1, '15:00:00'), day(-31), day(-1)]);
+  VALUES (?, 'manager', 'bank-statement.pdf', 'bank_statement', 'Demo Bank', 'approved', 'All entries matched.', ?, ?, 'XXXX4410', ?, ?, ?, ?, ?, ?)`, [ts(-1), ts(-1, '15:00:00'), BANK, day(-31), day(-1), tot(640000), tot(845300), tot(248400), tot(453700)]);
 await execute("INSERT INTO crm_tasks (title, due_date, assigned_to, created_by, created_at, invoice_id) SELECT 'Review freight invoice SCM/1093', ?, 'manager', 'store', ?, id FROM crm_invoices WHERE invoice_no = 'SCM/1093'", [day(0), ts(-21)]);
 
 // Partner-store papers and customer PO documents (listed only: the demo has no file bucket).
@@ -385,7 +400,7 @@ const MUST = ['users', 'items', 'reels', 'boxes', 'outwards', 'stock_transfers',
 const counts = {};
 for (const t of MUST) counts[t] = Number((await queryAll(`SELECT COUNT(*) n FROM ${t}`))[0].n);
 for (const s of ['pending', 'approved', 'rejected']) counts[`requests ${s}`] = Number((await queryAll('SELECT COUNT(*) n FROM requests WHERE status = ?', [s]))[0].n);
-console.log('Acme Components demo data seeded:', counts);
+console.log(`Acme Components demo data seeded (${NA ? 'NA' : 'IN'}):`, counts);
 const empty = Object.entries(counts).filter(([, n]) => !n).map(([t]) => t);
 if (empty.length) throw new Error(`Empty after seeding: ${empty.join(', ')}`);
 process.exit(0);

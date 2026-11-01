@@ -16,6 +16,8 @@ const r2 = require('../utils/r2');
 const background = require('../utils/background');
 const assistant = require('../utils/assistant');
 const { createPOFromExtraction } = require('./po');
+// MARKET=NA (the American demo) has no Tally: no XML, no ledger check, stock items from this app's catalog.
+const { NA } = require('../utils/market');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -1100,6 +1102,7 @@ router.get('/', ah(async (req, res) => {
 // Synced stock items (refreshed every 15 min by the agent). Optionally filter by parent group.
 router.get('/tally-stock-items', ah(async (req, res) => {
   const group = req.query.group;
+  if (NA) return res.json(await queryAll("SELECT item_code || ' ' || COALESCE(description, '') AS name, category AS parent, 'Pcs' AS base_units FROM items ORDER BY category, item_code"));
   const sql = group
     ? 'SELECT name, parent, base_units FROM crm_tally_stock_items WHERE parent = ? ORDER BY name'
     : 'SELECT name, parent, base_units FROM crm_tally_stock_items ORDER BY parent, name';
@@ -1123,6 +1126,7 @@ router.get('/:id/checks', ah(async (req, res) => {
       [inv.id, inv.party_name, inv.invoice_no]
     );
   }
+  if (NA) return res.json(out);
   const ledgerCount = await queryOne('SELECT COUNT(*) AS n FROM crm_tally_ledgers');
   out.ledgerSynced = (ledgerCount?.n || 0) > 0;
   if (out.ledgerSynced) {
@@ -1160,7 +1164,7 @@ router.get('/:id', ah(async (req, res) => {
 router.put('/:id', ah(async (req, res) => {
   const allowed = ['doc_type','invoice_no','invoice_date','party_name','party_gstin','buyer_gstin',
     'place_of_supply','taxable_value','cgst','sgst','igst','net_amount',
-    'mawb_no','flight_no','commodity','supplier_ref','line_items','review_notes',
+    'mawb_no','flight_no','commodity','supplier_ref','line_items','review_notes', ...(NA ? ['total_tax'] : []),
     'bank_ledger','purchase_ledger',
     'delivery_date','account_no','statement_from','statement_to',
     'opening_balance','closing_balance','total_debit','total_credit'];
@@ -1179,7 +1183,7 @@ router.put('/:id', ah(async (req, res) => {
   // if (typeof fields.line_items !== 'string') fields.line_items = JSON.stringify(fields.line_items || []);
   // const sets   = Object.keys(fields).map(k => `${k} = ?`).join(', ');
 
-  fields.tally_xml = buildTallyXML(merged);
+  fields.tally_xml = NA ? null : buildTallyXML(merged);
   
   // Deduplicate transaction rows for Bank Statements dynamically before saving
   if (typeof fields.line_items !== 'string' && fields.line_items) {
@@ -1241,7 +1245,7 @@ async function review(req, res, status, message) {
   res.json({ success: true, message });
 }
 
-router.post('/:id/approve', ah((req, res) => review(req, res, 'approved', 'Invoice approved. Local agent will push to Tally.')));
+router.post('/:id/approve', ah((req, res) => review(req, res, 'approved', NA ? 'Invoice approved. It will be posted to the books.' : 'Invoice approved. Local agent will push to Tally.')));
 router.post('/:id/reject', ah((req, res) => review(req, res, 'rejected', 'Invoice rejected.')));
 
 // DELETE /api/invoices/attachment — remove a bank line's attachment file. Only files in this app's bucket
@@ -1272,7 +1276,7 @@ router.delete('/:id', reviewersOnly, ah(async (req, res) => {
     return res.json({
       success: true,
       soft: true,
-      message: 'Record was pushed to Tally — archived, not erased. Reverse the voucher in Tally if needed.'
+      message: NA ? 'Record was posted to the books — archived, not erased. Reverse the entry in the books if needed.' : 'Record was pushed to Tally — archived, not erased. Reverse the voucher in Tally if needed.'
     });
   }
 
@@ -1290,7 +1294,7 @@ router.delete('/:id', reviewersOnly, ah(async (req, res) => {
 }));
 
 router.get('/:id/xml', ah(async (req, res) => {
-  const inv = await queryOne('SELECT invoice_no, tally_xml FROM crm_invoices WHERE id = ?', [req.params.id]);
+  const inv = NA ? null : await queryOne('SELECT invoice_no, tally_xml FROM crm_invoices WHERE id = ?', [req.params.id]);
   if (!inv?.tally_xml) return res.status(404).json({ error: 'No XML found' });
   res.setHeader('Content-Type', 'application/xml');
   res.setHeader('Content-Disposition', `attachment; filename="tally_${inv.invoice_no || req.params.id}.xml"`);

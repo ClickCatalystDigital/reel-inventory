@@ -6,6 +6,7 @@ import { DataTable } from "@/components/data-table/DataTable";
 import { api } from "@/lib/api";
 import { INR, finDate, periodQuery, type Period } from "@/lib/finance";
 import { FinCard, PeriodBar, Row } from "./bits";
+import { books } from "@/lib/market";
 
 interface Supplier { name: string; parent: string; balance: number; is_dr: boolean }
 interface Purchase { voucher_no: string; date: string; party_name: string | null; amount: number; narration: string | null }
@@ -62,7 +63,7 @@ export function Payables() {
             { label: "Balance Owed", render: (r) => <strong className={r.balance > 100000 ? "text-warning" : ""}>{INR(r.balance)}</strong> },
           ]}
         />
-        <div className="mt-3 border-t pt-3 text-xs text-muted-foreground">Balances from Tally ledger closing totals. Bill-level aging will appear once payables settlement tracking is confirmed.</div>
+        <div className="mt-3 border-t pt-3 text-xs text-muted-foreground">{books("Balances from Tally ledger closing totals.")} Bill-level aging will appear once payables settlement tracking is confirmed.</div>
       </FinCard>
 
       <FinCard title="Purchase Register" tip="All purchase vouchers from Tally for the selected period. Answers: What did we buy? From whom? At what cost? Use to reconcile with payables balances — new purchases this period vs existing debt.">

@@ -20,6 +20,7 @@ import { useMediaQuery } from "@/hooks/use-media-query";
 import { clientStatusClass, inr, type Assignee, type Invoice, type TaskDetail } from "@/lib/crm";
 import { cn } from "@/lib/utils";
 import { AssigneePicker, UserAvatar } from "./AssigneePicker";
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 interface Props {
   taskId: number | null;
@@ -159,7 +160,7 @@ export function TaskSheet({ taskId, onClose, onChanged, isApprover, assignees }:
 
   const review = (action: "approve" | "reject") => run(async () => {
     await api(`/api/invoices/${invoice!.id}/${action}`, { method: "POST", body: {} });
-    showToast(action === "approve" ? "Approved — local agent will push to Tally" : "Invoice rejected");
+    showToast(action === "approve" ? (NA ? "Approved — it will be posted to the books" : "Approved — local agent will push to Tally") : "Invoice rejected");
     onChanged();
     onClose();
   });
@@ -296,13 +297,13 @@ export function TaskSheet({ taskId, onClose, onChanged, isApprover, assignees }:
                   isApprover ? (
                     <>
                       <Button variant="outline" onClick={() => review("reject")} disabled={busy} className="border-destructive/40 text-destructive hover:text-destructive">Reject</Button>
-                      <Button onClick={() => review("approve")} disabled={busy}><CheckCircle2 /> Approve → Tally</Button>
+                      <Button onClick={() => review("approve")} disabled={busy}><CheckCircle2 /> Approve → {NA ? "Books" : "Tally"}</Button>
                     </>
                   ) : (
                     <span className="text-xs text-muted-foreground">Awaiting approval by an admin or manager</span>
                   )
                 ) : invoice ? (
-                  <span className="text-sm text-muted-foreground">{invoice.status === "pushed" ? (<span className="inline-flex items-center gap-1"><Check className="size-4" /> Pushed to Tally</span>) : `Status: ${invoice.status}`}</span>
+                  <span className="text-sm text-muted-foreground">{invoice.status === "pushed" ? (<span className="inline-flex items-center gap-1"><Check className="size-4" /> {NA ? "Posted to the books" : "Pushed to Tally"}</span>) : `Status: ${invoice.status}`}</span>
                 ) : null
               ) : (
                 <>

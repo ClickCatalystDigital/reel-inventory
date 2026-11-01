@@ -11,6 +11,8 @@ const nextConfig: NextConfig = {
   // monorepo tooling) but both carry a lockfile, which Next's root-inference
   // otherwise warns about.
   turbopack: { root: __dirname },
+  // Inlined even when unset (IN), so each build drops the other market's text (lib/market.ts).
+  env: { NEXT_PUBLIC_MARKET: process.env.NEXT_PUBLIC_MARKET || "IN" },
   ...(isProd && { output: "export" as const }),
   ...(!isProd && {
     async rewrites() {

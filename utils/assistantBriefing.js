@@ -5,7 +5,7 @@ const { queryOne, readBatch, istDateString, nowIST } = require('../db/schema');
 const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
 const ST = require('./assistantStats');
-const { locale } = require('./locale');
+const { locale } = require('./market');
 
 const n = (x) => Number(x || 0).toLocaleString(locale());
 const plural = (k, w) => `${n(k)} ${w}${Number(k) === 1 ? '' : 's'}`;

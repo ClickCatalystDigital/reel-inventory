@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { api } from "@/lib/api";
 import { INR, finDate, periodQuery, type Period } from "@/lib/finance";
 import { Empty, FinCard, Hint, PeriodBar, Row, Stat } from "./bits";
+import { books } from "@/lib/market";
 
 interface Bal { name: string; parent: string; balance: number; is_overdraft?: boolean }
 interface CashBank { accounts: Bal[]; advances: Bal[]; tax: Bal[] }
@@ -65,13 +66,13 @@ export function Position() {
             <div>
               <div className="mb-1.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">Available Cash &amp; Bank</div>
               <div className="text-2xl font-bold">{cb ? INR(cash - od) : "—"}</div>
-              <div className="mt-0.5 text-xs text-muted-foreground">{cb ? `${accounts.length} account${accounts.length !== 1 ? "s" : ""} · from Tally` : "loading accounts…"}</div>
+              <div className="mt-0.5 text-xs text-muted-foreground">{cb ? books(`${accounts.length} account${accounts.length !== 1 ? "s" : ""} · from Tally`) : "loading accounts…"}</div>
             </div>
             <Hint tip="Live bank and cash balance from Tally. Check before approving a supplier payment or extending credit to a customer. Refreshes with each daily master sync." />
           </div>
           {!cb ? <Empty>Loading…</Empty> : accounts.length ? accounts.map((a) => (
             <Row key={a.name} name={a.name} sub={a.parent} amount={`${a.is_overdraft ? "▼ OD " : ""}${INR(a.balance)}`} amountClass={a.is_overdraft ? "text-destructive" : ""} />
-          )) : <Empty>No bank or cash accounts found in Tally ledgers.<br /><span className="text-xs">Expected groups: Bank Accounts, Cash-in-Hand</span></Empty>}
+          )) : <Empty>{books("No bank or cash accounts found in Tally ledgers.")}<br /><span className="text-xs">{books("Expected groups: Bank Accounts, Cash-in-Hand")}</span></Empty>}
         </FinCard>
         <FinCard title="Other Positions" tip="Customer advances received (cash you hold but haven't earned yet) and tax liabilities (GST/IGST payable to government). Advances reduce your net receivables; tax liability reduces available cash.">
           {!cb ? <Empty>Loading…</Empty> : others.length ? (

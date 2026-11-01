@@ -8,7 +8,7 @@ import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { DataTable } from "@/components/data-table/DataTable";
 import { PortalOrders } from "@/components/orders/PortalOrders";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 interface Store {
   code: string;

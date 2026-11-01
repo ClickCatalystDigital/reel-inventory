@@ -1,7 +1,7 @@
-import { LOCALE } from "@/lib/locale";
+import { CUR, LOCALE } from "@/lib/market";
 // Shared helpers for the Finance page (ported from ls_crm's finance.html).
 
-export const INR = (n: number | null | undefined) => "₹" + Number(n || 0).toLocaleString(LOCALE(), { maximumFractionDigits: 0 });
+export const INR = (n: number | null | undefined) => CUR + Number(n || 0).toLocaleString(LOCALE(), { maximumFractionDigits: 0 });
 
 // Tally dates are plain 'YYYY-MM-DD' calendar days.
 export function finDate(d: string | null | undefined): string {

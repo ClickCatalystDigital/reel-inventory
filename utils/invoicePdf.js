@@ -40,6 +40,7 @@ const COLS = (() => {
 })();
 
 module.exports = function buildInvoicePdf(inv, res) {
+  if (require('./market').NA) return buildUS(inv, res);
   const PDFDocument = require('pdfkit'); // lazy: pdfkit is large, only load it when a PDF is asked for
   const doc = new PDFDocument({ size: 'A4', layout: 'landscape', margin: M });
   const chunks = [];
@@ -178,3 +179,51 @@ module.exports = function buildInvoicePdf(inv, res) {
   doc.end();
 };
 module.exports.rupeesInWords = rupeesInWords;
+
+// MARKET=NA: a plain US invoice. Letter portrait, bill-to, one sales tax line (routes/sales-invoices.js computeUS).
+function buildUS(inv, res) {
+  const PDFDocument = require('pdfkit');
+  const { money } = require('./market');
+  const doc = new PDFDocument({ size: 'LETTER', margin: 48 });
+  const chunks = [];
+  doc.on('data', (c) => chunks.push(c));
+  doc.on('end', () => res.end(Buffer.concat(chunks)));
+  const L = 48, R = 612 - 48, W = R - L;
+  const t = (s, x, y, w, o = {}) => doc.font(o.bold ? 'Helvetica-Bold' : 'Helvetica').fontSize(o.size || 9).fillColor(o.color || '#000').text(String(s ?? ''), x, y, { width: w, align: o.align || 'left', lineBreak: false, ellipsis: true });
+  const usDate = (d) => new Date(`${String(d).slice(0, 10)}T12:00:00Z`).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
+  const unit = (n) => `$${Number(n || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 4 })}`;
+
+  t(seller.name, L, 48, 300, { bold: true, size: 14 });
+  seller.lines.forEach((l, i) => t(l, L, 68 + i * 12, 300));
+  t(seller.email, L, 68 + seller.lines.length * 12, 300);
+  t('INVOICE', L, 48, W, { bold: true, size: 20, align: 'right' });
+  [['Invoice #', inv.invoice_no], ['Date', usDate(inv.invoice_date)], ['Terms', seller.terms]].forEach(([k, v], i) => {
+    t(k, R - 200, 76 + i * 13, 90, { color: '#555' }); t(v, R - 110, 76 + i * 13, 110, { bold: true, align: 'right' });
+  });
+  if (inv.missing_rates) t(`DRAFT: ${inv.missing_rates} item(s) have no price yet`, L, 132, W, { bold: true, align: 'right', color: '#b45309' });
+  t('BILL TO', L, 150, 200, { bold: true, color: '#555', size: 8 });
+  t(buyer.name, L, 162, 300, { bold: true });
+  buyer.lines.forEach((l, i) => t(l, L, 175 + i * 12, 300));
+
+  const cols = [['Item', L, 110, 'left'], ['Description', L + 110, 200, 'left'], ['Qty', L + 310, 70, 'right'], ['Unit price', L + 380, 66, 'right'], ['Amount', L + 446, W - 446, 'right']];
+  let y = 220;
+  doc.rect(L, y, W, 18).fill('#f1f5f9');
+  cols.forEach(([h, x, w, a]) => t(h, x + 4, y + 5, w - 8, { bold: true, align: a }));
+  y += 24;
+  for (const l of inv.lines) {
+    if (y > 792 - 160) { doc.addPage(); y = 48; }
+    const v = [l.item_code, l.description, `${Number(l.qty).toLocaleString('en-US')} pcs`, l.rate ? unit(l.rate) : '', money(l.amount)];
+    cols.forEach(([, x, w, a], i) => t(v[i], x + 4, y, w - 8, { align: a }));
+    y += 15;
+    doc.moveTo(L, y - 3).lineTo(R, y - 3).strokeColor('#e2e8f0').lineWidth(0.5).stroke();
+  }
+  y += 8;
+  const rate = inv.lines[0]?.gst_rate ?? 8.25;
+  [['Subtotal', money(inv.taxable)], [`Sales tax (${rate}%)`, money(inv.tax)], ['Total due', money(inv.total)]].forEach(([k, v], i) => {
+    const last = i === 2;
+    t(k, R - 230, y, 130, { bold: last, align: 'right', size: last ? 11 : 9 }); t(v, R - 100, y, 100, { bold: last, align: 'right', size: last ? 11 : 9 });
+    y += last ? 18 : 14;
+  });
+  t(`Please make checks payable to ${seller.name}, or pay by ACH. Thank you for your business.`, L, y + 24, W, { color: '#555' });
+  doc.end();
+}

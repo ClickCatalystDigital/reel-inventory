@@ -8,7 +8,7 @@ import { Card } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ChartCanvas } from "@/components/charts/ChartCanvas";
-import { LOCALE } from "@/lib/locale";
+import { LOCALE } from "@/lib/market";
 
 interface StockSummaryRow {
   item_code: string;
