@@ -8,7 +8,9 @@
 import { track } from '@/components/demo/DemoAnalytics';
 import { cn } from '@/lib/utils';
 
-const HREF = `https://wa.me/919426519798?text=${encodeURIComponent("Hi Pujan, I'm trying the electronics demo and have a question (ref: demo-electronics)")}`;
+
+// US builds: Pujan's US WhatsApp number, +1 732 306 5127.
+const HREF = `https://wa.me/${process.env.NEXT_PUBLIC_MARKET === "NA" ? '17323065127' : '919426519798'}?text=${encodeURIComponent("Hi Pujan, I'm trying the electronics demo and have a question (ref: demo-electronics)")}`;
 
 // North American demo: no WhatsApp; the same spot offers Pujan's booking page (as savistar-ops does).
 const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
