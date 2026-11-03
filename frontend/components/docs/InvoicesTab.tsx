@@ -13,6 +13,7 @@ import { formatDate } from "@/lib/format";
 import { INV_TYPES, lines, money, type Invoice } from "@/lib/docs";
 import { Chips, Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
+import { QuickBooksStatus, useQboState } from "./QuickBooksStatus";
 import { CUR, LOCALE } from "@/lib/market";
 const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
@@ -30,6 +31,7 @@ export function InvoicesTab() {
   const [q, setQ] = useState("");
   const [panel, setPanel] = useState(false);
   const file = useRef<HTMLInputElement>(null);
+  const qbo = useQboState(docs.version);
 
   useEffect(() => {
     api<Invoice[]>("/api/invoices").then((r) => setAll(r.filter((d) => INV_TYPES.includes(d.doc_type || "")))).catch(() => {});
@@ -125,7 +127,12 @@ export function InvoicesTab() {
             },
             { label: "Document Insights", render: (d) => <Insights d={d} />, className: "hidden md:table-cell" },
             { label: "Shipment Tracking", render: (d) => <Shipment d={d} all={all} />, className: "hidden lg:table-cell" },
-            { label: "Stage", render: (d) => <StatusPill status={d.status} /> },
+            { label: "Stage", render: (d) => (
+              <div className="flex flex-col items-start gap-1">
+                <StatusPill status={d.status} />
+                {d.doc_type === "purchase_invoice" && ["approved", "pushed"].includes(d.status) && <QuickBooksStatus kind="bill" no={String(d.id)} state={qbo.state} onChange={qbo.reload} />}
+              </div>
+            ) },
             { label: "Added", render: (d) => <span className="text-xs text-muted-foreground">{formatDate(d.created_at)}</span>, className: "hidden sm:table-cell" },
           ]}
         />

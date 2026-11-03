@@ -36,7 +36,7 @@ export const FEATURES = [
   ]],
   [Landmark, "Finance at a glance", "Receivables, sales and purchase registers, cash position and payables, from the accounting data.", "finance", "Finance from the accounting system", [
     "Receivables with ageing and a collections forecast, the sales register with a reminder date per invoice, purchase register and supplier payables, bank and cash balances, and the year's revenue against costs, all from the accounting system's data.",
-    ...(NA ? ["Sales invoices and payments go to QuickBooks Online, and each invoice shows whether it is in QuickBooks. QuickBooks works out the sales tax."] : []),
+    ...(NA ? ["Sales invoices and payments, and approved supplier bills and the payments against them, go to QuickBooks Online, and each invoice and bill shows whether it is in QuickBooks. QuickBooks works out the sales tax."] : []),
   ]],
   [Boxes, "Customer stock portal", "Each customer logs in to see their stock and each order line's progress.", "customer-portal", "A stock and order portal for customers", [
     "Customers who keep stock with you get their own login, which shows a read-only summary of the items kept for them, and the progress of every line on their purchase orders, from procurement to dispatch, with their documents to download.",

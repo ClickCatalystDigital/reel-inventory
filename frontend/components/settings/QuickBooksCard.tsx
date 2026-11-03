@@ -183,13 +183,15 @@ export function QuickBooksCard() {
             <div className="flex flex-col gap-2">
               <h3 className="text-sm font-medium">Sending</h3>
               <p className="text-xs text-muted-foreground">
-                A sales invoice goes to QuickBooks once every line has a rate. Payments received are sent here with Send (the books sync records them, not this app);
-                a payment names its invoice when it can, otherwise it goes in unapplied. QuickBooks works out the sales tax.
+                A sales invoice goes to QuickBooks once every line has a rate, and an approved purchase invoice goes as a supplier bill (sales tax paid as its own line).
+                Payments received and payments made are sent here with Send (the books sync records them, not this app); a payment received names its invoice when it can, otherwise it goes in unapplied,
+                while a payment made must name its bill, so those that do not are skipped. QuickBooks works out the sales tax on sales.
               </p>
               <p className="text-xs">Sent today: <strong>{qbo.state?.sentToday ?? 0}</strong></p>
+              {!!qbo.state?.unlinked && <p className="text-xs text-muted-foreground">{qbo.state.unlinked} payment{qbo.state.unlinked === 1 ? "" : "s"} made not linked to a supplier bill, so not sent.</p>}
               {qbo.state?.failures.length === 0 && <p className="text-xs text-muted-foreground">No failures.</p>}
-              {[...(qbo.state?.failures || []).map((f) => ({ ...f, label: f.kind === "invoice" ? `Invoice ${f.no}` : `Payment ${f.no}`, note: f.error, action: "Retry" })),
-                ...(qbo.state?.unsent || []).map((u) => ({ kind: "receipt" as const, id: u.id, label: `Payment ${u.no}`, note: `${u.party} · ${u.amount} not sent yet`, action: "Send" }))].map((f) => (
+              {[...(qbo.state?.failures || []).map((f) => ({ ...f, label: ({ invoice: "Invoice", receipt: "Payment received", bill: "Supplier bill", vendor_payment: "Payment made" } as const)[f.kind] + ` ${f.no}`, note: f.error, action: "Retry" })),
+                ...(qbo.state?.unsent || []).map((u) => ({ kind: u.kind, id: u.id, label: `${u.kind === "receipt" ? "Payment received" : "Payment made"} ${u.no}`, note: `${u.party} · ${u.amount} not sent yet`, action: "Send" }))].map((f) => (
                 <div key={`${f.kind}-${f.id}-${f.action}`} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
                   <div className="min-w-0"><div className="font-medium">{f.label}</div><div className={`truncate ${f.action === "Retry" ? "text-destructive" : "text-muted-foreground"}`} title={f.note}>{f.note}</div></div>
                   <Button size="sm" variant="outline" disabled={busy} onClick={async () => { setBusy(true); await sendToQuickBooks(f.kind, f.id); setBusy(false); qbo.reload(); }}>{f.action}</Button>

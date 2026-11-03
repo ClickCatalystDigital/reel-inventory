@@ -18,6 +18,7 @@ const assistant = require('../utils/assistant');
 const { createPOFromExtraction } = require('./po');
 // MARKET=NA (the American demo) has no Tally: no XML, no ledger check, stock items from this app's catalog.
 const { NA } = require('../utils/market');
+const { autoSend } = require('../utils/quickbooks-sync');
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 
@@ -1242,6 +1243,7 @@ async function review(req, res, status, message) {
   ]];
   if (inv.task_id) statements.push(["UPDATE crm_tasks SET status = 'done', completed_at = ? WHERE id = ?", [now, inv.task_id]]);
   await batch(statements);
+  if (status === 'approved') autoSend(req.get('host'), 'bill', req.params.id); // QuickBooks (NA demo): an approved purchase invoice is a supplier bill; ignored for other types
   res.json({ success: true, message });
 }
 

@@ -1,6 +1,6 @@
 // node scripts/check-quickbooks.js
 const assert = require('node:assert/strict');
-const { authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, suggestAccountMap, LOCAL_ACCOUNTS, QBO_SCOPE, fingerprint, syncKey, requestId, customerQuery, buildCustomer, buildInvoice, buildPayment } = require('../utils/quickbooks-core');
+const { authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, suggestAccountMap, LOCAL_ACCOUNTS, QBO_SCOPE, fingerprint, syncKey, requestId, customerQuery, buildCustomer, buildInvoice, buildPayment, vendorQuery, buildVendor, buildBill, buildBillPayment } = require('../utils/quickbooks-core');
 
 const u = new URL(authorizeUrl({ clientId: 'abc', redirectUri: 'https://x.test/api/quickbooks/callback', state: 's1' }));
 assert.equal(u.origin + u.pathname, 'https://appcenter.intuit.com/connect/oauth2');
@@ -75,3 +75,16 @@ assert.equal(pay.TotalAmt, 500);
 assert.equal(pay.DepositToAccountRef.value, '35');
 assert.deepEqual(buildPayment({ voucher_no: 'R-1', date: 'd', amount: 5 }, { customerId: '1' }).Line, []);
 console.log('quickbooks phase 2 builders ok');
+
+// Purchase side
+assert.equal(vendorQuery("Smith's Steel"), "select * from Vendor where DisplayName = 'Smith\\'s Steel'");
+assert.deepEqual(buildVendor({ name: 'Acme Supply', phone: '555' }), { DisplayName: 'Acme Supply', CompanyName: 'Acme Supply', PrimaryPhone: { FreeFormNumber: '555' } });
+const bill = buildBill({ bill_no: 'S-7', bill_date: '2026-11-01', tax_amount: 72.5 }, [{ description: 'BC857B reels', qty: 2, rate: 500, amount: 1000 }], { vendorId: '61', accountId: '81' });
+assert.deepEqual(bill.Line.map((l) => [l.Amount, l.Description, l.AccountBasedExpenseLineDetail.AccountRef.value]), [[1000, 'BC857B reels', '81'], [72.5, 'Sales tax paid', '81']]);
+assert.equal(bill.VendorRef.value, '61');
+assert.equal(bill.DueDate, undefined);
+const bp = buildBillPayment({ voucher_no: 'P-3', date: '2026-11-20', amount: -1072.5 }, { vendorId: '61', billId: '160', bankAccountId: '35' });
+assert.deepEqual(bp.Line[0].LinkedTxn, [{ TxnId: '160', TxnType: 'Bill' }]);
+assert.equal(bp.TotalAmt, 1072.5);
+assert.equal(bp.CheckPayment.BankAccountRef.value, '35');
+console.log('quickbooks purchase builders ok');

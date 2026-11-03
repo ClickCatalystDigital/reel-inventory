@@ -187,7 +187,38 @@ function buildPayment(r, { customerId, invoiceId, depositAccountId }) {
   return body;
 }
 
+// ---------- Purchase side: supplier bills (approved purchase invoices) and the payments made against them ----------
+const vendorQuery = (name) => `select * from Vendor where DisplayName = '${qq(name)}'`;
+function buildVendor(v) {
+  const body = { DisplayName: v.name.slice(0, 100), CompanyName: v.name.slice(0, 100) };
+  if (v.email) body.PrimaryEmailAddr = { Address: v.email };
+  if (v.phone) body.PrimaryPhone = { FreeFormNumber: v.phone };
+  return body;
+}
+// Bill lines post to one account (inventory for stock, purchases otherwise). Sales tax paid is part of the cost in the
+// US, so it goes as its own line on the same account; QuickBooks adds no tax to bills.
+// bill = { bill_no, bill_date, due_date?, tax_amount }, items = [{ description, qty, rate, amount }]
+function buildBill(bill, items, { vendorId, accountId }) {
+  const line = (amount, description) => ({ DetailType: 'AccountBasedExpenseLineDetail', Amount: r2(amount), Description: String(description || '').slice(0, 4000), AccountBasedExpenseLineDetail: { AccountRef: { value: accountId } } });
+  const lines = items.map((it) => line(it.amount ?? (it.qty || 0) * (it.rate || 0), it.description));
+  if (Number(bill.tax_amount) > 0) lines.push(line(bill.tax_amount, 'Sales tax paid'));
+  const body = { VendorRef: { value: vendorId }, DocNumber: String(bill.bill_no).slice(0, 21), TxnDate: bill.bill_date, Line: lines };
+  if (bill.due_date) body.DueDate = bill.due_date;
+  return body;
+}
+// r = a Payment row of crm_tally_bank_txns { voucher_no, date, amount }; it must name the bill it pays.
+const buildBillPayment = (r, { vendorId, billId, bankAccountId }) => ({
+  VendorRef: { value: vendorId },
+  PayType: 'Check',
+  CheckPayment: { BankAccountRef: { value: bankAccountId } },
+  TotalAmt: Math.abs(Number(r.amount)),
+  TxnDate: r.date,
+  DocNumber: String(r.voucher_no).slice(0, 21),
+  Line: [{ Amount: Math.abs(Number(r.amount)), LinkedTxn: [{ TxnId: billId, TxnType: 'Bill' }] }],
+});
+
 module.exports = {
+  vendorQuery, buildVendor, buildBill, buildBillPayment,
   fingerprint, syncKey, requestId, customerQuery, itemQuery, buildCustomer, buildInvoice, buildPayment,
   QBO_AUTHORIZE_URL, QBO_TOKEN_URL, QBO_REVOKE_URL, QBO_API_BASE, QBO_SCOPE, QBO_MINOR_VERSION, REFRESH_SKEW_MS, STATE_TTL_MS,
   authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, LOCAL_ACCOUNTS, suggestAccountMap,
