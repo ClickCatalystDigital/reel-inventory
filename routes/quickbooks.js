@@ -1,7 +1,9 @@
-// routes/quickbooks.js → /api/quickbooks (North American public demo only; utils/quickbooks.js). Six endpoints:
+// routes/quickbooks.js → /api/quickbooks (North American public demo only; utils/quickbooks.js). Eight endpoints:
 //   GET  status | accounts      — card state / the QuickBooks company's active accounts (admin/manager)
 //   GET  connect | callback     — Intuit's OAuth 2.0 authorization-code round trip (owner pass only)
 //   POST disconnect, PUT account-map {map: {code: qboAccountId|''}} (owner pass only)
+//   GET  sync / POST send {kind: 'invoice'|'receipt', id} — send state for the screens / send or retry one record
+//        (anyone who can see sales invoices, visitors included: the target is the Intuit sandbox; utils/quickbooks-sync.js)
 // Register this exact redirect URI in the Intuit app: https://electronics-erp-us.ahromlabs.com/api/quickbooks/callback
 const express = require('express');
 const { createHmac, timingSafeEqual } = require('node:crypto');
@@ -9,6 +11,8 @@ const router = express.Router();
 const ah = require('../utils/asyncHandler');
 const { isOwnerPass } = require('../utils/demo');
 const { qboConfig, redirectUri, completeConnection, connectionStatus, qboAccounts, saveAccountMap, disconnect } = require('../utils/quickbooks');
+const { send, syncState } = require('../utils/quickbooks-sync');
+const { STAFF_ROLES } = require('../utils/auth');
 const { authorizeUrl, checkState, normalizeAccounts, cleanAccountMap, accountFits, suggestAccountMap, LOCAL_ACCOUNTS, STATE_TTL_MS } = require('../utils/quickbooks-core');
 
 const MANAGE_NOTE = 'Visitors can see the QuickBooks connection but not change it';
@@ -39,6 +43,20 @@ function owner(req, res, next) {
   if (req.method === 'GET') return back(res, { qbo_error: MANAGE_NOTE });
   res.status(403).json({ error: MANAGE_NOTE });
 }
+
+// Same people as routes/sales-invoices.js. Registered before `gate` so non-admin staff reach /sync and /send.
+const SALES_ROLES = [...STAFF_ROLES, 'gelco_manager', 'gelco_worker'];
+const sales = (req, res, next) => (SALES_ROLES.includes(req.user?.role) ? next() : res.status(403).json({ error: 'Not authorized' }));
+
+router.get('/sync', sales, ah(async (req, res) => {
+  res.json(qboConfig() ? await syncState(site(req)) : { invoices: {}, failures: [], unsent: [], sentToday: 0 });
+}));
+router.post('/send', sales, ah(async (req, res) => {
+  if (!qboConfig()) return res.status(404).json({ error: 'QuickBooks is not set up on this server' });
+  const { kind, id } = req.body || {};
+  if (!['invoice', 'receipt'].includes(kind) || !id) return res.status(400).json({ error: 'Send {kind: "invoice"|"receipt", id}' });
+  try { res.json(await send(site(req), kind, String(id))); } catch (err) { res.status(502).json({ error: err.message }); }
+}));
 
 router.get('/status', gate, ah(async (req, res) => {
   const cfg = qboConfig();

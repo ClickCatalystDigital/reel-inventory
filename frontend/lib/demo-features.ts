@@ -3,6 +3,8 @@ import { Boxes, ClipboardCheck, FileBarChart, FileText, Landmark, QrCode, ScanLi
 // The public demo page's features (app/demo/page.tsx) and its structured data (app/demo/layout.tsx).
 // Each feature: [icon, title, one line, section id, section heading, section paragraphs]. The paragraphs fill
 // the "in detail" section below the fold, for visitors and search engines.
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
+
 export const FEATURES = [
   [QrCode, "Every reel labelled", "Reels and boxes get their own number and a printable QR label the moment they come in.", "reel-labels", "Reel-level stock with QR labels", [
     "Electronic components arrive on reels, and two reels of the same part are rarely the same quantity. Inward a delivery by item and number of reels (optionally packed in boxes), and every reel gets its own number with the item's standard pack quantity. A sheet of QR labels prints straight away as a PDF.",
@@ -34,6 +36,7 @@ export const FEATURES = [
   ]],
   [Landmark, "Finance at a glance", "Receivables, sales and purchase registers, cash position and payables, from the accounting data.", "finance", "Finance from the accounting system", [
     "Receivables with ageing and a collections forecast, the sales register with a reminder date per invoice, purchase register and supplier payables, bank and cash balances, and the year's revenue against costs, all from the accounting system's data.",
+    ...(NA ? ["Sales invoices and payments go to QuickBooks Online, and each invoice shows whether it is in QuickBooks. QuickBooks works out the sales tax."] : []),
   ]],
   [Boxes, "Customer stock portal", "Each customer logs in to see their stock and each order line's progress.", "customer-portal", "A stock and order portal for customers", [
     "Customers who keep stock with you get their own login, which shows a read-only summary of the items kept for them, and the progress of every line on their purchase orders, from procurement to dispatch, with their documents to download.",

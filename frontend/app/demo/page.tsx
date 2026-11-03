@@ -144,6 +144,7 @@ export default function DemoPage() {
             </li>
           ))}
         </ul>
+        {NA && <p className="text-sm text-muted-foreground"><span className="font-medium text-foreground">Connects with:</span> QuickBooks Online</p>}
         <p className="text-sm text-muted-foreground">
           How it was built for a real trader:{" "}
           <a href="https://ahromlabs.com/industries/electronics-component-trading" className="font-medium text-foreground underline-offset-2 hover:underline">

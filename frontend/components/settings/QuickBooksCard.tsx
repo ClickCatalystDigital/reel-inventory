@@ -10,6 +10,7 @@ import { showToast } from "@/lib/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card } from "@/components/ui/card";
+import { sendToQuickBooks, useQboState } from "@/components/docs/QuickBooksStatus";
 
 interface LocalAccount { code: string; name: string; account_type: string }
 interface QboAccount { id: string; name: string; type: string }
@@ -30,6 +31,7 @@ export function QuickBooksCard() {
   const [qbError, setQbError] = useState<string | null>(null);
   const [map, setMap] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const qbo = useQboState(); // the Sending section; quiet until connected
 
   const load = useCallback(() => {
     api<Status>("/api/quickbooks/status")
@@ -176,6 +178,23 @@ export function QuickBooksCard() {
                   })}
                 </div>
               )}
+            </div>
+
+            <div className="flex flex-col gap-2">
+              <h3 className="text-sm font-medium">Sending</h3>
+              <p className="text-xs text-muted-foreground">
+                A sales invoice goes to QuickBooks once every line has a rate. Payments received are sent here with Send (the books sync records them, not this app);
+                a payment names its invoice when it can, otherwise it goes in unapplied. QuickBooks works out the sales tax.
+              </p>
+              <p className="text-xs">Sent today: <strong>{qbo.state?.sentToday ?? 0}</strong></p>
+              {qbo.state?.failures.length === 0 && <p className="text-xs text-muted-foreground">No failures.</p>}
+              {[...(qbo.state?.failures || []).map((f) => ({ ...f, label: f.kind === "invoice" ? `Invoice ${f.no}` : `Payment ${f.no}`, note: f.error, action: "Retry" })),
+                ...(qbo.state?.unsent || []).map((u) => ({ kind: "receipt" as const, id: u.id, label: `Payment ${u.no}`, note: `${u.party} · ${u.amount} not sent yet`, action: "Send" }))].map((f) => (
+                <div key={`${f.kind}-${f.id}-${f.action}`} className="flex items-center justify-between gap-2 rounded-md border px-3 py-2 text-xs">
+                  <div className="min-w-0"><div className="font-medium">{f.label}</div><div className={`truncate ${f.action === "Retry" ? "text-destructive" : "text-muted-foreground"}`} title={f.note}>{f.note}</div></div>
+                  <Button size="sm" variant="outline" disabled={busy} onClick={async () => { setBusy(true); await sendToQuickBooks(f.kind, f.id); setBusy(false); qbo.reload(); }}>{f.action}</Button>
+                </div>
+              ))}
             </div>
 
             {s.canManage ? (

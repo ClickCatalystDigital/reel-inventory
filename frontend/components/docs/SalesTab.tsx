@@ -15,6 +15,7 @@ import { BRAND } from "@/lib/brand";
 import { docDate, money } from "@/lib/docs";
 import { Kpi, StatusPill } from "./bits";
 import { useDocs } from "./context";
+import { QuickBooksStatus, useQboState } from "./QuickBooksStatus";
 const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 
 interface InvLine { item_code: string; description: string; hsn_code: string | null; rate: number | null; gst_rate: number | null; qty: number; reels: number; amount: number; cgst: number; sgst: number; tax?: number; total: number }
@@ -38,6 +39,7 @@ export function SalesTab() {
   useEffect(() => {
     api<Invoice[]>("/api/sales-invoices").then(setRows).catch(() => {});
   }, [docs.version]);
+  const qbo = useQboState(docs.version);
   const drafts = rows.filter((r) => r.missing_rates > 0);
 
   return (
@@ -63,6 +65,7 @@ export function SalesTab() {
             { label: "Qty", render: (r) => formatQty(r.qty), className: "hidden sm:table-cell" },
             { label: "Total", render: (r) => <strong>{money(r.total)}</strong> },
             { label: "Status", render: (r) => (r.missing_rates ? <StatusPill status="pending" label={`Draft · ${r.missing_rates} without rate`} /> : <StatusPill status="approved" label="Ready" />) },
+            ...(qbo.state ? [{ label: "QuickBooks", render: (r: Invoice) => <QuickBooksStatus no={r.invoice_no} state={qbo.state} onChange={qbo.reload} /> }] : []),
             { label: "", render: (r) => <Button variant="ghost" size="icon" title="Download PDF" onClick={() => downloadPdf(r.invoice_no)}><Download className="size-4" /></Button> },
           ]}
         />

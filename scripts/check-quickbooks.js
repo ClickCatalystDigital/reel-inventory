@@ -1,6 +1,6 @@
 // node scripts/check-quickbooks.js
 const assert = require('node:assert/strict');
-const { authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, suggestAccountMap, LOCAL_ACCOUNTS, QBO_SCOPE } = require('../utils/quickbooks-core');
+const { authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, suggestAccountMap, LOCAL_ACCOUNTS, QBO_SCOPE, fingerprint, syncKey, requestId, customerQuery, buildCustomer, buildInvoice, buildPayment } = require('../utils/quickbooks-core');
 
 const u = new URL(authorizeUrl({ clientId: 'abc', redirectUri: 'https://x.test/api/quickbooks/callback', state: 's1' }));
 assert.equal(u.origin + u.pathname, 'https://appcenter.intuit.com/connect/oauth2');
@@ -55,3 +55,23 @@ assert.deepEqual(suggestAccountMap(LOCAL_ACCOUNTS, qbo),
 assert.deepEqual(suggestAccountMap([{ code: 'tax', name: 'Sales Tax Payable', account_type: 'liability' }], qbo), {});
 
 console.log('quickbooks selfcheck ok');
+
+// Phase 2 builders
+assert.equal(customerQuery("O'Neil Parts"), "select * from Customer where DisplayName = 'O\\'Neil Parts'");
+const rid = requestId('9341', 'invoice', '12#x');
+assert.ok(rid.length <= 50 && rid === requestId('9341', 'invoice', '12#x') && rid !== requestId('9341', 'invoice', '13#x'));
+assert.equal(syncKey('12', fingerprint('2026-11-03', 'Partner Store')), '12#2026-11-03|Partner Store');
+assert.deepEqual(buildCustomer({ name: 'Acme', email: 'a@b.test' }), { DisplayName: 'Acme', CompanyName: 'Acme', PrimaryEmailAddr: { Address: 'a@b.test' } });
+const inv = buildInvoice({ invoice_no: '12', invoice_date: '2026-11-03' },
+  [{ item_code: 'BC857B', description: 'PNP transistor', qty: 9000, rate: 0.42, amount: 3780, gst_rate: 8.25 }, { item_code: 'FRT', description: 'FRT', qty: 1, rate: 50, amount: 50, gst_rate: 0 }],
+  { customerId: '58', itemId: '19' });
+assert.deepEqual(inv.Line.map((l) => [l.Amount, l.SalesItemLineDetail.TaxCodeRef.value]), [[3780, 'TAX'], [50, 'NON']]);
+assert.equal(inv.Line[0].Description, 'BC857B - PNP transistor');
+assert.equal(inv.Line[1].Description, 'FRT');
+assert.equal(inv.CustomerRef.value, '58');
+const pay = buildPayment({ voucher_no: 'R-202', date: '2026-11-04', amount: -500 }, { customerId: '58', invoiceId: '130', depositAccountId: '35' });
+assert.deepEqual(pay.Line[0].LinkedTxn, [{ TxnId: '130', TxnType: 'Invoice' }]);
+assert.equal(pay.TotalAmt, 500);
+assert.equal(pay.DepositToAccountRef.value, '35');
+assert.deepEqual(buildPayment({ voucher_no: 'R-1', date: 'd', amount: 5 }, { customerId: '1' }).Line, []);
+console.log('quickbooks phase 2 builders ok');

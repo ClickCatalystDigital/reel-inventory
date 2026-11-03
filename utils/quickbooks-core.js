@@ -127,7 +127,68 @@ function suggestAccountMap(localAccounts, qboAccounts) {
   return map;
 }
 
+// ---------- Phase 2: sending records (utils/quickbooks-sync.js) ----------
+// A record is matched to what was sent by its number plus a fingerprint, so the demo's nightly reset (which reuses
+// numbers for new, different documents) never shows someone else's invoice as "In QuickBooks".
+const fingerprint = (...parts) => parts.map((p) => String(p ?? '')).join('|');
+const syncKey = (no, fp) => `${no}#${fp}`;
+// requestid makes a retried create idempotent at Intuit (same id = same result, no duplicate). Max 50 chars.
+function requestId(realm, kind, key) {
+  let h = 0;
+  for (const c of `${realm}:${kind}:${key}`) h = (Math.imul(h, 31) + c.charCodeAt(0)) | 0;
+  return `io-${kind}-${(h >>> 0).toString(36)}-${String(key).replace(/[^A-Za-z0-9]/g, '').slice(0, 24)}`.slice(0, 50);
+}
+const qq = (s) => String(s ?? '').replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+const customerQuery = (name) => `select * from Customer where DisplayName = '${qq(name)}'`;
+const itemQuery = (name) => `select * from Item where Name = '${qq(name)}'`;
+
+const r2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+// c = { name, email?, phone? }: the CRM company (and its first contact) when there is one, else just the name.
+function buildCustomer(c) {
+  const body = { DisplayName: c.name.slice(0, 100), CompanyName: c.name.slice(0, 100) };
+  if (c.email) body.PrimaryEmailAddr = { Address: c.email };
+  if (c.phone) body.PrimaryPhone = { FreeFormNumber: c.phone };
+  return body;
+}
+// Lines carry TAX/NON only: with QuickBooks' automated sales tax QuickBooks works the tax out, so we never send tax
+// amounts or post to its agency accounts. Part number + description go in the line Description; one Service item
+// ("Component sales") carries the income account for every line.
+// inv = { invoice_no, invoice_date }, lines = [{ item_code, description, qty, rate, amount, gst_rate }]
+function buildInvoice(inv, lines, { customerId, itemId }) {
+  return {
+    CustomerRef: { value: customerId },
+    DocNumber: String(inv.invoice_no).slice(0, 21),
+    TxnDate: inv.invoice_date,
+    Line: lines.map((l) => ({
+      DetailType: 'SalesItemLineDetail',
+      Amount: r2(l.amount ?? (l.qty || 0) * (l.rate || 0)),
+      Description: [l.item_code, l.description].filter((v, i, a) => v && a.indexOf(v) === i).join(' - ').slice(0, 4000),
+      SalesItemLineDetail: {
+        ItemRef: { value: itemId },
+        ...(l.qty ? { Qty: Number(l.qty) } : {}),
+        ...(l.rate != null ? { UnitPrice: Number(l.rate) } : {}),
+        TaxCodeRef: { value: Number(l.gst_rate) > 0 ? 'TAX' : 'NON' },
+      },
+    })),
+  };
+}
+// r = { voucher_no, date, amount, narration }. invoiceId null = unapplied payment (a credit on the customer).
+function buildPayment(r, { customerId, invoiceId, depositAccountId }) {
+  const amount = Math.abs(Number(r.amount));
+  const body = {
+    CustomerRef: { value: customerId },
+    TotalAmt: amount,
+    TxnDate: r.date,
+    PaymentRefNum: String(r.voucher_no).slice(0, 21),
+    PrivateNote: String(r.narration || '').slice(0, 4000),
+    Line: invoiceId ? [{ Amount: amount, LinkedTxn: [{ TxnId: invoiceId, TxnType: 'Invoice' }] }] : [],
+  };
+  if (depositAccountId) body.DepositToAccountRef = { value: depositAccountId };
+  return body;
+}
+
 module.exports = {
+  fingerprint, syncKey, requestId, customerQuery, itemQuery, buildCustomer, buildInvoice, buildPayment,
   QBO_AUTHORIZE_URL, QBO_TOKEN_URL, QBO_REVOKE_URL, QBO_API_BASE, QBO_SCOPE, QBO_MINOR_VERSION, REFRESH_SKEW_MS, STATE_TTL_MS,
   authorizeUrl, tokenTimes, needsRefresh, checkState, normalizeAccounts, accountFits, cleanAccountMap, LOCAL_ACCOUNTS, suggestAccountMap,
 };

@@ -10,6 +10,7 @@ const brand = require('../utils/brand');
 const { STAFF_ROLES } = require('../utils/auth');
 const buildInvoicePdf = require('../utils/invoicePdf');
 const { NA } = require('../utils/market');
+const { autoSend } = require('../utils/quickbooks-sync');
 
 const GELCO_ROLES = ['gelco_manager', 'gelco_worker'];
 // gst_rate holds the line's tax %: GST split CGST/SGST in India, one sales tax rate for MARKET=NA (Texas 8.25%).
@@ -122,6 +123,7 @@ router.get('/', ah(async (req, res) => {
 router.post('/:no', ah(async (req, res) => {
   const inv = await ensure(String(req.params.no), req.user.username);
   if (!inv) return res.status(404).json({ error: `No ${brand.partnerStore} shipment with invoice ${req.params.no}` });
+  if (!inv.missing_rates) autoSend(req.get('host'), 'invoice', inv.invoice_no); // QuickBooks (NA demo): final once every line has a rate
   res.json(inv);
 }));
 
@@ -149,7 +151,9 @@ router.put('/:no', editors, ah(async (req, res) => {
   }
   stmts.push(['UPDATE sales_invoices SET updated_by = ?, updated_at = ? WHERE invoice_no = ?', [req.user.username, nowIST(), no]]);
   await batch(stmts);
-  res.json(await load(no));
+  const inv = await load(no);
+  if (!inv.missing_rates) autoSend(req.get('host'), 'invoice', no);
+  res.json(inv);
 }));
 
 router.get('/:no/pdf', ah(async (req, res) => {
@@ -162,3 +166,4 @@ router.get('/:no/pdf', ah(async (req, res) => {
 
 module.exports = router;
 module.exports.load = load;
+module.exports.ensure = ensure;

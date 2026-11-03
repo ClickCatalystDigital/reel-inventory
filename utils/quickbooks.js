@@ -27,18 +27,23 @@ function bucket() {
   return globalThis.DEMO_FILES;
 }
 // Every demo shares one bucket: the site's host keeps their records apart.
-const key = (site) => `quickbooks/${site}/connection.json`;
+const key = (site, file = 'connection') => `quickbooks/${site}/${file}.json`;
 
-async function loadRecord(site) {
-  const obj = await bucket().get(key(site));
+async function loadRecord(site, file) {
+  const obj = await bucket().get(key(site, file));
   return obj ? { data: JSON.parse(await obj.text()), version: obj.etag } : null;
 }
 // Saves only if nobody changed the record since `version` was read (falsy = overwrite).
-async function saveRecord(site, data, version) {
+async function saveRecord(site, data, version, file) {
   const opts = { httpMetadata: { contentType: 'application/json' } };
   if (version) opts.onlyIf = { etagMatches: version };
-  return !!(await bucket().put(key(site), JSON.stringify(data), opts));
+  return !!(await bucket().put(key(site, file), JSON.stringify(data), opts));
 }
+// The send history (utils/quickbooks-sync.js): one JSON document per site beside the connection, in R2 so it
+// survives the nightly reset (seeded invoices must not be sent again). null when nothing was sent yet.
+const loadSyncDoc = (site) => loadRecord(site, 'sync');
+// false = someone saved since `version` (read-modify-write again).
+const saveSyncDoc = (site, data, version) => saveRecord(site, data, version, 'sync');
 
 // ---------- Intuit token endpoint ----------
 async function tokenCall(url, body, cfg) {
@@ -113,13 +118,15 @@ async function accessToken(site) {
   throw new Error('Could not refresh the QuickBooks connection; try again');
 }
 
-// GET against the Accounting API. 401 → one forced refresh and retry.
-async function qboGet(site, path, params = {}) {
+// Call the Accounting API (GET, or POST with a JSON body). 401 → one forced refresh and retry.
+async function qboCall(site, method, path, { params = {}, body } = {}) {
   for (let attempt = 0; attempt < 2; attempt++) {
     const { token, conn } = await accessToken(site);
     const q = new URLSearchParams({ ...params, minorversion: QBO_MINOR_VERSION });
     const res = await fetch(`${QBO_API_BASE[conn.environment]}/v3/company/${conn.realm_id}${path}?${q}`, {
-      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json' },
+      method,
+      headers: { Authorization: `Bearer ${token}`, Accept: 'application/json', ...(body ? { 'Content-Type': 'application/json' } : {}) },
+      body: body ? JSON.stringify(body) : undefined,
     });
     if (res.status === 401 && attempt === 0) {
       const rec = await loadRecord(site);
@@ -135,6 +142,7 @@ async function qboGet(site, path, params = {}) {
   }
   throw new Error('QuickBooks rejected the connection');
 }
+const qboGet = (site, path, params = {}) => qboCall(site, 'GET', path, { params });
 
 const qboAccounts = (site) => qboGet(site, '/query', { query: 'select * from Account where Active = true maxresults 1000' });
 
@@ -158,4 +166,4 @@ async function disconnect(site) {
   await bucket().delete(key(site));
 }
 
-module.exports = { qboConfig, redirectUri, completeConnection, connectionStatus, qboAccounts, saveAccountMap, disconnect };
+module.exports = { qboConfig, redirectUri, completeConnection, connectionStatus, qboCall, qboGet, qboAccounts, saveAccountMap, disconnect, loadSyncDoc, saveSyncDoc };
