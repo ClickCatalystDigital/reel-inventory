@@ -7,6 +7,8 @@ const { userFromHeaders, ROLE_PAGE_ALLOWLIST } = auth;
 
 // Binding, not request state — see utils/r2.js.
 globalThis.R2_BUCKET = env.BUCKET;
+// The demo's own bucket (wrangler.us.jsonc), used for the QuickBooks connection record — see utils/quickbooks.js.
+globalThis.DEMO_FILES = env.DEMO_FILES;
 // Request-scoped (it finds the current request itself) — see utils/background.js.
 globalThis.WAIT_UNTIL = waitUntil;
 

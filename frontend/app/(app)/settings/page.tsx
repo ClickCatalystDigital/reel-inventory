@@ -2,7 +2,7 @@
 
 import { askConfirm } from "@/components/layout/AskDialog";
 import { useEffect, useState } from "react";
-import { BookOpen, Database, UserPlus, Users } from "lucide-react";
+import { BookOpen, Database, Link2, UserPlus, Users } from "lucide-react";
 import { api } from "@/lib/api";
 import { showToast } from "@/lib/toast";
 import { formatDate } from "@/lib/format";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Card } from "@/components/ui/card";
 import { StorageCard } from "@/components/settings/StorageCard";
 import { AssistantCard } from "@/components/settings/AssistantCard";
+import { QuickBooksCard } from "@/components/settings/QuickBooksCard";
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { SettingsNav, type SettingsTab } from "@/components/settings/SettingsNav";
 import { ChipMark } from "@/components/assistant/ChipMark";
@@ -35,6 +36,10 @@ const ROLE_OPTIONS = [
 const TAB_STORAGE: SettingsTab = { key: "storage", label: "Storage", caption: "Database & files", icon: Database };
 const TAB_AI: SettingsTab = { key: "ai", label: "AI", caption: `${BRAND.ai} assistant`, icon: ChipMark as unknown as SettingsTab["icon"] };
 const TAB_HUMANS: SettingsTab = { key: "humans", label: "Humans", caption: "Users & access", icon: Users };
+const TAB_INTEGRATIONS: SettingsTab = { key: "integrations", label: "Integrations", caption: "QuickBooks", icon: Link2 };
+// QuickBooks is on the North American public demo only (the server also checks); declared here, see lib/market.ts.
+const NA = process.env.NEXT_PUBLIC_MARKET === "NA";
+const QBO = DEMO && NA;
 
 interface AppUser {
   id: number;
@@ -55,11 +60,12 @@ export default function SettingsPage() {
   const [companies, setCompanies] = useState<Company[]>([]);
 
   // Sections: Storage | AI (admin only — the server enforces it too) | Humans. The active one lives in the URL hash so a refresh keeps it.
-  const tabs = user?.role === "admin" ? [TAB_STORAGE, TAB_AI, TAB_HUMANS] : [TAB_STORAGE, TAB_HUMANS];
+  const tabs = [TAB_STORAGE, ...(user?.role === "admin" ? [TAB_AI] : []), TAB_HUMANS, ...(QBO ? [TAB_INTEGRATIONS] : [])];
   const [tab, setTab] = useState("storage");
   const active = tabs.some((t) => t.key === tab) ? tab : "storage";
   useEffect(() => {
-    const h = window.location.hash.slice(1);
+    // ?tab=integrations is where the QuickBooks round trip lands (the hash wins if both are there).
+    const h = window.location.hash.slice(1) || new URLSearchParams(window.location.search).get("tab") || "";
     // eslint-disable-next-line react-hooks/set-state-in-effect -- reading the hash is only possible after mount (static export)
     if (h) setTab(h);
   }, []);
@@ -135,6 +141,12 @@ export default function SettingsPage() {
           {user?.role === "admin" && (
             <TabsContent value="ai" className="space-y-4 outline-none">
               <AssistantCard />
+            </TabsContent>
+          )}
+
+          {QBO && (
+            <TabsContent value="integrations" className="space-y-4 outline-none">
+              <QuickBooksCard />
             </TabsContent>
           )}
 

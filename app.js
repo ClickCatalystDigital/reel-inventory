@@ -34,6 +34,9 @@ const demo = require('./utils/demo');
 // body parsers: they read the request stream, which would drop the scope.
 if (demo.DEMO && process.env.GOLDEN_TURSO_URL) app.use((req, res, next) => (demo.isOwnerPass(req) ? onGolden(next) : next()));
 if (demo.DEMO) app.use('/api/demo', demo.router);
+// QuickBooks (NA demo): Intuit's redirect back arrives without the login cookies, so the callback sits before the login check
+// and trusts its own signed state cookie (routes/quickbooks.js).
+if (demo.DEMO) app.get('/api/quickbooks/callback', require('./routes/quickbooks').callback);
 
 app.get('/api/logout', (req, res) => {
   res.clearCookie('token', { httpOnly: true, secure: true, sameSite: 'strict', path: '/' });
@@ -80,6 +83,7 @@ app.use('/api/inward', require('./routes/inward'));
 app.use('/api/outward', require('./routes/outward'));
 app.use('/api/requests', require('./routes/requests'));
 app.use('/api/settings', require('./routes/settings'));
+if (demo.DEMO) app.use('/api/quickbooks', require('./routes/quickbooks'));
 app.use('/api/dashboard', require('./routes/dashboard'));
 app.use('/api/po', require('./routes/po'));
 // Lazy: pdfkit is ~1.5 MB of the Worker; only load it when a PDF is actually requested (faster cold starts).
