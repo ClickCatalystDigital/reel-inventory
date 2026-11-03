@@ -25,7 +25,8 @@ const ITEM_NAME = 'Component sales';
 const invoiceFp = (head) => fingerprint(head.invoice_date, head.customer_name);
 const receiptFp = (r) => fingerprint(r.date, Math.abs(r.amount), r.party_name);
 const receiptKey = (r) => syncKey(r.voucher_no, receiptFp(r));
-const billFp = (b) => fingerprint(b.invoice_date, b.party_name);
+// 'v2': bills sent before the line-total fix (one arrived as tax only) are sent again, correctly.
+const billFp = (b) => fingerprint('v2', b.invoice_date, b.party_name);
 const BILL_WHERE = "doc_type = 'purchase_invoice' AND status IN ('approved', 'pushed') AND deleted_at IS NULL";
 const refsOf = (r) => { try { return JSON.parse(r.bill_refs || '[]').map((x) => String(x.bill_ref)); } catch { return []; } };
 const lazy = () => require('../routes/sales-invoices'); // loaded on use: that route requires this file
@@ -143,7 +144,10 @@ async function sendBill(site, id) {
     if (!b.invoice_no || !b.party_name || !b.invoice_date) throw new Error('The invoice needs a number, date and supplier');
     let lines = []; try { lines = JSON.parse(b.line_items || '[]'); } catch { /* none */ }
     const tax = Number(b.total_tax) || (Number(b.cgst) || 0) + (Number(b.sgst) || 0) + (Number(b.igst) || 0);
-    const items = lines.length ? lines : [{ description: `Invoice ${b.invoice_no}`, amount: b.taxable_value ?? (Number(b.net_amount) || 0) - tax }];
+    // Scanned lines often lack amounts: when they don't add up to the pre-tax total, send that total as one line.
+    const preTax = Number(b.taxable_value ?? (Number(b.net_amount) || 0) - tax);
+    const lineSum = lines.reduce((s, l) => s + Number(l.amount ?? (l.qty || 0) * (l.rate || 0)), 0);
+    const items = lines.length && Math.abs(lineSum - preTax) < 0.01 ? lines : [{ description: lines.map((l) => l.description).filter(Boolean).join('; ').slice(0, 900) || `Invoice ${b.invoice_no}`, amount: preTax }];
     const code = lines.some((l) => l.kind === 'stock') ? 'inventory' : 'purchases'; // stock → inventory, anything else → purchases
     const accountId = conn.account_map[code];
     if (!accountId) throw new Error(`Map ${code === 'inventory' ? 'Inventory' : 'Purchases'} to a QuickBooks account first (Settings > Integrations)`);
