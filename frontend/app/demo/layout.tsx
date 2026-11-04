@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { FEATURES } from "@/lib/demo-features";
+import { DEMO_VIDEO } from "@/lib/demo-video";
 
 const NA = process.env.NEXT_PUBLIC_MARKET === "NA"; // per module, see lib/market.ts
 // The demo's public address (wrangler.demo.jsonc / wrangler.us.jsonc routes).
@@ -33,11 +34,24 @@ const jsonLd = {
   publisher: { "@type": "Organization", name: "Ahrom Labs", url: "https://ahromlabs.com" },
   hasPart: FEATURES.map(([, , , id, heading]) => ({ "@type": "WebPageElement", name: heading, url: `${DEMO_ORIGIN}/demo#${id}`})),
 };
+// The tour embedded above the form (lib/demo-video.ts), for video results in search.
+const video = DEMO_VIDEO && {
+  "@context": "https://schema.org",
+  "@type": "VideoObject",
+  name: DEMO_VIDEO.name,
+  description: DEMO_VIDEO.description,
+  thumbnailUrl: `https://i.ytimg.com/vi/${DEMO_VIDEO.id}/maxresdefault.jpg`,
+  uploadDate: DEMO_VIDEO.uploadDate,
+  duration: DEMO_VIDEO.duration,
+  contentUrl: `https://www.youtube.com/watch?v=${DEMO_VIDEO.id}`,
+  embedUrl: `https://www.youtube.com/embed/${DEMO_VIDEO.id}`,
+  publisher: jsonLd.publisher,
+};
 
 export default function DemoLayout({ children }: { children: React.ReactNode }) {
   return (
     <>
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd).replace(/</g, "\\u003c") }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(video ? [jsonLd, video] : jsonLd).replace(/</g, "\\u003c") }} />
       {children}
     </>
   );

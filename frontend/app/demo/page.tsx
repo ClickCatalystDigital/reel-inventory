@@ -3,6 +3,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ArrowRight, ArrowUp, ChevronRight, Loader2 } from "lucide-react";
 import { FEATURES } from "@/lib/demo-features";
+import { DEMO_VIDEO } from "@/lib/demo-video";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
@@ -120,7 +121,7 @@ export default function DemoPage() {
         </nav>
       </div>
     </header>
-    <main id="top" className="mx-auto grid min-h-[calc(100dvh-3.5rem)] max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-center">
+    <main id="top" className="mx-auto grid min-h-[calc(100dvh-3.5rem)] max-w-6xl gap-10 px-4 py-10 lg:grid-cols-[1fr_1.1fr] lg:items-start">
       <section className="order-2 min-w-0 space-y-6 lg:order-none">
         <div>
           <p className="text-sm font-medium text-muted-foreground">Ahrom Labs · live demo</p>
@@ -130,6 +131,11 @@ export default function DemoPage() {
             and dispatches. Click anything; changes reset every night.
           </p>
         </div>
+        {/* The narrated tour (lib/demo-video.ts), above the features. */}
+        {DEMO_VIDEO && (
+          <iframe src={`https://www.youtube-nocookie.com/embed/${DEMO_VIDEO.id}`} title={DEMO_VIDEO.name}
+            allow="encrypted-media; picture-in-picture; fullscreen" allowFullScreen className="aspect-video w-full rounded-lg border" />
+        )}
         <ul className="grid gap-3 sm:grid-cols-2">
           {/* Each feature links to its own section below (#in-detail), for visitors and search engines. */}
           {FEATURES.map(([Icon, title, text, id]) => (
@@ -153,6 +159,8 @@ export default function DemoPage() {
         </p>
       </section>
 
+      {/* The form stays in view beside the tour and the features on wide screens. */}
+      <div className="min-w-0 lg:sticky lg:top-8">
       <div className="rounded-xl border bg-card p-6 text-card-foreground shadow-sm">
         <h2 className="text-lg font-semibold">{step === "roles" ? "Choose who to be" : "Open the demo"}</h2>
         <p className="mt-1 text-sm text-muted-foreground">
@@ -205,6 +213,7 @@ export default function DemoPage() {
         <p className="mt-4 text-center text-sm text-muted-foreground">
           Questions? <DemoWhatsApp>{NA ? "Book a call with Pujan" : "WhatsApp Pujan"}</DemoWhatsApp>
         </p>
+      </div>
       </div>
     </main>
 
