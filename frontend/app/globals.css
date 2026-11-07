@@ -174,3 +174,6 @@
 /* Demo page: the feature links jump to their section below (app/demo/page.tsx). */
 html:has(#in-detail) { scroll-behavior: smooth; }
 @media (prefers-reduced-motion: reduce) { html:has(#in-detail) { scroll-behavior: auto; } }
+
+/* Phones: the demo pill hides while the AI chat is open (the chat fills the screen). */
+@media (max-width: 767px) { body:has([data-ai-panel]) [data-demo-pill] { display: none; } }
