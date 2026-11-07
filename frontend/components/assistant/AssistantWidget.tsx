@@ -74,6 +74,7 @@ export function AssistantWidget() {
   const [limitOpen, setLimitOpen] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
   const idRef = useRef(1);
   const contextRef = useRef<Record<string, unknown> | null>(null); // what the last table answer was about, for follow-ups
 
@@ -99,13 +100,19 @@ export function AssistantWidget() {
 
   useEffect(() => {
     if (!open) return;
-    inputRef.current?.focus();
+    if (!isPhone()) inputRef.current?.focus(); // phones: the keyboard comes up when the box is tapped
+    // Phones: the panel follows the visible area, so the keyboard never covers the text box and nothing scrolls.
+    const vv = window.visualViewport;
+    const fit = () => { const el = panelRef.current; if (el && vv) { el.style.top = `${vv.offsetTop}px`; el.style.height = `${vv.height}px`; } };
+    if (isPhone() && vv) { fit(); vv.addEventListener("resize", fit); vv.addEventListener("scroll", fit); }
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && setOpen(false);
     window.addEventListener("keydown", onKey);
     const prev = document.body.style.overflow;
     if (isPhone()) document.body.style.overflow = "hidden";
     return () => {
       window.removeEventListener("keydown", onKey);
+      vv?.removeEventListener("resize", fit);
+      vv?.removeEventListener("scroll", fit);
       document.body.style.overflow = prev;
     };
   }, [open]);
@@ -238,6 +245,8 @@ export function AssistantWidget() {
     <>
     {limitOverlay}
     <div
+      ref={panelRef}
+      data-ai-panel
       role="dialog"
       aria-label={`${BRAND.ai} assistant`}
       className={cn(
@@ -415,7 +424,7 @@ export function AssistantWidget() {
             rows={1}
             maxLength={600}
             placeholder="Ask about stock, shipments, POs…"
-            className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2.5 py-2 text-[15px] outline-none placeholder:text-muted-foreground/70 md:text-sm"
+            className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2.5 py-2 text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
           />
           <button
             type="submit"
