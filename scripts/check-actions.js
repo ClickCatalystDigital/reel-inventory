@@ -13,6 +13,9 @@ process.env.TURSO_AUTH_TOKEN = '';
 process.env.SESSION_SECRET ||= 'check-actions-only';
 delete process.env.GOLDEN_TURSO_URL;
 
+// The US demo (MARKET=NA) has the same sample records under American names.
+const US_NAMES = [['Neha Kapoor', 'Emily Carter'], ['Rahul Bansal', 'Jason Miller'], ['Imran Shaikh', 'Marcus Reed'], ['Pooja Iyer', 'Laura Chen'], ['Arvind Rao', 'Daniel Ortiz'], ['Neha', 'Emily']];
+const market = (s) => (process.env.MARKET === 'NA' ? US_NAMES.reduce((t, [a, b]) => t.split(a).join(b), s) : s);
 const S = require('../db/schema');
 const { ACTIONS, fill, check } = require('../utils/assistantActions');
 const { runAction } = require('../utils/actionRunner');
@@ -23,8 +26,8 @@ const { runAction } = require('../utils/actionRunner');
 
   // ---- 1. filling from words (demo sample data: Voltix, Orbit, SYS-2…) ----
   const voltix = (await one("SELECT id FROM crm_companies WHERE name LIKE 'Voltix%'")).id;
-  const neha = (await one("SELECT id FROM crm_contacts WHERE poc_name = 'Neha Kapoor'")).id;
-  const imran = (await one("SELECT id FROM crm_contacts WHERE poc_name = 'Imran Shaikh'")).id;
+  const neha = (await one('SELECT id FROM crm_contacts WHERE poc_name = ?', [market('Neha Kapoor')])).id;
+  const imran = (await one('SELECT id FROM crm_contacts WHERE poc_name = ?', [market('Imran Shaikh')])).id;
   const sys2 = (await one("SELECT id FROM crm_purchase_orders WHERE po_number = 'SYS-2'")).id;
   const sys5 = (await one("SELECT id FROM crm_purchase_orders WHERE po_number = 'SYS-5'")).id;
   const ss34line = (await one("SELECT id FROM crm_po_items WHERE po_id = ? AND item_code = 'SS34'", [sys2])).id;
@@ -53,12 +56,12 @@ const { runAction } = require('../utils/actionRunner');
   ];
   const bad = [];
   for (const [key, q, want] of cases) {
-    const c = await fill(key, q, day);
+    const c = await fill(key, market(q), day);
     for (const [k, v] of Object.entries(want)) if (JSON.stringify(c.values[k]) !== JSON.stringify(v)) bad.push(`${key}: "${q}" → ${k} = ${JSON.stringify(c.values[k])}, wanted ${JSON.stringify(v)}`);
   }
   assert.deepEqual(bad, [], `filling:\n${bad.join('\n')}`);
   // A name given as text (how MCP passes it) resolves; a wrong id is an error, not a guess.
-  assert.equal((await check('log_client_note', { client: 'Neha', body: 'x' })).values.client, neha);
+  assert.equal((await check('log_client_note', { client: market('Neha'), body: 'x' })).values.client, neha);
   assert.ok((await check('complete_task', { task: 999999 })).errors.length);
   assert.ok((await check('transfer_stock', { unit: 'nothing', to_store: 'primary' })).errors.length);
 

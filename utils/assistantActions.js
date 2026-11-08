@@ -252,7 +252,7 @@ const ACTIONS = [
     summary: (v, l) => `Cancel ${l.proc}`, link: () => '/orders#procurement' },
 
   // ---- documents (supplier bills read by AI, waiting for review) ----
-  { key: 'approve_document', about: 'Approve a supplier bill or document (purchase invoice, bill of entry, freight bill) waiting for review, so it goes to Tally.', risk: 'change',
+  { key: 'approve_document', about: 'Approve a supplier bill or document (purchase invoice, bill of entry, freight bill) waiting for review, so it is posted to the accounts.', risk: 'change',
     fields: [ref('doc', 'Document', 'document'), field('notes', 'Note', 'text', { fill: false })],
     request: (v) => ({ method: 'POST', path: `/api/invoices/${v.doc}/approve`, body: { notes: v.notes || '' } }),
     summary: (v, l) => `Approve ${l.doc}`, link: () => '/docs' },
