@@ -136,6 +136,18 @@ const DEMO_CASES = [
   ['cancel procurement order PRC-1', act('cancel_procurement')],
   ['approve the bill of entry BE-2291', act('approve_document')],
   ['reject bill BE-2291, the GSTIN is wrong', act('reject_document')],
+  ['approve request 4 but only 3 reels, not 4', act('edit_approve_request')],
+  ["approve store's SS34 shipment request with just REEL-10031", act('edit_approve_request')],
+  ['change the customer on SYS-5 to Orbit', act('edit_po')],
+  ['the LM358DR quantity on SYS-3 should be 8000, not 10000', act('edit_po_line')],
+  ['set the SS34 price on SYS-2 to 1.85', act('edit_po_line')],
+  ['remove the MOV-14D471 line from SYS-5', act('remove_po_line')],
+  ['push the SYS-2 STM32G030 lot of 5000 to the 28th', act('edit_dispatch_lot')],
+  ['delete the CC0603-104K dispatch lot on SYS-4', act('delete_dispatch_lot')],
+  ['PRC-1 is now expected next Friday', act('edit_procurement')],
+  ['mark procurement order PRC-1 as ordered', act('edit_procurement')],
+  ['set the rate of RC0603-10K on invoice 10001 to 0.07', act('set_invoice_rate')],
+  ['remind me to chase payment on voucher S-104 next Friday', act('set_payment_reminder')],
   // a request we can't do is a plain no, not neighbouring data
   ['change my password', { type: 'text', says: /can't do that one|Settings/i }],
 ];

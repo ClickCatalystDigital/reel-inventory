@@ -27,6 +27,7 @@ const CATEGORY = ITEM_CATEGORIES.map((c) => ({ value: c, label: c, words: new Re
 // "5 reels", "3000 per reel", "at 1.9"…: a field may name the words its number sits next to.
 const num = (re) => ({ num: re });
 const QTY = /\b(\d[\d,]{0,9})(?![\d.]|st\b|nd\b|rd\b|th\b)\s*(?:k\b)?\s*(?:pcs|pieces|nos|units|qty)?\s*(?:x|×|of)?\s*(?=[A-Z][A-Z0-9-]*\d|[a-z])/;
+const PRICE_TO = /(?:\bat|@|₹|\brs\.?|\$|\bprice(?: of| is| to)?|\brate(?: of| is| to)?|\bcost(?: of| is| to)?)\s*([\d,]+(?:\.\d+)?)|\bto\s+([\d,]*\.\d+)/i;
 const PRICE = /(?:\bat|@|₹|\brs\.?|\bprice(?: of| is)?|\brate(?: of| is)?)\s*([\d,]+(?:\.\d+)?)/i;
 const CODE = /\b(?!REEL-|BOX-|PRC-|SYS-)([A-Z0-9][A-Z0-9.]*[-/]?[A-Z0-9.-]*\d[A-Z0-9.-]*|[A-Z0-9]*\d[A-Z0-9-]*[A-Z][A-Z0-9-]*)\b/;
 const INVOICE = /\b(?:inv(?:oice)?|bill)\s*(?:no\.?|number|#)?\s*[:#]?\s*([A-Z0-9][A-Z0-9/_-]*\d[A-Z0-9/_-]*)/i;
@@ -69,7 +70,7 @@ const ACTIONS = [
     request: (v) => ({ method: 'POST', path: '/api/outward/undo', body: { outward_id: v.outward } }),
     summary: (v, l) => `Undo shipment ${l.outward}`, link: () => '/outward' },
 
-  { key: 'approve_request', about: "Approve a staff member's pending inward, outward or transfer request (so it is carried out).", risk: 'change',
+  { key: 'approve_request', about: "Approve a staff member's pending inward, outward or transfer request exactly as submitted (so it is carried out).", risk: 'change',
     fields: [ref('request', 'Request', 'request')],
     request: (v) => ({ method: 'POST', path: `/api/requests/${v.request}/approve`, body: {} }),
     summary: (v, l) => `Approve request ${l.request}`, link: () => '/requests' },
@@ -78,6 +79,26 @@ const ACTIONS = [
     fields: [ref('request', 'Request', 'request'), field('reject_reason', 'Reason', 'text', { pick: /\b(?:because|reason:?|as|since)\s+(.+)$/i })],
     request: (v) => ({ method: 'POST', path: `/api/requests/${v.request}/reject`, body: { reject_reason: v.reject_reason || '' } }),
     summary: (v, l) => `Reject request ${l.request}`, link: () => '/requests' },
+
+  { key: 'edit_approve_request', about: "Approve a staff member's pending inward or outward request with changes: fewer (or more) reels or boxes, or with only some (just one) of its reels; edits it, then approves.", risk: 'change',
+    fields: [ref('request', 'Request', 'editable_request'), field('num_reels', 'Reels (inward)', 'number', num(/\b(\d{1,3})\s*reels?\b/i)), field('num_boxes', 'Boxes (inward)', 'number', num(/\b(\d{1,3})\s*box(?:es)?\b/i)),
+      field('keep', 'Reels to ship (outward)', 'units')],
+    // The stored payload with only the changed numbers, so store, PO and notes carry over as the staff member entered them.
+    request: async (v) => {
+      const r = await queryOne('SELECT type, payload FROM requests WHERE id = ?', [v.request]);
+      const p = JSON.parse(r.payload || '{}');
+      if (r.type === 'inward') {
+        if (v.num_reels == null && v.num_boxes == null) throw new Error('Give the new number of reels or boxes');
+        Object.assign(p, v.num_reels != null ? { num_reels: Number(v.num_reels) } : {}, v.num_boxes != null ? { num_boxes: Number(v.num_boxes) } : {});
+      } else {
+        const keep = units(v.keep);
+        const reels = p.reel_numbers || [p.reel_number];
+        if (!keep.length || keep.some((k) => !reels.includes(k))) throw new Error(`List the reels to ship, from: ${reels.join(', ')}`);
+        p.reel_numbers = keep; delete p.reel_number;
+      }
+      return { method: 'POST', path: `/api/requests/${v.request}/edit-approve`, body: { payload: p } };
+    },
+    summary: (v, l) => `Approve ${l.request} with ${v.keep ? `only ${v.keep}` : [v.num_reels != null && `${v.num_reels} reels`, v.num_boxes != null && `${v.num_boxes} boxes`].filter(Boolean).join(', ')}`, link: () => '/requests' },
 
   { key: 'reserve_stock', about: "Reserve (set aside, allocate) free stock for a customer purchase order line, so it isn't shipped to anyone else.", risk: 'change',
     fields: [ref('line', 'PO line', 'po_line')],
@@ -105,7 +126,7 @@ const ACTIONS = [
     },
     summary: (v, l) => `Update item ${l.item}`, link: () => '/catalog' },
 
-  { key: 'set_item_price', about: "Set or change an item's selling rate (price per piece), its HSN code or its GST rate, used on invoices.", risk: 'change',
+  { key: 'set_item_price', about: "Set or change an item's catalog selling rate (default price per piece for every customer), its HSN code or its GST rate, used on invoices.", risk: 'change',
     fields: [ref('item', 'Item', 'item'), field('sale_rate', 'Rate per piece', 'money', num(/(?:\bat|@|₹|\brs\.?|\bto|\bis)\s*([\d,]+(?:\.\d+)?)\b(?![-\w])/i)), field('hsn_code', 'HSN', 'text', { pick: /\bhsn\s*(?:code)?\s*(?:is|to|:)?\s*(\d{4,8})/i }), field('gst_rate', 'GST %', 'number', num(/\b(\d{1,2})\s*%|\bgst\s*(?:of|to|at|is)?\s*(\d{1,2})/i))],
     request: async (v) => {
       const it = await queryOne('SELECT invoice_name, hsn_code, sale_rate, gst_rate FROM items WHERE item_code = ?', [v.item]);
@@ -221,6 +242,46 @@ const ACTIONS = [
     },
     summary: (v, l) => `Set ${l.po} dispatch date to ${v.expected_dispatch_date}`, link: () => '/orders' },
 
+  { key: 'edit_po', about: 'Correct a customer purchase order\'s customer (company) or order date.', risk: 'change',
+    fields: [ref('po', 'PO', 'open_po'), ref('customer', 'Customer', 'company', false), field('order_date', 'Order date', 'date')],
+    request: async (v) => {
+      if (!v.customer && !v.order_date) throw new Error('Give the new customer or order date');
+      const p = await queryOne('SELECT company_id, contact_id, order_date, expected_dispatch_date, notes FROM crm_purchase_orders WHERE id = ?', [v.po]);
+      // a new company: its contact no longer belongs, so it is cleared
+      return { method: 'PATCH', path: `/api/po/${v.po}`, body: { ...p, ...(v.customer && v.customer !== p.company_id ? { company_id: v.customer, contact_id: null } : {}), ...(v.order_date ? { order_date: v.order_date } : {}) } };
+    },
+    summary: (v, l) => `Set ${l.po}${v.customer ? ` customer to ${l.customer}` : ''}${v.customer && v.order_date ? ',' : ''}${v.order_date ? ` order date to ${v.order_date}` : ''}`, link: () => '/orders' },
+
+  { key: 'edit_po_line', about: "Change or correct the quantity ordered (it should be N) or the agreed price of one item (line) on a customer's purchase order (PO such as SYS-2): that order only, not the catalog rate.", risk: 'change',
+    fields: [ref('line', 'PO line', 'po_line_open'), field('qty', 'New quantity', 'number', num(/(?<!(?:price|rate|cost)\s)\b(?:to|=|is|now)\s+(\d[\d,]*)\s*(k\b)?(?!\s*(?:each|per|\/))(?![.\d])|\b(\d[\d,]*)\s*(?:pcs|pieces|nos|units)\b/i)),
+      field('unit_price', 'New unit price', 'money', num(PRICE_TO))],
+    request: async (v) => {
+      if (v.qty == null && v.unit_price == null) throw new Error('Give the new quantity or price');
+      const l = await queryOne('SELECT po_id FROM crm_po_items WHERE id = ?', [v.line]);
+      return { method: 'PATCH', path: `/api/po/${l.po_id}/items/${v.line}`, body: { ...(v.qty != null ? { quantity_ordered: Number(v.qty) } : {}), ...(v.unit_price != null ? { unit_price: Number(v.unit_price) } : {}) } };
+    },
+    summary: (v, l) => `Change ${l.line}:${v.qty != null ? ` qty ${v.qty}` : ''}${v.unit_price != null ? ` price ${v.unit_price}` : ''}`, link: () => '/orders' },
+
+  { key: 'remove_po_line', about: 'Remove (delete) an item line from a customer purchase order (releases its reserved stock).', risk: 'delete',
+    fields: [ref('line', 'PO line', 'po_line_open')],
+    request: async (v) => ({ method: 'DELETE', path: `/api/po/${(await queryOne('SELECT po_id FROM crm_po_items WHERE id = ?', [v.line])).po_id}/items/${v.line}`, body: {} }),
+    summary: (v, l) => `Remove ${l.line}`, link: () => '/orders' },
+
+  { key: 'edit_dispatch_lot', about: 'Change the date or quantity of a planned dispatch lot (part delivery) already on a customer PO.', risk: 'change',
+    fields: [ref('lot', 'Dispatch lot', 'dispatch'), field('qty', 'New quantity', 'number', num(/\b(?:to|=|is|now)\s+(\d[\d,]*)\s*(k\b)?(?![.\d])(?!\s*(?:st|nd|rd|th)\b)|\b(\d[\d,]*)\s*(?:pcs|pieces|nos|units)\b/i)),
+      field('dispatch_date', 'New date', 'date', { when: 'future' })],
+    request: async (v) => {
+      if (v.qty == null && !v.dispatch_date) throw new Error('Give the new date or quantity');
+      const d = await queryOne('SELECT po_id, item_code, quantity, dispatch_date, notes FROM po_dispatches WHERE id = ?', [v.lot]);
+      return { method: 'PUT', path: `/api/orders/dispatches/${v.lot}`, body: { ...d, quantity: v.qty != null ? Number(v.qty) : d.quantity, dispatch_date: v.dispatch_date || d.dispatch_date } };
+    },
+    summary: (v, l) => `Change ${l.lot}:${v.qty != null ? ` qty ${v.qty}` : ''}${v.dispatch_date ? ` date ${v.dispatch_date}` : ''}`, link: () => '/orders#dispatch' },
+
+  { key: 'delete_dispatch_lot', about: 'Delete (remove) a planned dispatch lot from a customer PO.', risk: 'delete',
+    fields: [ref('lot', 'Dispatch lot', 'dispatch')],
+    request: (v) => ({ method: 'DELETE', path: `/api/orders/dispatches/${v.lot}`, body: {} }),
+    summary: (v, l) => `Delete ${l.lot}`, link: () => '/orders#dispatch' },
+
   { key: 'add_dispatch_lot', about: 'Plan or record a dispatch lot: a quantity of one item on a customer PO going out on a date (part delivery).', risk: 'create',
     fields: [ref('line', 'PO line', 'po_line'), need(field('qty', 'Quantity', 'number', num(QTY))), field('dispatch_date', 'Dispatch date', 'date', { when: 'future', default: 'today' })],
     request: async (v) => {
@@ -246,6 +307,16 @@ const ACTIONS = [
     request: async (v) => ({ method: 'PUT', path: `/api/procurement/${(await queryOne('SELECT proc_id FROM procurement_items WHERE id = ?', [v.proc_item])).proc_id}/items/${v.proc_item}/stage`, body: { stage: v.stage } }),
     summary: (v, l) => `Set ${l.proc_item} to ${v.stage}`, link: () => '/orders#procurement' },
 
+  { key: 'edit_procurement', about: 'Change the expected arrival date of a procurement (supplier purchase) order, or mark a draft as ordered (placed with the supplier).', risk: 'change',
+    fields: [ref('proc', 'Procurement order', 'proc'), field('expected_date', 'Expected by', 'date', { when: 'future' }),
+      field('status', 'Status', 'enum', { options: [{ value: 'ordered', label: 'Ordered', words: /\b(ordered|placed|sent to the supplier)\b/i }, { value: 'draft', label: 'Draft', words: /\bdraft\b/i }] })],
+    // only these two fields; the supplier, items and quantities stay as they are
+    request: (v) => {
+      if (!v.expected_date && !v.status) throw new Error('Give the new expected date or status');
+      return { method: 'PUT', path: `/api/procurement/${v.proc}`, body: { ...(v.expected_date ? { expected_date: v.expected_date } : {}), ...(v.status ? { status: v.status } : {}) } };
+    },
+    summary: (v, l) => `Set ${l.proc}${v.expected_date ? ` expected ${v.expected_date}` : ''}${v.status ? ` to ${v.status}` : ''}`, link: () => '/orders#procurement' },
+
   { key: 'cancel_procurement', about: 'Cancel a procurement (supplier purchase) order that will not go ahead.', risk: 'delete',
     fields: [ref('proc', 'Procurement order', 'proc')],
     request: (v) => ({ method: 'POST', path: `/api/procurement/${v.proc}/cancel`, body: {} }),
@@ -261,6 +332,25 @@ const ACTIONS = [
     fields: [ref('doc', 'Document', 'document'), field('notes', 'Reason', 'text', { pick: /\b(?:because|reason:?|as|since)\s+(.+)$/i })],
     request: (v) => ({ method: 'POST', path: `/api/invoices/${v.doc}/reject`, body: { notes: v.notes || '' } }),
     summary: (v, l) => `Reject ${l.doc}`, link: () => '/docs' },
+
+  { key: 'set_invoice_rate', about: `Set the rate, HSN code or GST % of an item on a ${brand.partnerStore} sales (tax) invoice.`, risk: 'change',
+    fields: [ref('invoice', 'Sales invoice', 'sales_invoice'), ref('item', 'Item', 'item', false), field('rate', 'Rate per piece', 'money', num(/(?:\bat|@|₹|\brs\.?|\$|\brate(?: of| is| to)?|\bto)\s*([\d,]+(?:\.\d+)?)\b(?![-\w])/i)),
+      field('hsn_code', 'HSN', 'text', { pick: /\bhsn\s*(?:code)?\s*(?:is|to|:)?\s*(\d{4,8})/i }), field('gst_rate', 'GST %', 'number', num(/\b(\d{1,2})\s*%|\bgst\s*(?:of|to|at|is)?\s*(\d{1,2})\b/i))],
+    // One line, sent with its other values as stored (the route blanks a description it isn't given).
+    request: async (v) => {
+      if (v.rate == null && !v.hsn_code && v.gst_rate == null) throw new Error('Give the rate, HSN or GST %');
+      const lines = await queryAll('SELECT item_code, description, hsn_code, rate, gst_rate FROM sales_invoice_items WHERE invoice_no = ?', [v.invoice]);
+      const l = v.item ? lines.find((x) => x.item_code === v.item) : lines.length === 1 ? lines[0] : null;
+      if (!l) throw new Error(v.item ? `${v.item} is not on invoice ${v.invoice}` : `Which item? The invoice has ${lines.map((x) => x.item_code).join(', ')}`);
+      return { method: 'PUT', path: `/api/sales-invoices/${enc(v.invoice)}`, body: { lines: [{ ...l, ...(v.rate != null ? { rate: v.rate } : {}), ...(v.hsn_code ? { hsn_code: v.hsn_code } : {}), ...(v.gst_rate != null ? { gst_rate: v.gst_rate } : {}) }] } };
+    },
+    summary: (v, l) => `Invoice ${v.invoice}${l.item ? ` · ${l.item}` : ''}:${v.rate != null ? ` rate ${v.rate}` : ''}${v.hsn_code ? ` HSN ${v.hsn_code}` : ''}${v.gst_rate != null ? ` GST ${v.gst_rate}%` : ''}`, link: () => '/docs#sales' },
+
+  // ---- finance ----
+  { key: 'set_payment_reminder', about: 'Set the date to chase (remind about) payment of a sales bill / voucher from the books; it also keeps one payment reminder task.', risk: 'change',
+    fields: [ref('voucher', 'Sales voucher', 'sales_voucher'), need(field('reminder_date', 'Remind on', 'date', { when: 'future' }))],
+    request: (v) => ({ method: 'PUT', path: `/api/finance/sales/${enc(v.voucher)}/reminder`, body: { reminder_date: v.reminder_date } }),
+    summary: (v, l) => `Remind about ${l.voucher} on ${v.reminder_date}`, link: () => '/finance' },
 ];
 const ACTION_BY_KEY = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
 
@@ -296,6 +386,29 @@ const taskFinder = (status) => async (q) => {
     LEFT JOIN crm_companies co ON co.id = c.company_id WHERE t.status = ? ORDER BY t.due_date`, [status]);
   return top5(rank(q, rows, (r) => `${r.title} ${r.company || ''} ${r.poc_name || ''}`), (r) => `${r.title}${r.company && !r.title.includes(r.company) ? ` · ${r.company}` : ''} (${r.due_date})`);
 };
+// A record number said as a whole word ("S-111", "invoice 10000"), not inside another number.
+const named = (q, no) => new RegExp(`(^|[^\\w/-])${String(no).replace(/[.*+?^$()|[\]\\{}]/g, '\\$&')}(?![\\w/-])`, 'i').test(q);
+const lotLabel = (r) => `#${r.id} ${r.quantity} × ${r.item_code} on ${r.po_number} (${r.dispatch_date || 'no date'})`;
+const lineFinder = (closed) => async (q) => {
+  const rows = await queryAll(`SELECT pi.id, pi.item_code, pi.quantity_ordered, p.po_number, co.name AS company FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id
+    LEFT JOIN crm_companies co ON co.id = p.company_id WHERE p.status NOT IN (${closed})`);
+  const pos = (await E.poCandidates(q)).map((c) => c.po_number);
+  const code = (await E.itemCandidates(q))[0];
+  const pool = pos.length ? rows.filter((r) => pos.includes(r.po_number)) : rows;
+  const label = (r) => `${r.item_code} × ${r.quantity_ordered} on ${r.po_number} · ${r.company || '—'}`;
+  const exact = code ? pool.filter((r) => r.item_code === code.code) : [];
+  if (exact.length) return exact.map((r) => ({ id: r.id, label: label(r), score: 50 }));
+  return top5(rank(q, pool, (r) => `${r.po_number} ${r.item_code} ${E.normalizeCustomer(r.company || '')}`), label);
+};
+const requestFinder = (types) => async (q) => {
+  const rows = await queryAll(`SELECT id, type, created_by, payload FROM requests WHERE status = 'pending' AND type IN (${types}) ORDER BY id`);
+  const label = (r) => { const p = JSON.parse(r.payload || '{}'); return `#${r.id} ${r.type} ${p.item_code || p.number || ''}${p.num_reels ? ` × ${p.num_reels} reels` : p.reel_numbers ? ` × ${p.reel_numbers.length} reels` : ''} · ${r.created_by}`.replace(/\s+/g, ' '); };
+  const n = byNumber(rows, hashNo(q, 'request'), label);
+  if (n) return n;
+  const ranked = top5(rank(q, rows, (r) => { const p = JSON.parse(r.payload || '{}'); return `${r.type} ${r.type}s ${r.type === 'outward' ? 'shipment ship' : r.type === 'inward' ? 'receipt receive' : 'move'} ${r.created_by} ${p.item_code || ''} ${p.number || ''} ${p.customer_name || ''} ${(p.reel_numbers || []).join(' ')}`; }), label);
+  // "approve the pending request" with only one waiting: that one
+  return ranked.length ? ranked : rows.length === 1 && /\brequest\b/i.test(q) ? [{ id: rows[0].id, label: label(rows[0]), score: 1 }] : [];
+};
 const unitOf = (q) => { const r = E.reelBox(q); return r.reel || r.box; };
 
 const FIND = {
@@ -319,26 +432,37 @@ const FIND = {
   open_po: poFinder("p.status NOT IN ('dispatched', 'cancelled')"),
   draft_po: poFinder("p.status = 'draft'"),
   confirmed_po: poFinder("p.status = 'confirmed'"),
-  po_line: async (q) => {
-    const rows = await queryAll(`SELECT pi.id, pi.item_code, pi.quantity_ordered, p.po_number, co.name AS company FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id
-      LEFT JOIN crm_companies co ON co.id = p.company_id WHERE p.status NOT IN ('dispatched', 'cancelled', 'draft')`);
+  po_line: lineFinder("'dispatched', 'cancelled', 'draft'"),
+  po_line_open: lineFinder("'dispatched', 'cancelled'"),
+  dispatch: async (q) => {
+    const rows = await queryAll(`SELECT d.id, d.item_code, d.quantity, d.dispatch_date, p.po_number, co.name AS company FROM po_dispatches d JOIN crm_purchase_orders p ON p.id = d.po_id
+      LEFT JOIN crm_companies co ON co.id = p.company_id WHERE p.status NOT IN ('dispatched', 'cancelled') ORDER BY d.dispatch_date`);
+    const n = byNumber(rows, hashNo(q, 'lot|dispatch'), lotLabel);
+    if (n) return n;
     const pos = (await E.poCandidates(q)).map((c) => c.po_number);
     const code = (await E.itemCandidates(q))[0];
-    const pool = pos.length ? rows.filter((r) => pos.includes(r.po_number)) : rows;
-    const label = (r) => `${r.item_code} × ${r.quantity_ordered} on ${r.po_number} · ${r.company || '—'}`;
-    const exact = code ? pool.filter((r) => r.item_code === code.code) : [];
-    if (exact.length) return exact.map((r) => ({ id: r.id, label: label(r), score: 50 }));
-    return top5(rank(q, pool, (r) => `${r.po_number} ${r.item_code} ${E.normalizeCustomer(r.company || '')}`), label);
+    const pool = rows.filter((r) => (!pos.length || pos.includes(r.po_number)) && (!code || r.item_code === code.code));
+    // "the lot of 5000": a quantity said that matches a lot narrows it down
+    const said = new Set((q.match(/\d[\d,]*/g) || []).map((x) => Number(x.replace(/,/g, ''))));
+    if (pool.filter((r) => said.has(r.quantity)).length) pool.splice(0, pool.length, ...pool.filter((r) => said.has(r.quantity)));
+    if (pool.length && (pos.length || code)) return pool.map((r, i) => ({ id: r.id, label: lotLabel(r), score: 50 - i }));
+    return top5(rank(q, rows, (r) => `${r.po_number} ${r.item_code} ${E.normalizeCustomer(r.company || '')}`), lotLabel);
   },
-  request: async (q) => {
-    const rows = await queryAll("SELECT id, type, created_by, payload FROM requests WHERE status = 'pending' ORDER BY id");
-    const label = (r) => { const p = JSON.parse(r.payload || '{}'); return `#${r.id} ${r.type} ${p.item_code || p.number || ''}${p.num_reels ? ` × ${p.num_reels} reels` : p.reel_numbers ? ` × ${p.reel_numbers.length} reels` : ''} · ${r.created_by}`.replace(/\s+/g, ' '); };
-    const n = byNumber(rows, hashNo(q, 'request'), label);
-    if (n) return n;
-    const ranked = top5(rank(q, rows, (r) => { const p = JSON.parse(r.payload || '{}'); return `${r.type} ${r.type}s ${r.type === 'outward' ? 'shipment ship' : r.type === 'inward' ? 'receipt receive' : 'move'} ${r.created_by} ${p.item_code || ''} ${p.number || ''} ${p.customer_name || ''} ${(p.reel_numbers || []).join(' ')}`; }), label);
-    // "approve the pending request" with only one waiting: that one
-    return ranked.length ? ranked : rows.length === 1 && /\brequest\b/i.test(q) ? [{ id: rows[0].id, label: label(rows[0]), score: 1 }] : [];
+  sales_invoice: async (q) => {
+    const rows = await queryAll(`SELECT s.invoice_no, GROUP_CONCAT(i.item_code, ', ') AS items FROM sales_invoices s LEFT JOIN sales_invoice_items i ON i.invoice_no = s.invoice_no GROUP BY s.invoice_no ORDER BY s.invoice_no DESC`);
+    const hit = rows.filter((r) => named(q, r.invoice_no));
+    return hit.map((r) => ({ id: r.invoice_no, label: `Invoice ${r.invoice_no} · ${r.items || '—'}`, score: 50 }));
   },
+  sales_voucher: async (q) => {
+    const rows = await queryAll('SELECT voucher_no, party_name, amount, date FROM crm_tally_sales_vouchers ORDER BY date DESC');
+    const label = (r) => `${r.voucher_no} · ${r.party_name || '—'} · ${r.amount} (${r.date})`;
+    const hit = rows.filter((r) => named(q, r.voucher_no));
+    if (hit.length) return hit.map((r) => ({ id: r.voucher_no, label: label(r), score: 50 }));
+    // by customer only when a bill is mentioned: "chase Orbit about the payment" is a task, not this voucher
+    return /\b(voucher|bill|invoice)s?\b/i.test(q) ? top5(rank(q, rows, (r) => E.normalizeCustomer(r.party_name || '')), label, (r) => r.voucher_no) : [];
+  },
+  request: requestFinder("'inward', 'outward', 'transfer'"),
+  editable_request: requestFinder("'inward', 'outward'"),
   transfer: async (q) => {
     const u = unitOf(q);
     const label = (r) => `#${r.id} ${r.reel_number || r.box_number} → ${storeName(r.to_store)} (${String(r.transferred_at).slice(0, 10)})`;
@@ -388,14 +512,19 @@ const LABEL = {
   draft_po: async (v) => { const r = await queryOne(PO_SQL("p.id = ? AND p.status = 'draft'"), [v]); return r && poLabel(r); },
   confirmed_po: async (v) => { const r = await queryOne(PO_SQL("p.id = ? AND p.status = 'confirmed'"), [v]); return r && poLabel(r); },
   po_line: async (v) => { const r = await queryOne('SELECT pi.item_code, pi.quantity_ordered, p.po_number FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id WHERE pi.id = ?', [v]); return r && `${r.item_code} × ${r.quantity_ordered} on ${r.po_number}`; },
+  po_line_open: async (v) => { const r = await queryOne("SELECT pi.item_code, pi.quantity_ordered, p.po_number FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id WHERE pi.id = ? AND p.status NOT IN ('dispatched', 'cancelled')", [v]); return r && `${r.item_code} × ${r.quantity_ordered} on ${r.po_number}`; },
+  dispatch: async (v) => { const r = await queryOne('SELECT d.id, d.item_code, d.quantity, d.dispatch_date, p.po_number FROM po_dispatches d JOIN crm_purchase_orders p ON p.id = d.po_id WHERE d.id = ?', [v]); return r && lotLabel(r); },
+  sales_invoice: async (v) => (await queryOne('SELECT invoice_no FROM sales_invoices WHERE invoice_no = ?', [String(v)])) && `Invoice ${v}`,
+  sales_voucher: async (v) => { const r = await queryOne('SELECT voucher_no, party_name FROM crm_tally_sales_vouchers WHERE voucher_no = ?', [String(v)]); return r && `${r.voucher_no} · ${r.party_name || '—'}`; },
   request: async (v) => { const r = await queryOne("SELECT id, type FROM requests WHERE id = ? AND status = 'pending'", [v]); return r && `#${r.id} ${r.type}`; },
+  editable_request: async (v) => { const r = await queryOne("SELECT id, type FROM requests WHERE id = ? AND status = 'pending' AND type IN ('inward', 'outward')", [v]); return r && `#${r.id} ${r.type}`; },
   transfer: async (v) => { const r = await queryOne('SELECT id, reel_number, box_number, to_store FROM stock_transfers WHERE id = ?', [v]); return r && `#${r.id} ${r.reel_number || r.box_number} → ${storeName(r.to_store)}`; },
   outward: async (v) => { const r = await queryOne('SELECT id, reel_number, customer_name FROM outwards WHERE id = ?', [v]); return r && `#${r.id} ${r.reel_number} → ${r.customer_name}`; },
   proc: async (v) => { const r = await queryOne("SELECT number, supplier FROM procurement_orders WHERE id = ? AND status NOT IN ('cancelled', 'closed')", [v]); return r && `${r.number} · ${r.supplier}`; },
   proc_item: async (v) => { const r = await queryOne("SELECT i.item_code, o.number FROM procurement_items i JOIN procurement_orders o ON o.id = i.proc_id WHERE i.id = ? AND i.stage != 'Received'", [v]); return r && `${r.item_code} on ${r.number}`; },
   document: async (v) => { const r = await queryOne("SELECT doc_type, invoice_no, party_name FROM crm_invoices WHERE id = ? AND status IN ('pending', 'under_review')", [v]); return r && `${r.doc_type.replace(/_/g, ' ')} ${r.invoice_no || `#${v}`} · ${r.party_name || '—'}`; },
 };
-const NUMERIC_REF = (kind) => !['item', 'user'].includes(kind);
+const NUMERIC_REF = (kind) => !['item', 'user', 'sales_invoice', 'sales_voucher'].includes(kind);
 
 // "REEL-10031, REEL-10032 and BOX-1004" → every reel; a box stands for its reels still in stock.
 const UNIT_RE = /\b(reel|box)[-\s]?(\d{3,6})\b/gi;
