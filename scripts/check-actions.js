@@ -33,6 +33,12 @@ const { runAction } = require('../utils/actionRunner');
   const ss34line = (await one("SELECT id FROM crm_po_items WHERE po_id = ? AND item_code = 'SS34'", [sys2])).id;
   const cycleTask = (await one("SELECT id FROM crm_tasks WHERE title LIKE 'Cycle count%'"))?.id;
   const lm358 = (await one("SELECT i.id FROM procurement_items i WHERE i.item_code = 'LM358DR'")).id;
+  const orbit = (await one("SELECT id FROM crm_companies WHERE name LIKE 'Orbit%'")).id;
+  const lineOf = async (po, item) => (await one("SELECT pi.id FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id WHERE p.po_number = ? AND pi.item_code = ?", [po, item])).id;
+  const lotOf = async (po, item, qty) => (await one(`SELECT d.id FROM po_dispatches d JOIN crm_purchase_orders p ON p.id = d.po_id WHERE p.po_number = ? AND d.item_code = ?${qty ? ' AND d.quantity = ?' : ''}`, [po, item, ...(qty ? [qty] : [])])).id;
+  const lm358line = await lineOf('SYS-3', 'LM358DR'), movLine = await lineOf('SYS-5', 'MOV-14D471');
+  const stmLot = await lotOf('SYS-2', 'STM32G030', 5000), bcLot = await lotOf('SYS-4', 'BC857B'), ccLot = await lotOf('SYS-4', 'CC0603-104K');
+  const prc1 = (await one("SELECT id FROM procurement_orders WHERE number = 'PRC-1'")).id;
   const cases = [
     ['inward_stock', 'received 4 reels of SS34 at the main store', { item: 'SS34', num_reels: 4, store: 'primary' }],
     ['inward_stock', '6 reels of BC857B came in, 2 boxes', { item: 'BC857B', num_reels: 6, num_boxes: 2 }],
@@ -53,6 +59,19 @@ const { runAction } = require('../utils/actionRunner');
     ['reserve_stock', 'reserve stock for the SS34 line on SYS-2', { line: ss34line }],
     ['set_procurement_stage', 'the LM358DR order from the supplier is under QC now', { proc_item: lm358, stage: 'Under QC' }],
     ['create_procurement', 'order 10000 LM358DR from Lotus Semicon at 3.1', { supplier: 'Lotus Semicon', item: 'LM358DR', qty: 10000, unit_cost: 3.1 }],
+    ['edit_approve_request', 'approve request 4 but with only 3 reels', { request: 4, num_reels: 3 }],
+    ['edit_approve_request', "approve store's SS34 outward request with only REEL-10031", { request: 5, keep: 'REEL-10031' }],
+    ['edit_po', 'change the customer on SYS-5 to Orbit', { po: sys5, customer: orbit }],
+    ['edit_po_line', 'change the LM358DR on SYS-3 to 8000 pcs', { line: lm358line, qty: 8000 }],
+    ['edit_po_line', 'set the SS34 price on SYS-2 to 1.85', { line: ss34line, qty: null, unit_price: 1.85 }],
+    ['remove_po_line', 'remove the MOV-14D471 line from SYS-5', { line: movLine }],
+    ['edit_dispatch_lot', 'move the SYS-2 STM32G030 lot of 5000 to the 28th', { lot: stmLot, qty: null }],
+    ['edit_dispatch_lot', 'change the BC857B dispatch lot on SYS-4 to 8000 pcs', { lot: bcLot, qty: 8000 }],
+    ['delete_dispatch_lot', 'delete the CC0603-104K dispatch lot on SYS-4', { lot: ccLot }],
+    ['edit_procurement', 'PRC-1 is now expected next Friday', { proc: prc1 }],
+    ['edit_procurement', 'mark PRC-1 as ordered', { proc: prc1, status: 'ordered' }],
+    ['set_invoice_rate', 'set the rate of RC0603-10K on invoice 10001 to 0.07', { invoice: '10001', item: 'RC0603-10K', rate: 0.07 }],
+    ['set_payment_reminder', 'remind me to chase payment on voucher S-104 next Friday', { voucher: 'S-104' }],
   ];
   const bad = [];
   for (const [key, q, want] of cases) {
@@ -94,13 +113,22 @@ const { runAction } = require('../utils/actionRunner');
 
   const po = await go('create_po', { customer: co, item: tag, qty: 2000, unit_price: 3 });
   await go('add_po_line', { po: po.result.id, item: 'SS34', qty: 100, unit_price: 1.9 });
+  await go('edit_po', { po: po.result.id, order_date: '2026-11-01' });
+  assert.equal((await one('SELECT order_date FROM crm_purchase_orders WHERE id = ?', [po.result.id])).order_date, '2026-11-01');
   await go('confirm_po', { po: po.result.id });
   await go('set_po_dispatch_date', { po: po.result.id, expected_dispatch_date: '2026-12-31' });
   const line = (await one('SELECT id FROM crm_po_items WHERE po_id = ? AND item_code = ?', [po.result.id, tag])).id;
   await go('reserve_stock', { line });
   assert.ok((await one('SELECT COUNT(*) AS n FROM reels WHERE reserved_po_item_id = ?', [line])).n > 0);
   await go('release_reservation', { line });
+  await go('edit_po_line', { line, qty: 2500 });
+  assert.equal((await one('SELECT quantity_ordered FROM crm_po_items WHERE id = ?', [line])).quantity_ordered, 2500);
+  await go('remove_po_line', { line: (await one("SELECT id FROM crm_po_items WHERE po_id = ? AND item_code = 'SS34'", [po.result.id])).id });
   await go('add_dispatch_lot', { line, qty: 500, dispatch_date: '2026-12-01' });
+  const lot = (await one('SELECT id FROM po_dispatches WHERE po_id = ? ORDER BY id DESC', [po.result.id])).id;
+  await go('edit_dispatch_lot', { lot, dispatch_date: '2026-12-05' });
+  assert.deepEqual({ ...(await one('SELECT quantity, dispatch_date FROM po_dispatches WHERE id = ?', [lot])) }, { quantity: 500, dispatch_date: '2026-12-05' });
+  await go('delete_dispatch_lot', { lot });
   await go('ship_reels', { reels: reels[1], customer: co, invoice_number: `${tag}-INV`, po: po.result.id });
   const ow = await one('SELECT id FROM outwards WHERE reel_number = ?', [reels[1]]);
   assert.ok(ow, 'shipped');
@@ -112,6 +140,8 @@ const { runAction } = require('../utils/actionRunner');
 
   const pr = await go('create_procurement', { supplier: `${tag} Supplier`, item: tag, qty: 1000 });
   await go('set_procurement_stage', { proc_item: (await one('SELECT id FROM procurement_items WHERE proc_id = ?', [pr.result.id])).id, stage: 'Under QC' });
+  await go('edit_procurement', { proc: pr.result.id, expected_date: '2026-12-20', status: 'ordered' });
+  assert.deepEqual({ ...(await one('SELECT status, expected_date, supplier FROM procurement_orders WHERE id = ?', [pr.result.id])) }, { status: 'ordered', expected_date: '2026-12-20', supplier: `${tag} Supplier` });
   await go('cancel_procurement', { proc: pr.result.id });
 
   const t = await go('add_task', { title: `${tag} task`, due_date: day, client: cl.result.id, assignee: 'store' });
@@ -131,11 +161,33 @@ const { runAction } = require('../utils/actionRunner');
   await go('approve_request', { request: r1 });
   await go('reject_request', { request: r2, reject_reason: 'Duplicate' });
   assert.equal((await one('SELECT status FROM requests WHERE id = ?', [r2])).status, 'rejected');
+  // edit, then approve: fewer reels on an inward; one reel of two on a shipment
+  await run('inward_stock', { item: tag, num_reels: 3, store: 'primary' }, store);
+  const r3 = (await one("SELECT id FROM requests WHERE status = 'pending' AND payload LIKE ? ORDER BY id DESC", [`%${tag}%`])).id;
+  const before = (await one('SELECT COUNT(*) AS n FROM reels WHERE item_code = ?', [tag])).n;
+  await go('edit_approve_request', { request: r3, num_reels: 2 });
+  assert.equal((await one('SELECT COUNT(*) AS n FROM reels WHERE item_code = ?', [tag])).n, before + 2);
+  const two = (await S.queryAll("SELECT reel_number FROM reels WHERE item_code = ? AND status = 'In Stock' ORDER BY reel_number DESC LIMIT 2", [tag])).map((r) => r.reel_number);
+  assert.ok((await run('ship_reels', { reels: two.join(', '), customer: co, invoice_number: `${tag}-INV2` }, store)).pending);
+  const r4 = (await one("SELECT id FROM requests WHERE status = 'pending' AND type = 'outward' AND payload LIKE ? ORDER BY id DESC", [`%${tag}-INV2%`])).id;
+  await go('edit_approve_request', { request: r4, keep: two[0] });
+  assert.deepEqual((await S.queryAll('SELECT reel_number FROM outwards WHERE invoice_number = ?', [`${tag}-INV2`])).map((r) => r.reel_number), [two[0]]);
+  assert.ok(!(await runAction(owner, 'edit_approve_request', { request: r4, keep: two[1] })).ok, 'a done request is not editable');
 
   // documents waiting for review (rows made here; the real ones come from the AI read)
   const doc = async () => (await S.execute("INSERT INTO crm_invoices (doc_type, status, party_name, invoice_no) VALUES ('purchase_invoice', 'pending', ?, ?)", [`${tag} Supplier`, `${tag}/B`])).lastId;
   await go('approve_document', { doc: await doc() });
   await go('reject_document', { doc: await doc(), notes: 'Wrong GSTIN' });
+
+  // a partner-store sales invoice line (the demo's invoice 10001), set back to what it was
+  const inv = await one("SELECT rate, hsn_code FROM sales_invoice_items WHERE invoice_no = '10001' AND item_code = 'RC0603-10K'");
+  await go('set_invoice_rate', { invoice: '10001', item: 'RC0603-10K', rate: 0.07, hsn_code: '85332100' });
+  assert.deepEqual({ ...(await one("SELECT rate, hsn_code, description FROM sales_invoice_items WHERE invoice_no = '10001' AND item_code = 'RC0603-10K'")) }, { rate: 0.07, hsn_code: '85332100', description: 'Resistor 10k 1% 0603' });
+  await run('set_invoice_rate', { invoice: '10001', item: 'RC0603-10K', rate: inv.rate, hsn_code: inv.hsn_code });
+  assert.ok(!(await runAction(owner, 'set_invoice_rate', { invoice: '10001', rate: 1 })).ok, 'two lines: the item must be named');
+  await go('set_payment_reminder', { voucher: 'S-104', reminder_date: '2026-12-20' });
+  assert.equal((await one("SELECT payment_reminder_date FROM crm_tally_sales_vouchers WHERE voucher_no = 'S-104'")).payment_reminder_date, '2026-12-20');
+  assert.ok(await one("SELECT id FROM crm_tasks WHERE title LIKE '%S-104%' AND status = 'open' AND due_date = '2026-12-20'"));
 
   await go('archive_item', { item: tag });
   await go('delete_client', { client: cl.result.id });
