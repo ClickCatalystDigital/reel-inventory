@@ -331,6 +331,17 @@ async function initDB() {
     day TEXT PRIMARY KEY,
     count INTEGER NOT NULL DEFAULT 0
   )`);
+  // Connect Claude / ChatGPT (utils/oauth.js, routes/mcp.js): an AI app's connection is an api_keys row (access token hash, expiry,
+  // refresh token hash) that Settings → AI lists and disconnects. Only hashes are kept.
+  await connect().execute(`CREATE TABLE IF NOT EXISTS api_keys (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT NOT NULL, name TEXT NOT NULL, hash TEXT NOT NULL UNIQUE,
+    client_id TEXT, expires_at INTEGER, refresh_hash TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP, last_used_at DATETIME, revoked INTEGER NOT NULL DEFAULT 0)`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS oauth_clients (
+    client_id TEXT PRIMARY KEY, name TEXT, redirect_uris TEXT NOT NULL, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)`);
+  await connect().execute(`CREATE TABLE IF NOT EXISTS oauth_codes (
+    code_hash TEXT PRIMARY KEY, client_id TEXT NOT NULL, username TEXT NOT NULL, redirect_uri TEXT NOT NULL,
+    challenge TEXT NOT NULL, expires_at INTEGER NOT NULL)`);
   await connect().execute(`CREATE TABLE IF NOT EXISTS assistant_log (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     asked_by TEXT,

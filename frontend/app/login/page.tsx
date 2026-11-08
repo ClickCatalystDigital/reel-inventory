@@ -43,7 +43,9 @@ export default function LoginPage() {
       const data = await res.json();
       if (res.ok) {
         // The server sets the session cookie (HttpOnly) — nothing to store here.
-        window.location.href = data.role === "client" ? "/stock" : "/";
+        // Back to where the person was sent from (connecting Claude / ChatGPT): same-site paths only.
+        const next = new URLSearchParams(window.location.search).get("next");
+        window.location.href = next && next.startsWith("/") && !next.startsWith("//") ? next : data.role === "client" ? "/stock" : "/";
       } else {
         setError(data.error || "Login failed");
       }

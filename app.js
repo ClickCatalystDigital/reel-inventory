@@ -47,6 +47,10 @@ app.get('/api/logout', (req, res) => {
 // webhook secret instead (routes/invoices.js).
 app.post('/api/invoices/telegram-webhook', (req, res, next) => require('./routes/invoices').telegramWebhook(req, res).catch(next));
 
+// MCP (/mcp) and its OAuth sign-in endpoints: AI apps carry their own token, not the session cookie (routes/mcp.js).
+const mcp = require('./routes/mcp');
+app.use(mcp.router);
+
 // All routes below require login
 app.use((req, res, next) => {
   req.user = userFromHeaders((h) => req.headers[h]);
@@ -62,6 +66,9 @@ app.use((req, res, next) => {
   }
   next();
 });
+
+// Connect Claude / ChatGPT: the consent page's check and Allow, and Settings → AI's list of connections (admins only).
+app.use(mcp.signedIn);
 
 // CRM APIs are for LS Tech employees only (Gelco roles aren't covered by the client guard above).
 app.use(['/api/clients', '/api/tasks', '/api/products', '/api/invoices', '/api/orders', '/api/finance', '/api/procurement'], (req, res, next) => {
