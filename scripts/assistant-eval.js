@@ -139,7 +139,10 @@ const DEMO_CASES = [
   // a request we can't do is a plain no, not neighbouring data
   ['change my password', { type: 'text', says: /can't do that one|Settings/i }],
 ];
-if (process.env.EVAL_SET === 'demo') CASES.splice(0, CASES.length, ...DEMO_CASES);
+// The US demo (MARKET=NA) has the same sample records under American names.
+const US_NAMES = [['Neha Kapoor', 'Emily Carter'], ['Rahul Bansal', 'Jason Miller'], ['Imran Shaikh', 'Marcus Reed'], ['Pooja Iyer', 'Laura Chen'], ['Arvind Rao', 'Daniel Ortiz'], ['Neha', 'Emily']];
+const market = (s) => (process.env.MARKET === 'NA' ? US_NAMES.reduce((t, [a, b]) => t.split(a).join(b), s) : s);
+if (process.env.EVAL_SET === 'demo') CASES.splice(0, CASES.length, ...DEMO_CASES.map(([q, e]) => [market(q), e]));
 
 (async () => {
   // Every Cue Card (utils/cueCards.js) is a promise that the prompt works: ask each one too, filled from this database.
