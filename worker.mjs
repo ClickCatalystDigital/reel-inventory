@@ -30,6 +30,11 @@ export default {
     // passed with --var at deploy time).
     if (pathname === '/api/version') return Response.json({ commit: env.BUILD_COMMIT || null });
 
+    // Claude / ChatGPT: the MCP endpoint and the OAuth sign-in endpoints are API routes (routes/mcp.js), not pages.
+    if (pathname === '/mcp' || pathname === '/oauth/register' || pathname === '/oauth/token' || /^\/\.well-known\/(oauth-|openid-configuration)/.test(pathname)) {
+      return api.fetch(request, env, ctx);
+    }
+
     if (pathname.startsWith('/api/')) {
       // The demo has no password logins: everyone enters through /api/demo/enter.
       if (env.DEMO_MODE === '1' && pathname === '/api/login') return json(404, 'Not found');
@@ -55,7 +60,12 @@ export default {
     // The Ahrom Labs mark on the /demo header is public too.
     if (pathname !== '/login' && pathname !== '/favicon.ico' && pathname !== '/ahrom-labs-mark.webp' && !isDemoPage) {
       const user = userFromHeaders((h) => request.headers.get(h));
-      if (!user) return Response.redirect(new URL(demo ? '/demo' : '/login', request.url), 302);
+      if (!user) {
+        // The Connect page (Claude / ChatGPT sign-in) comes back here after the login.
+        const login = new URL(demo ? '/demo' : '/login', request.url);
+        if (pathname === '/oauth/authorize' && !demo) login.searchParams.set('next', pathname + url.search);
+        return Response.redirect(login, 302);
+      }
       const rule = ROLE_PAGE_ALLOWLIST[user.role];
       // Next's client-side navigation fetches RSC payloads ('/stocks.txt', '/stocks/__next._tree.txt');
       // gate them as the page they belong to, or allowlisted roles get redirected mid-navigation.

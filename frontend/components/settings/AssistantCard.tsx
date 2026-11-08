@@ -17,7 +17,7 @@ import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { ChipMark } from "@/components/assistant/ChipMark";
-import { BRAND } from "@/lib/brand";
+import { BRAND, DEMO } from "@/lib/brand";
 
 interface Balance { bought: number; used: number; left: number }
 interface DataAccess { on: boolean; approver_name?: string; approver_role?: string; recorded_by?: string; at?: string }
@@ -61,6 +61,45 @@ function MissedQuestions() {
         </ul>
       ))}
       <p className="text-xs text-muted-foreground">Use this list to decide which look-ups to add next.</p>
+    </div>
+  );
+}
+
+// "Connect Claude or ChatGPT": the MCP address to add as a connector, and this admin's connections (routes/mcp.js).
+// The AI app signs in with this login (OAuth) and then asks and prepares changes exactly like the chat; each change is
+// confirmed in that app before it is made. Off in the public demo.
+interface Connection { id: number; name: string; created_at: string; last_used_at: string | null }
+function ConnectApps() {
+  const [data, setData] = useState<{ url: string; connections: Connection[] } | null>(null);
+  const load = () => api<{ url: string; connections: Connection[] }>("/api/assistant/connections").then(setData).catch(() => {});
+  useEffect(() => { load(); }, []);
+  async function disconnect(c: Connection) {
+    if (!(await askConfirm({ title: `Disconnect ${c.name}?`, description: "It stops working at once. You can connect it again any time.", confirmLabel: "Disconnect", destructive: true }))) return;
+    await api(`/api/assistant/connections/${c.id}`, { method: "DELETE" }).then(load).catch(() => {});
+  }
+  if (!data) return null;
+  return (
+    <div className="space-y-2 border-t pt-4">
+      <p className="text-sm font-medium">Connect Claude or ChatGPT</p>
+      <p className="text-xs text-muted-foreground">
+        In Claude (Settings → Connectors → Add custom connector) or ChatGPT (a custom connector), paste this address, then sign in here and press Allow.
+        It can ask {BRAND.ai} anything and prepare changes; each change is shown there and made only when you confirm it.
+      </p>
+      <div className="flex items-center gap-2">
+        <Input readOnly value={data.url} className="h-8 font-mono text-xs" onFocus={(e) => e.target.select()} />
+        <Button size="sm" variant="outline" onClick={() => navigator.clipboard.writeText(data.url).then(() => showToast("Copied", "success"))}>Copy</Button>
+      </div>
+      {data.connections.length > 0 && (
+        <ul className="divide-y rounded-md border text-sm">
+          {data.connections.map((c) => (
+            <li key={c.id} className="flex items-center gap-3 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate">{c.name}</span>
+              <span className="shrink-0 text-xs text-muted-foreground">{c.last_used_at ? `used ${formatDateTime(c.last_used_at)}` : `added ${formatDateTime(c.created_at)}`}</span>
+              <Button size="sm" variant="ghost" className="text-destructive" onClick={() => disconnect(c)}>Disconnect</Button>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }
@@ -343,6 +382,7 @@ export function AssistantCard() {
       </div>
 
       <MissedQuestions />
+      {!DEMO && <ConnectApps />}
 
       <Dialog open={consentOpen} onOpenChange={setConsentOpen}>
         <DialogContent className="sm:max-w-lg">
