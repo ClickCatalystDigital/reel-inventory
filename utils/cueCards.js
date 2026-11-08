@@ -48,7 +48,7 @@ const CARDS = [
   ['stock', D, "Which items haven't shipped in 30 days?", tool('dead_stock')],
   ['stock', D, 'What is our total stock?', tool('stock_overview')],
   ['stock', D, 'Which items will run out in 30 days?', tool('stock_cover')],
-  ['stock', D, 'Do we stock {item_desc}?', tool('search_items')],
+  ['stock', D, 'Do we have any {item_word}?', tool('search_items')],
   ['stock', D, 'Where is {reel}?', tool('trace')],
   ['stock', D, 'What is in {box}?', tool('trace')],
   ['stock', K, 'How do I add a new item to the catalog?', text],
@@ -93,7 +93,7 @@ const CARDS = [
 // One real record per slot, the kind each card needs (an item with stock, a confirmed PO, a pending request…).
 const SLOT_SQL = {
   item: "SELECT r.item_code AS v FROM reels r JOIN items i ON i.item_code = r.item_code AND i.status = 'active' WHERE r.status = 'In Stock' AND r.store_code = 'primary' GROUP BY r.item_code ORDER BY COUNT(*) DESC LIMIT 1",
-  item_desc: "SELECT i.description AS v FROM items i WHERE i.status = 'active' AND i.description LIKE '% %' ORDER BY length(i.description) LIMIT 1",
+  item_word: "SELECT i.description AS v FROM items i WHERE i.status = 'active' AND i.description LIKE '% %' ORDER BY length(i.description) LIMIT 1",
   reel: "SELECT reel_number AS v FROM reels WHERE status = 'In Stock' AND store_code = 'primary' AND reserved_po_item_id IS NULL ORDER BY reel_number DESC LIMIT 1",
   box: "SELECT box_number AS v FROM reels WHERE status = 'In Stock' AND box_number IS NOT NULL ORDER BY box_number DESC LIMIT 1",
   moved_reel: "SELECT t.reel_number AS v FROM stock_transfers t JOIN reels r ON r.reel_number = t.reel_number AND r.store_code = t.to_store AND r.status = 'In Stock' ORDER BY t.id DESC LIMIT 1",
@@ -116,7 +116,7 @@ const SLOT_SQL = {
 const short = (slot, v) => {
   let s = String(v).split(' — ')[0].split(',')[0].split(':')[0].trim();
   if (['customer', 'company', 'supplier'].includes(slot)) s = s.replace(/\s+(pvt\.?|private|ltd\.?|limited|llp|inc\.?|distributors|co\.?)(\s|$).*$/i, '').trim();
-  if (slot === 'item_desc') s = s.split(' ').slice(0, 3).join(' ');
+  if (slot === 'item_word') s = `${s.split(' ')[0].toLowerCase().replace(/s$/, '')}s`; // "Varistor 14D471K" → "varistors"
   return slot === 'task' ? s.charAt(0).toLowerCase() + s.slice(1) : s;
 };
 
