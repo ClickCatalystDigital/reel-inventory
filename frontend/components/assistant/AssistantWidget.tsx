@@ -10,6 +10,7 @@ import { capitalize } from "@/lib/crm";
 import { safePath, type Briefing, type Reply } from "@/lib/assistant-links";
 import { ChipMark } from "./ChipMark";
 import { ResultCard } from "./ResultCard";
+import { ActionCard } from "./ActionCard";
 import { AiLimitOverlay } from "@/components/demo/AiLimitOverlay";
 import { BRAND, DEMO } from "@/lib/brand";
 import { track } from "@/components/demo/DemoAnalytics";
@@ -37,7 +38,7 @@ const store = {
   set: (k: string, v: string) => { try { localStorage.setItem(k, v); } catch { /* storage blocked */ } },
 };
 
-const replyText = (r: Reply) => [r.title, r.summary, r.text].filter(Boolean).join(" — ");
+const replyText = (r: Reply) => (r.type === "draft" && r.draft ? `Prepared: ${r.draft.summary}` : [r.title, r.summary, r.text].filter(Boolean).join(" — "));
 
 function Thinking() {
   return (
@@ -192,6 +193,15 @@ export function AssistantWidget() {
     },
     [msgs, text, busy, pathname, locked]
   );
+
+  // Cue Cards (/cue-cards): "Ask" opens the panel and sends that prompt, as if typed.
+  const sendRef = useRef(send);
+  useEffect(() => { sendRef.current = send; }, [send]);
+  useEffect(() => {
+    const onAsk = (e: Event) => { const q = (e as CustomEvent<{ q?: string }>).detail?.q; if (!q) return; setOpen(true); setTimeout(() => sendRef.current(q), 0); };
+    window.addEventListener("assistant:ask", onAsk);
+    return () => window.removeEventListener("assistant:ask", onAsk);
+  }, []);
 
   // Thumbs on an answer: logged server-side (no new table); a thumbs-down also removes the question from "your usual" and lands in
   // Settings → Ohm AI → "Questions it couldn't answer".
@@ -368,6 +378,11 @@ export function AssistantWidget() {
                       })}
                     </div>
                   </>
+                ) : m.reply?.type === "draft" && m.reply.draft ? (
+                  <>
+                    {m.reply.text && <p className="text-[12.5px] text-muted-foreground">{m.reply.text}</p>}
+                    <ActionCard draft={m.reply.draft} onNavigate={closeOnPhone} />
+                  </>
                 ) : m.reply ? (
                   <>
                     <div className="rounded-xl bg-muted px-3.5 py-2.5 text-[13.5px] leading-relaxed">
@@ -435,7 +450,7 @@ export function AssistantWidget() {
             <ArrowUp className="size-4" />
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-muted-foreground/70">Read-only · live data{quota ? ` · ${quota.used}/${quota.cap} questions today` : ""}</p>
+        <p className="mt-1.5 text-center text-[10px] text-muted-foreground/70">Live data · changes only when you press Save{quota ? ` · ${quota.used}/${quota.cap} questions today` : ""}</p>
       </form>
     </div>
     </>

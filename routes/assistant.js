@@ -116,6 +116,20 @@ router.post('/chat', ah(async (req, res) => {
   res.status(out.status).json(out.body);
 }));
 
+// Save on an action card: { action, fields } → the app's own route, as this person (utils/actionRunner.js re-checks the fields
+// and dispatches through app.js, so login, role, approval and demo rules apply exactly as on screen).
+router.post('/act', ah(async (req, res) => {
+  const { action, fields } = req.body || {};
+  const out = await require('../utils/actionRunner').runAction(req.user, String(action || ''), fields && typeof fields === 'object' ? fields : {});
+  res.status(out.ok ? 200 : out.status >= 500 ? 500 : out.status === 403 ? 403 : 400).json(out);
+}));
+
+// Cue Cards: the ladder, the areas and the prompts, filled with this system's own records (utils/cueCards.js).
+router.get('/cue-cards', ah(async (req, res) => {
+  const C = require('../utils/cueCards');
+  res.json({ levels: C.LEVELS, areas: C.AREAS, cards: await C.fillCards() });
+}));
+
 // Time-aware briefing (deterministic; nothing is sent to OpenRouter).
 router.get('/briefing', ah(async (req, res) => res.json(await require('../utils/assistantBriefing').briefing({ role: req.user.role, user: req.user.username }))));
 

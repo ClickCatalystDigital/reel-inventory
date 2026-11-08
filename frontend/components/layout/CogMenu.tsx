@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import Link from "next/link";
-import { Settings, Moon, Sun, LogOut, ClipboardList, BookOpen } from "lucide-react";
+import { Settings, Moon, Sun, LogOut, ClipboardList, BookOpen, MessageSquareQuote } from "lucide-react";
 import { DEMO } from "@/lib/brand";
 import {
   DropdownMenu,
@@ -52,6 +52,15 @@ export function CogMenu() {
             <Link href="/settings">
               <Settings className="size-4" />
               Settings
+            </Link>
+          </DropdownMenuItem>
+        )}
+        {isStaff && (
+          // what you can say to Ohm AI (app/(app)/cue-cards)
+          <DropdownMenuItem asChild>
+            <Link href="/cue-cards">
+              <MessageSquareQuote className="size-4" />
+              Cue Cards
             </Link>
           </DropdownMenuItem>
         )}
