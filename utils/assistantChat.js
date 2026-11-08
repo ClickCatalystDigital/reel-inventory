@@ -5,6 +5,7 @@
 const A = require('./assistant');
 const E = require('./assistantEntities');
 const { TOOLS, BY_KEY } = require('./assistantTools');
+const { ACTIONS, fill } = require('./assistantActions');
 const { GUIDE, SCREEN_LABEL, pickSections } = require('./assistantGuide');
 const { istDateString, queryAll, queryOne } = require('../db/schema');
 const brand = require('./brand');
@@ -15,7 +16,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const KINDS = brand.deep({
   data: "Asks for numbers, lists or records from LS TECH's own data: stock, reels, boxes, items, inward, shipments to customers, transfers, purchase orders, approvals, tasks or clients.",
   howto: 'Asks how to do something in the LS TECH app, or where to find a screen or feature.',
-  action: "Asks to create, change, delete, approve, reject, send or otherwise act on data (for example 'delete REEL-123', 'approve request 5', 'add a client').",
+  action: "Asks to create, change, move, ship, receive, reserve, approve, reject, cancel, delete, mark, log or record business records, or reports something that happened that the app records (for example 'received 4 reels of SS34', 'ship REEL-10031 to Voltix', 'move BOX-1004 to Gelco Stores', 'approve request 5', 'add a client', 'log a call with Neha: wants 15k next month', 'the cycle count task is done', 'remind me to call Orbit on Friday', 'Voltix sent a new PO').",
   smalltalk: 'A greeting, thanks or small talk.',
   offtopic: "Not about LS TECH's inventory, customers, tasks or this app (general knowledge, other companies, coding, jokes).",
   unclear: 'Too vague or incomplete to tell what is wanted.',
@@ -235,10 +236,57 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
   if (kind === 'offtopic') return done(text(`I only help with ${brand.app}: inventory, shipments, purchase orders, tasks, clients and how this app works. Ask me something about those.`, { chips: chips(STARTERS) }), kind, null);
   if (kind === 'unclear') return done(text("I'm not sure what you'd like to know. Could you say it with an item, customer or date? For example:", { chips: chips(STARTERS) }), kind, null, false);
 
+  // ---- action: one more Jev choice picks the task (utils/assistantActions.js), the card is filled from the words, and
+  // nothing changes until the person presses Save on it (POST /api/assistant/act). ----
   if (kind === 'action') {
-    // only suggest a screen when Jev is confident which one — a keyword guess ("delete" -> Catalog) would mislead
-    const sec = route.sectionP >= 0.6 ? sectionOf(route.section) : null;
-    return done(text("I can only look things up — I can't change, delete or approve anything." + (sec ? ` You can do that from ${sec.label.split(':')[0]}.` : ''), { link: sec ? link(sec.path) : null }), kind, null);
+    let pick = null;
+    if (!route.fallback) {
+      const ck = `action:${question.toLowerCase()}`;
+      let ans = cacheGet(ck);
+      if (!ans) {
+        try {
+          // Neutral ids (a0, a1…): Jev judges by the descriptions, not by a key's words ("done" ≠ complete_task).
+          const criteria = { ...Object.fromEntries(ACTIONS.map((a, i) => [`a${i}`, brand.text(a.about)])), none: 'None of these: some other change, or not a task for the app' };
+          const r = await A.jevDecide(key, { request: question, today }, { action: { type: 'choice', instructions: `Which task does the message ask ${brand.app} to do?`, criteria } });
+          const back = (k) => (k === 'none' ? 'none' : ACTIONS[Number(String(k).slice(1))]?.key || 'none');
+          const raw = r.answers.action || {};
+          ans = { action: { ...raw, choice: raw.choice && back(raw.choice), probabilities: raw.probabilities && Object.fromEntries(Object.entries(raw.probabilities).map(([k, v]) => [back(k), v])) } };
+          cost += r.cost; cacheSet(ck, ans);
+        } catch (e) { trace.push(`jev (action) unavailable: ${e.message}`); }
+      }
+      const t = ans ? top(ans.action) : null;
+      if (t?.key && t.key !== 'none' && t.p >= 0.5) pick = t.key;
+      trace.push(`action: ${ans ? ranked(ans.action).slice(0, 3).map((x) => `${x.key} ${Math.round(x.p * 100)}%`).join(', ') : '-'}`);
+      // Unsure between tasks, or Jev's pick names no record it can act on: prefer the candidate whose required records the
+      // message actually names (the same look-ups as the card, no extra model call).
+      const resolved = async (k) => (await fill(k, question, today)).fields.filter((f) => f.type === 'ref' && f.required && f.value == null).length === 0;
+      const lost = !!(pick && !(await resolved(pick)));
+      if (!pick && ans) {
+        const alt = ranked(ans.action).find((x) => x.key !== 'none');
+        if (alt && alt.p >= 0.25 && (await resolved(alt.key))) { pick = alt.key; trace.push(`runner-up taken: ${alt.key}`); }
+      }
+      if (ans && t && (t.p < 0.7 || lost)) {
+        const close = ranked(ans.action).filter((x) => x.key !== 'none' && x.p >= (lost ? 0.01 : 0.15)).slice(0, lost ? 5 : 3);
+        if (close.length > 1) {
+          const named = [];
+          for (const x of close) { const c = await fill(x.key, question, today); named.push({ key: x.key, n: c.fields.filter((f) => f.type === 'ref' && f.required && f.value != null).length, p: x.p }); }
+          named.sort((a, b) => b.n - a.n || b.p - a.p);
+          if (named[0].n > 0 && named[0].key !== pick) { trace.push(`action tie-break: ${named.map((x) => `${x.key}=${x.n}`).join(' ')}`); pick = named[0].key; }
+        }
+      }
+    }
+    if (pick) {
+      const c = await fill(pick, question, today);
+      return done({ type: 'draft', text: c.ready ? "Here's what I'll do. Check it and press Save; nothing changes until you do." : 'Fill in what’s missing, check it and press Save.', draft: { kind: 'action', ...c } }, kind, `action:${pick}`);
+    }
+    // No task fits, Jev wasn't sure it was a request at all, and a look-up clearly fits: it was a question.
+    // A clear request we can't do ("change my password") gets a plain no, not neighbouring data.
+    if (!(route.tool && route.tool !== 'none' && route.toolP >= 0.8 && route.kindP < 0.9)) {
+      const sec = route.sectionP >= 0.6 ? sectionOf(route.section) : null;
+      return done(text("I can't do that one from here yet." + (sec ? ` You can do it from ${sec.label.split(':')[0]}.` : ''), { link: sec ? link(sec.path) : null }), kind, null);
+    }
+    trace.push(`no action fits; answering with the look-up ${route.tool}`);
+    route.kind = 'data';
   }
 
   if (kind === 'howto') {

@@ -8,8 +8,20 @@ export const safePath = (p: string | null | undefined) => (p && ASSISTANT_PATHS.
 export interface ReplyColumn { key: string; label: string; type?: "int" | "date" | "text" }
 export interface ReplyLink { path: string; label: string }
 export interface ReplyOption { label: string; send: string }
+// A change Ohm AI prepared (utils/assistantActions.js): every field editable, nothing saved until Save.
+export interface DraftField {
+  name: string; label: string; required: boolean;
+  type: "text" | "longtext" | "number" | "money" | "date" | "enum" | "ref" | "phone" | "email" | "unit" | "units";
+  ref?: string; value: string | number | null; display?: string; error?: string;
+  options?: { value: string | number; label: string }[];
+}
+export interface ActionDraft {
+  kind: "action"; action: string; risk: "create" | "change" | "delete"; summary: string;
+  fields: DraftField[]; values: Record<string, string | number | null>; missing: string[]; errors: string[]; ready: boolean;
+}
 export interface Reply {
-  type: "text" | "table" | "ask";
+  type: "text" | "table" | "ask" | "draft";
+  draft?: ActionDraft;
   text?: string | null;
   title?: string;
   link?: ReplyLink | null;

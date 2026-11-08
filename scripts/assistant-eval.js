@@ -82,7 +82,73 @@ const CASES = [
   ['low stock and pending approvals', { type: 'table', tool: 'low_stock', second: 'pending_requests' }],
 ];
 
+// Actions (a card only; nothing is saved: dry mode, and a card needs Save). Named after the DEMO's sample data, so they run
+// with EVAL_SET=demo against a local scratch copy of the demo golden DB:
+//   DEMO_MODE=1 EVAL_SET=demo TURSO_URL=http://127.0.0.1:8089 node scripts/assistant-eval.js
+const act = (action) => ({ type: 'draft', action });
+const DEMO_CASES = [
+  ['received 4 reels of SS34 at the main store', act('inward_stock')],
+  ['6 reels of BC857B came in today, packed in 2 boxes', act('inward_stock')],
+  ['ship REEL-10031 and REEL-10032 to Voltix, invoice INV-9001', act('ship_reels')],
+  ['outward BOX-1004 to Brightline against invoice INV-778', act('ship_reels')],
+  ['move REEL-10060 to the Partner Store', act('transfer_stock')],
+  ['send BOX-1004 back to the main store', act('transfer_stock')],
+  ['undo the transfer of REEL-10060', act('undo_transfer')],
+  ['reverse the shipment of REEL-10031, it was entered by mistake', act('undo_outward')],
+  ['approve request 4', act('approve_request')],
+  ["approve store's LM358DR inward request", act('approve_request')],
+  ['reject request 6, the partner store has enough', act('reject_request')],
+  ['reserve stock for the SS34 line on SYS-2', act('reserve_stock')],
+  ['set aside the BC857B for SYS-4', act('reserve_stock')],
+  ['release the reservation on the SS34 line of SYS-2', act('release_reservation')],
+  ['add item BC817-40 NPN transistor SOT-23, 3000 per reel', act('add_item')],
+  ['new part TPS5430 buck converter, 2500 pcs per reel', act('add_item')],
+  ['change the SPQ of SS34 to 2000', act('edit_item')],
+  ['set the rate of LM358DR to 4.9', act('set_item_price')],
+  ['HSN code for SS34 is 85411000', act('set_item_price')],
+  ['archive the item MOV-14D471', act('archive_item')],
+  ['add a new client Ravi Menon from Apex Drives, 98250 12345', act('add_client')],
+  ['new lead: Kavita Shah at Lumen Controls', act('add_client')],
+  ['log a call with Neha Kapoor: wants 15k BC857B next month', act('log_client_note')],
+  ['spoke to Rahul Bansal, Voltix will send the next PO in December', act('log_client_note')],
+  ['Pooja Iyer is now qualified', act('set_client_stage')],
+  ['we lost Arvind Rao', act('set_client_stage')],
+  ['put Imran Shaikh on the watch list', act('set_client_watch')],
+  ["Neha Kapoor's new number is 98250 99999", act('edit_client')],
+  ['delete the client Arvind Rao', act('delete_client')],
+  ['add a task to call Neha Kapoor about the call-off on Friday', act('add_task')],
+  ['remind me to chase Orbit about the overdue payment tomorrow', act('add_task')],
+  ['the cycle count task is done', act('complete_task')],
+  ['reopen the SYS-1 post-dispatch follow up task', act('reopen_task')],
+  ['move the cycle count task to Monday', act('reschedule_task')],
+  ['give the freight invoice task to store', act('assign_task')],
+  ['delete the freight invoice review task', act('delete_task')],
+  ['Voltix sent a new PO VM/889 for 5000 SS34 at 1.9', act('create_po')],
+  ['new purchase order from Northwind for 2000 LM358DR', act('create_po')],
+  ['add 3000 BC847C at 0.4 to SYS-5', act('add_po_line')],
+  ['confirm SYS-5', act('confirm_po')],
+  ['SYS-2 has been dispatched', act('dispatch_po')],
+  ['move the SYS-3 dispatch date to the 28th', act('set_po_dispatch_date')],
+  ['plan a dispatch lot of 5000 BC857B on SYS-4 for the 20th', act('add_dispatch_lot')],
+  ['cancel SYS-5, Northwind dropped it', act('cancel_po')],
+  ['order 10000 LM358DR from Lotus Semicon at 3.1', act('create_procurement')],
+  ['the LM358DR from the supplier is in transit now', act('set_procurement_stage')],
+  ['cancel procurement order PRC-1', act('cancel_procurement')],
+  ['approve the bill of entry BE-2291', act('approve_document')],
+  ['reject bill BE-2291, the GSTIN is wrong', act('reject_document')],
+  // a request we can't do is a plain no, not neighbouring data
+  ['change my password', { type: 'text', says: /can't do that one|Settings/i }],
+];
+if (process.env.EVAL_SET === 'demo') CASES.splice(0, CASES.length, ...DEMO_CASES);
+
 (async () => {
+  // Every Cue Card (utils/cueCards.js) is a promise that the prompt works: ask each one too, filled from this database.
+  for (const c of await require('../utils/cueCards').fillCards()) {
+    if (!CASES.some(([q]) => q.toLowerCase() === c.q.toLowerCase())) CASES.push([c.q, c.expect.type === 'draft' ? act(c.expect.action) : c.expect]);
+  }
+  // EVAL_ONLY=<regex>: run just the matching questions.
+  const only = process.env.EVAL_ONLY ? new RegExp(process.env.EVAL_ONLY, 'i') : null;
+  if (only) CASES.splice(0, CASES.length, ...CASES.filter(([q]) => only.test(q)));
   let pass = 0, fail = 0, cost = 0, ms = 0; const bad = [];
   try {
     for (const [q, exp, prevQ] of CASES) {
@@ -98,6 +164,7 @@ const CASES = [
       const errs = [];
       if (rep.type !== exp.type) errs.push(`type ${rep.type} != ${exp.type}`);
       if (exp.tool && rep.tool !== exp.tool) errs.push(`tool ${rep.tool} != ${exp.tool}`);
+      if (exp.action && rep.draft?.action !== exp.action) errs.push(`action ${rep.draft?.action} != ${exp.action}`);
       for (const h of exp.has || []) if (!params.includes(h)) errs.push(`missing ${h} (have ${params.join(', ') || 'none'})`);
       if (exp.title && !(rep.title || '').includes(exp.title)) errs.push(`title "${rep.title}" lacks "${exp.title}"`);
       if (exp.second && !(rep.cards || []).some((c) => c.tool === exp.second)) errs.push(`no second card ${exp.second}`);

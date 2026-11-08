@@ -166,7 +166,8 @@ router.post('/enter', async (req, res, next) => {
 // After login: refuse anything that changes logins or settings, or uploads files. Of the AI, only the chat
 // (two questions per visitor, routes/assistant.js) and its read-only starters/briefing are open.
 const BLOCKED = ['/api/settings', '/api/gelco-docs/upload', '/api/invoices/upload', '/api/invoices/attachment'];
-const AI_OPEN = ['/api/assistant/chat', '/api/assistant/starters', '/api/assistant/briefing'];
+// act = Save on a chat card (the change itself runs through the normal routes and this same guard); nightly reset undoes it.
+const AI_OPEN = ['/api/assistant/chat', '/api/assistant/starters', '/api/assistant/briefing', '/api/assistant/act', '/api/assistant/cue-cards'];
 function guard(req, res, next) {
   const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
   const path = req.originalUrl.split('?')[0];
