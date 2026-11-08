@@ -39,6 +39,7 @@ const CARDS = [
   ['today', K, 'Where do I approve requests?', text],
   ['today', X, 'Approve request {request}', act('approve_request')],
   ['today', X, 'Reject request {request2}, wrong quantity', act('reject_request')],
+  ['today', X, 'Approve request {inward_request} but make it 2 reels', act('edit_approve_request')],
   ['today', X, 'The {task} task is done', act('complete_task')],
   ['today', X, 'Move the {task} task to Friday', act('reschedule_task')],
 
@@ -74,10 +75,15 @@ const CARDS = [
   ['orders', X, 'Confirm {draft_po}', act('confirm_po')],
   ['orders', X, 'Reserve stock for the {po_line}', act('reserve_stock')],
   ['orders', X, 'Move the {po} dispatch date to the 28th', act('set_po_dispatch_date')],
+  ['orders', X, 'Change the quantity of the {po_line} to 8000', act('edit_po_line')],
+  ['orders', X, 'Move the {dispatch_lot} to the 28th', act('edit_dispatch_lot')],
 
   ['buying', X, 'Order 10000 {item} from {supplier} at 3.1', act('create_procurement')],
   ['buying', X, 'The {proc_item} order from the supplier is under QC now', act('set_procurement_stage')],
   ['buying', X, 'Approve bill {doc}', act('approve_document')],
+  ['buying', X, '{proc} is now expected next Friday', act('edit_procurement')],
+  ['buying', X, 'Set the rate of {sales_line} to 0.07', act('set_invoice_rate')],
+  ['buying', X, 'Remind me to chase payment on voucher {voucher} next Monday', act('set_payment_reminder')],
 
   ['clients', D, 'How many clients are at each stage?', tool('clients_pipeline')],
   ['clients', D, 'Who is on the client watch list?', tool('clients_pipeline')],
@@ -109,6 +115,12 @@ const SLOT_SQL = {
   po_line: "SELECT pi.item_code || ' line on ' || p.po_number AS v FROM crm_po_items pi JOIN crm_purchase_orders p ON p.id = pi.po_id WHERE p.status = 'confirmed' ORDER BY p.id, pi.id LIMIT 1",
   supplier: "SELECT supplier AS v FROM procurement_orders ORDER BY id DESC LIMIT 1",
   proc_item: "SELECT i.item_code AS v FROM procurement_items i JOIN procurement_orders o ON o.id = i.proc_id WHERE i.stage NOT IN ('Received', 'Under QC') AND o.status NOT IN ('cancelled', 'closed') LIMIT 1",
+  inward_request: "SELECT id AS v FROM requests WHERE status = 'pending' AND type = 'inward' ORDER BY id LIMIT 1",
+  // a lot that is the only one for its PO + item, so the sentence names exactly one
+  dispatch_lot: "SELECT MIN(d.item_code) || ' dispatch lot on ' || p.po_number AS v FROM po_dispatches d JOIN crm_purchase_orders p ON p.id = d.po_id WHERE p.status = 'confirmed' GROUP BY d.po_id, d.item_code HAVING COUNT(*) = 1 ORDER BY MIN(d.id) LIMIT 1",
+  proc: "SELECT number AS v FROM procurement_orders WHERE status NOT IN ('cancelled', 'closed') ORDER BY id DESC LIMIT 1",
+  sales_line: "SELECT item_code || ' on invoice ' || invoice_no AS v FROM sales_invoice_items ORDER BY invoice_no DESC, item_code LIMIT 1",
+  voucher: 'SELECT voucher_no AS v FROM crm_tally_sales_vouchers ORDER BY date DESC LIMIT 1',
   doc: "SELECT invoice_no AS v FROM crm_invoices WHERE status = 'pending' AND invoice_no IS NOT NULL AND deleted_at IS NULL ORDER BY id DESC LIMIT 1",
 };
 
