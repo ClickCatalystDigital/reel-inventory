@@ -44,7 +44,7 @@ const { initDB } = require('../db/schema');
   const tl = await rpc({ jsonrpc: '2.0', id: 2, method: 'tools/list' });
   assert.deepEqual(tl.result.tools.map((t) => t.name), ['ask', 'propose_action', 'confirm_action']);
   const call = async (name, args) => JSON.parse((await rpc({ jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name, arguments: args } })).result.content[0].text.replace(/^Error: (.*)$/s, '{"error":"$1"}'));
-  const prop = await call('propose_action', { action: 'add_task', fields: { title: 'MCP check task', due_date: '2026-12-01', client: 'Neha' } });
+  const prop = await call('propose_action', { action: 'add_task', fields: { title: 'MCP check task', due_date: '2026-12-01', client: 'Orbit' } });
   assert.ok(prop.ready && prop.confirm_token, JSON.stringify(prop));
   const missing = await call('propose_action', { action: 'inward_stock', fields: { item: 'SS34' } });
   assert.deepEqual(missing.missing, ['num_reels']);
