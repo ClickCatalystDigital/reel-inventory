@@ -105,7 +105,7 @@ const ACTIONS = [
     },
     summary: (v, l) => `Update item ${l.item}`, link: () => '/catalog' },
 
-  { key: 'set_item_price', about: "Set an item's selling rate (price per piece), HSN code or GST rate used on invoices.", risk: 'change',
+  { key: 'set_item_price', about: "Set or change an item's selling rate (price per piece), its HSN code or its GST rate, used on invoices.", risk: 'change',
     fields: [ref('item', 'Item', 'item'), field('sale_rate', 'Rate per piece', 'money', num(/(?:\bat|@|₹|\brs\.?|\bto|\bis)\s*([\d,]+(?:\.\d+)?)\b(?![-\w])/i)), field('hsn_code', 'HSN', 'text', { pick: /\bhsn\s*(?:code)?\s*(?:is|to|:)?\s*(\d{4,8})/i }), field('gst_rate', 'GST %', 'number', num(/\b(\d{1,2})\s*%|\bgst\s*(?:of|to|at|is)?\s*(\d{1,2})/i))],
     request: async (v) => {
       const it = await queryOne('SELECT invoice_name, hsn_code, sale_rate, gst_rate FROM items WHERE item_code = ?', [v.item]);
@@ -132,7 +132,7 @@ const ACTIONS = [
     request: (v) => ({ method: 'POST', path: `/api/clients/${v.client}/notes`, body: { body: v.body } }),
     summary: (v, l) => `Log a note on ${l.client}`, link: (r, v) => `/clients?open=${v.client}` },
 
-  { key: 'set_client_stage', about: "Move a client to another pipeline stage (new, contacted, qualified, customer/won, lost).", risk: 'change',
+  { key: 'set_client_stage', about: "Move a client to another pipeline stage (new, contacted, qualified, customer/won, lost), e.g. we lost a client, or a lead is now qualified.", risk: 'change',
     fields: [ref('client', 'Client', 'contact'), need(field('status', 'Stage', 'enum', { options: CLIENT_STATUS }))],
     request: async (v) => ({ method: 'PUT', path: `/api/clients/${v.client}`, body: { ...(await contactRow(v.client)), status: v.status } }),
     summary: (v, l) => `Move ${l.client} to ${v.status}`, link: (r, v) => `/clients?open=${v.client}` },
@@ -198,7 +198,7 @@ const ACTIONS = [
       expected_dispatch_date: v.expected_dispatch_date || null, order_date: istDateString(), items: v.item && v.qty ? [{ item_code: v.item, quantity_ordered: Number(v.qty), unit_price: v.unit_price ?? null }] : [] } }),
     summary: (v, l) => `New PO ${v.po_number || '(next SYS number)'} from ${l.customer}${v.item && v.qty ? `: ${v.qty} × ${l.item}` : ''}`, link: () => '/orders' },
 
-  { key: 'add_po_line', about: 'Add a line (an item with quantity and price) to an existing customer purchase order.', risk: 'create',
+  { key: 'add_po_line', about: 'Add an item with a quantity (and price) to an existing customer purchase order, e.g. add 3000 of an item to SYS-5.', risk: 'create',
     fields: [ref('po', 'PO', 'open_po'), ref('item', 'Item', 'item'), need(field('qty', 'Quantity', 'number', num(QTY))), field('unit_price', 'Unit price', 'money', num(PRICE))],
     request: (v) => ({ method: 'POST', path: `/api/po/${v.po}/items`, body: { item_code: v.item, quantity_ordered: Number(v.qty), unit_price: v.unit_price ?? null } }),
     summary: (v, l) => `Add ${v.qty} × ${l.item} to ${l.po}`, link: () => '/orders' },

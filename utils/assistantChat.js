@@ -17,7 +17,7 @@ const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 
 const KINDS = brand.deep({
   data: "Asks for numbers, lists or records from LS TECH's own data: stock, reels, boxes, items, inward, shipments to customers, transfers, purchase orders, approvals, tasks or clients.",
   howto: 'Asks how to do something in the LS TECH app, or where to find a screen or feature.',
-  action: "Asks to create, change, move, ship, receive, reserve, approve, reject, cancel, delete, mark, log or record business records, or reports something that happened that the app records (for example 'received 4 reels of SS34', 'ship REEL-10031 to Voltix', 'move BOX-1004 to Gelco Stores', 'approve request 5', 'add a client', 'log a call with Neha: wants 15k next month', 'the cycle count task is done', 'remind me to call Orbit on Friday', 'Voltix sent a new PO').",
+  action: "Asks to create, change, move, ship, receive, reserve, approve, reject, cancel, delete, mark, log or record business records, or reports something that happened that the app records (for example 'received 4 reels of SS34', 'ship REEL-10031 to Voltix', 'move BOX-1004 to Gelco Stores', 'approve request 5', 'add a client', 'log a call with Neha: wants 15k next month', 'the cycle count task is done', 'remind me to call Orbit on Friday', 'Voltix sent a new PO', 'add 3000 BC847C to SYS-5', 'set the rate of LM358DR to 4.9', 'HSN for SS34 is 8541', 'we lost Arvind Rao', 'change my password'). Includes requests the app can't do, such as changing settings or passwords.",
   smalltalk: 'A greeting, thanks or small talk.',
   offtopic: "Not about LS TECH's inventory, customers, tasks or this app (general knowledge, other companies, coding, jokes).",
   unclear: 'Too vague or incomplete to tell what is wanted.',
@@ -239,7 +239,11 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
 
   // ---- action: one more Jev choice picks the task (utils/assistantActions.js), the card is filled from the words, and
   // nothing changes until the person presses Save on it (POST /api/assistant/act). ----
-  if (kind === 'action') {
+  // A hesitant "action" next to a certain look-up is a question ("low stock at the partner store").
+  if (kind === 'action' && route.kindP < 0.6 && route.tool && route.tool !== 'none' && route.toolP >= 0.9) {
+    trace.push(`weak action, certain look-up: answering with ${route.tool}`);
+    route.kind = 'data';
+  } else if (kind === 'action') {
     let pick = null;
     if (!route.fallback) {
       const ck = `action:${question.toLowerCase()}`;
@@ -260,7 +264,8 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
       trace.push(`action: ${ans ? ranked(ans.action).slice(0, 3).map((x) => `${x.key} ${Math.round(x.p * 100)}%`).join(', ') : '-'}`);
       // Unsure between tasks, or Jev's pick names no record it can act on: prefer the candidate whose required records the
       // message actually names (the same look-ups as the card, no extra model call).
-      const resolved = async (k) => (await fill(k, question, today)).fields.filter((f) => f.type === 'ref' && f.required && f.value == null).length === 0;
+      // "names its records": every required record (and reel/box) the task needs was found in the words
+      const resolved = async (k) => (await fill(k, question, today)).fields.filter((f) => ['ref', 'unit', 'units'].includes(f.type) && f.required && f.value == null).length === 0;
       const lost = !!(pick && !(await resolved(pick)));
       if (!pick && ans) {
         const alt = ranked(ans.action).find((x) => x.key !== 'none');
