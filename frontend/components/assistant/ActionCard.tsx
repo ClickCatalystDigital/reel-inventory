@@ -12,12 +12,15 @@ type Val = string | number | null;
 
 // A change Ohm AI prepared (utils/assistantActions.js): every field shown and editable, nothing saved until Save.
 // Save sends the fields to /api/assistant/act, which checks them again and runs the app's own route as this person.
-export function ActionCard({ draft, onNavigate }: { draft: ActionDraft; onNavigate?: () => void }) {
+export type AutoDone = { summary: string; link?: string | null; pending?: boolean; message?: string | null; undo_token?: string };
+
+// autoDone: Auto mode already saved it (AssistantWidget); shown as one line with Undo instead of the card.
+export function ActionCard({ draft, autoDone, onNavigate }: { draft: ActionDraft; autoDone?: AutoDone; onNavigate?: () => void }) {
   const [values, setValues] = useState<Record<string, Val>>(draft.values);
   const [display, setDisplay] = useState<Record<string, string>>(Object.fromEntries(draft.fields.filter((f) => f.type === "ref").map((f) => [f.name, f.display || ""])));
-  const [state, setState] = useState<"draft" | "saving" | "saved" | "cancelled">("draft");
+  const [state, setState] = useState<"draft" | "saving" | "saved" | "cancelled" | "undoing" | "undone">(autoDone ? "saved" : "draft");
   const [error, setError] = useState<string | null>(draft.errors?.join(". ") || null);
-  const [done, setDone] = useState<{ summary: string; link?: string | null; pending?: boolean; message?: string | null } | null>(null);
+  const [done, setDone] = useState<AutoDone | null>(autoDone ?? null);
   const del = draft.risk === "delete";
   const missing = draft.fields.filter((f) => f.required && empty(values[f.name]));
 
@@ -31,14 +34,29 @@ export function ActionCard({ draft, onNavigate }: { draft: ActionDraft; onNaviga
     } catch (e) { setError(e instanceof Error ? e.message : "Could not save"); setState("draft"); }
   }
 
-  if (state === "saved" && done) {
+  async function undo() {
+    setState("undoing"); setError(null);
+    try {
+      const res = await fetch("/api/assistant/undo", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ token: done?.undo_token }) });
+      const out = await res.json().catch(() => ({}));
+      if (!out.ok) throw new Error(out.error || "Could not undo");
+      setState("undone");
+    } catch (e) { setError(e instanceof Error ? e.message : "Could not undo"); setState("saved"); }
+  }
+
+  if (state === "undone" && done) return <p className="text-[12.5px] text-muted-foreground">Undone: {done.summary}.</p>;
+  if ((state === "saved" || state === "undoing") && done) {
     const link = safePath(done.link?.split("?")[0].split("#")[0]) ? done.link : null;
     return (
-      <p className="flex flex-wrap items-center gap-x-2 rounded-xl border border-emerald-600/25 bg-emerald-600/5 px-3.5 py-2 text-[13px]">
-        <Check className="size-3.5 text-emerald-600" />
-        {done.pending ? `Sent for approval: ${done.summary}.` : `Done: ${done.summary}.`}
-        {link && <Link href={link} onClick={onNavigate} className="inline-flex items-center gap-0.5 text-xs font-medium underline underline-offset-2">Open <ArrowUpRight className="size-3" /></Link>}
-      </p>
+      <div>
+        <p className="flex flex-wrap items-center gap-x-2 rounded-xl border border-emerald-600/25 bg-emerald-600/5 px-3.5 py-2 text-[13px]">
+          <Check className="size-3.5 text-emerald-600" />
+          {done.pending ? `Sent for approval: ${done.summary}.` : `Done: ${done.summary}.`}
+          {link && <Link href={link} onClick={onNavigate} className="inline-flex items-center gap-0.5 text-xs font-medium underline underline-offset-2">Open <ArrowUpRight className="size-3" /></Link>}
+          {done.undo_token && <button type="button" onClick={undo} disabled={state === "undoing"} className="text-xs font-medium underline underline-offset-2 disabled:opacity-50">{state === "undoing" ? "Undoing…" : "Undo"}</button>}
+        </p>
+        {error && <p className="mt-1 text-[12px] text-destructive">{error}</p>}
+      </div>
     );
   }
   if (state === "cancelled") return <p className="text-[12.5px] text-muted-foreground">Not saved.</p>;

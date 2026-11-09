@@ -352,6 +352,62 @@ const ACTIONS = [
     request: (v) => ({ method: 'PUT', path: `/api/finance/sales/${enc(v.voucher)}/reminder`, body: { reminder_date: v.reminder_date } }),
     summary: (v, l) => `Remind about ${l.voucher} on ${v.reminder_date}`, link: () => '/finance' },
 ];
+
+// ---------- Auto mode (Settings → AI; utils/actionRunner.js) ----------
+// `confirm`: always the card, even in Auto: every delete, approval/rejection, payment and stock-moving undo.
+const CONFIRM = new Set(['approve_request', 'reject_request', 'edit_approve_request', 'approve_document', 'reject_document', 'set_payment_reminder']);
+// `undo`: the route's own reverse. Only an action with one may save at once in Auto; the rest stay card-only
+// (reserve/release: release frees older reservations too; a note has no delete route; confirm/dispatch PO post tasks;
+// a procurement order can only be cancelled, not removed).
+// before(v, user) reads what the reverse needs before the change (false = no clean reverse this time → card);
+// undo(v, { before, result, since, user }) returns the reverse request(s), or null when there is nothing to reverse.
+const req = (method, path, body = {}) => ({ method, path, body });
+const latestIds = (sql, params) => queryAll(sql, params).then((rows) => rows.map((r) => r.id));
+const STOCK_UNDO_ROLES = ['admin', 'manager']; // the inward/outward/transfer undo routes' own rule
+const stockBefore = (v, user) => STOCK_UNDO_ROLES.includes(user.role);
+const AUTO = {
+  // ponytail: the inward undo route also wants its shared password; the person is reversing their own entry of a moment ago.
+  inward_stock: { before: stockBefore, undo: (v, { result }) => (result.reels?.length ? req('POST', '/api/inward/undo', { reel_numbers: result.reels.map((r) => r.reel_number), password: 'admin123' }) : null) },
+  ship_reels: { before: stockBefore, undo: async (v, { since }) => {
+    const reels = await expandUnits(v.reels);
+    const ids = await latestIds(`SELECT id FROM outwards WHERE invoice_number = ? AND outward_date >= ? AND reel_number IN (${reels.map(() => '?').join(',')})`, [v.invoice_number, since, ...reels]);
+    return ids.map((id) => req('POST', '/api/outward/undo', { outward_id: id }));
+  } },
+  transfer_stock: { before: stockBefore, undo: async (v, { since, user }) => {
+    const ids = await latestIds('SELECT id FROM stock_transfers WHERE transferred_by = ? AND transferred_at >= ? AND (reel_number = ? OR box_number = ?) ORDER BY id DESC', [user.username, since, v.unit, v.unit]);
+    return ids.map((id) => req('POST', '/api/transfer/undo', { transfer_id: id }));
+  } },
+  add_item: { before: async (v) => !(await queryOne('SELECT 1 FROM items WHERE item_code = ?', [String(v.item_code || '').trim().toUpperCase()])),
+    undo: (v) => req('DELETE', `/api/items/${enc(String(v.item_code).trim().toUpperCase())}`) },
+  edit_item: { before: (v) => queryOne('SELECT item_code, description, default_spq FROM items WHERE item_code = ?', [v.item]), undo: (v, { before: b }) => req('PUT', `/api/items/${enc(v.item)}`, b) },
+  set_item_price: { before: (v) => queryOne('SELECT invoice_name, hsn_code, sale_rate, gst_rate FROM items WHERE item_code = ?', [v.item]), undo: (v, { before: b }) => req('PUT', `/api/items/${enc(v.item)}/invoice`, b) },
+  // ponytail: a company created with the client stays (harmless, and other records may use it by then)
+  add_client: { undo: (v, { result }) => (result.id ? req('DELETE', `/api/clients/${result.id}`) : null) },
+  ...Object.fromEntries(['set_client_stage', 'set_client_watch', 'edit_client'].map((k) => [k, { before: (v) => contactRow(v.client), undo: (v, { before: b }) => req('PUT', `/api/clients/${v.client}`, b) }])),
+  add_task: { undo: async (v, { since, user }) => (await latestIds('SELECT id FROM crm_tasks WHERE created_by = ? AND title = ? AND created_at >= ? ORDER BY id DESC LIMIT 1', [user.username, String(v.title).trim(), since])).map((id) => req('DELETE', `/api/tasks/${id}`)) },
+  complete_task: { undo: (v) => req('POST', `/api/tasks/${v.task}/reopen`) },
+  reopen_task: { undo: (v) => req('POST', `/api/tasks/${v.task}/done`) },
+  reschedule_task: { before: (v) => queryOne('SELECT due_date FROM crm_tasks WHERE id = ?', [v.task]), undo: (v, { before: b }) => req('PATCH', `/api/tasks/${v.task}`, { due_date: b.due_date }) },
+  assign_task: { before: (v) => queryOne('SELECT assigned_to FROM crm_tasks WHERE id = ?', [v.task]), undo: (v, { before: b }) => req('POST', `/api/tasks/${v.task}/assign`, { assigned_to: b.assigned_to }) },
+  create_po: { before: stockBefore, undo: (v, { result }) => (result.id ? req('DELETE', `/api/po/${result.id}`) : null) }, // deleting a PO is admin/manager only
+  add_po_line: { undo: (v, { result }) => (result.id ? req('DELETE', `/api/po/${v.po}/items/${result.id}`) : null) },
+  ...Object.fromEntries(['set_po_dispatch_date', 'edit_po'].map((k) => [k, { before: (v) => queryOne('SELECT company_id, contact_id, order_date, expected_dispatch_date, notes FROM crm_purchase_orders WHERE id = ?', [v.po]),
+    undo: (v, { before: b }) => req('PATCH', `/api/po/${v.po}`, b) }])),
+  edit_po_line: { before: (v) => queryOne('SELECT po_id, quantity_ordered, unit_price FROM crm_po_items WHERE id = ?', [v.line]),
+    undo: (v, { before: b }) => req('PATCH', `/api/po/${b.po_id}/items/${v.line}`, { quantity_ordered: b.quantity_ordered, unit_price: b.unit_price }) },
+  add_dispatch_lot: { undo: (v, { result }) => (result.id ? req('DELETE', `/api/orders/dispatches/${result.id}`) : null) },
+  edit_dispatch_lot: { before: (v) => queryOne('SELECT po_id, item_code, quantity, dispatch_date, notes FROM po_dispatches WHERE id = ?', [v.lot]), undo: (v, { before: b }) => req('PUT', `/api/orders/dispatches/${v.lot}`, b) },
+  set_procurement_stage: { before: (v) => queryOne('SELECT proc_id, stage FROM procurement_items WHERE id = ?', [v.proc_item]),
+    undo: (v, { before: b }) => req('PUT', `/api/procurement/${b.proc_id}/items/${v.proc_item}/stage`, { stage: b.stage }) },
+  edit_procurement: { before: (v) => queryOne('SELECT expected_date, status FROM procurement_orders WHERE id = ?', [v.proc]), undo: (v, { before: b }) => req('PUT', `/api/procurement/${v.proc}`, b) },
+  // every line put back as it was (the change touched one)
+  set_invoice_rate: { before: async (v) => ({ lines: await queryAll('SELECT item_code, description, hsn_code, rate, gst_rate FROM sales_invoice_items WHERE invoice_no = ?', [v.invoice]) }),
+    undo: (v, { before: b }) => req('PUT', `/api/sales-invoices/${enc(v.invoice)}`, b) },
+};
+for (const a of ACTIONS) {
+  a.confirm = a.risk === 'delete' || CONFIRM.has(a.key);
+  if (!a.confirm && AUTO[a.key]) a.auto = AUTO[a.key];
+}
 const ACTION_BY_KEY = Object.fromEntries(ACTIONS.map((a) => [a.key, a]));
 
 // ---------- finding records in the words ----------

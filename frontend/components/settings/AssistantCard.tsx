@@ -26,6 +26,7 @@ interface DataAccess { on: boolean; approver_name?: string; approver_role?: stri
 interface Settings {
   model: string; hasKey: boolean; keyLast4: string | null; mode: "show" | "write"; cap: number;
   dataAccess: DataAccess; jevModel: string; balance: Balance | null; usedToday: number; creditsUrl: string;
+  actionsOn: boolean; autoRoles: string[];
 }
 interface Model { id: string; name: string; context: number | null; in: number | null; out: number | null }
 interface TestResult { ok?: boolean; answered?: string; ms?: number; cost?: number; error?: string; link?: string; linkLabel?: string }
@@ -381,6 +382,32 @@ export function AssistantCard() {
             <Button variant="outline" size="sm" onClick={() => setConsentOpen(true)}>Record approval and switch on</Button>
           )}
         </div>
+      </div>
+
+      <div className="space-y-2 rounded-lg border bg-muted/30 p-3">
+        <div className="flex items-center gap-2">
+          <Badge variant={s.actionsOn ? "default" : "outline"}>{s.actionsOn ? "On" : "Off"}</Badge>
+          <p className="text-sm font-medium">Allow changes from the assistant</p>
+          <Button variant="outline" size="sm" className="ml-auto" disabled={busy} onClick={() => put({ actions: !s.actionsOn }, s.actionsOn ? "Changes switched off" : "Changes switched on")}>{s.actionsOn ? "Switch off" : "Switch on"}</Button>
+        </div>
+        <p className="text-xs text-muted-foreground">
+          {s.actionsOn ? "The assistant can prepare changes (receive stock, add a task, update a client…). Each one runs the screen's own rules for the person asking." : "Off: the assistant only answers questions and explains how things work. It never offers to change anything, here or from Claude / ChatGPT."}
+        </p>
+        {s.actionsOn && (
+          <div className="space-y-1.5 border-t pt-2">
+            <p className="text-xs font-medium">Roles that may use Auto</p>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+              {([["admin", "Owner / admin"], ["manager", "Manager"], ["user", "Staff"]] as const).map(([role, label]) => (
+                <label key={role} className="flex items-center gap-1.5 text-sm">
+                  <Checkbox checked={s.autoRoles.includes(role)} disabled={busy}
+                    onCheckedChange={(v) => put({ autoRoles: v === true ? [...s.autoRoles, role] : s.autoRoles.filter((r) => r !== role) }, "Auto roles saved")} />
+                  {label}
+                </label>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground">Auto saves adds and edits at once, with Undo. Deletes, approvals and payments always show the card first. Everyone else, and Claude / ChatGPT, always confirm.</p>
+          </div>
+        )}
       </div>
 
       <MissedQuestions />

@@ -43,6 +43,20 @@ router.put('/settings', ah(async (req, res) => {
     return res.json(await payload());
   }
 
+  // Changes from the assistant: on/off, and the roles that may use Auto (adds and edits save at once, with Undo).
+  if (b.actions !== undefined || b.autoRoles !== undefined) {
+    const entries = [], detail = {};
+    if (b.actions !== undefined) { entries.push(['assistant_actions', b.actions ? 'on' : 'off']); detail.actions = !!b.actions; }
+    if (b.autoRoles !== undefined) {
+      if (!Array.isArray(b.autoRoles) || b.autoRoles.some((r) => !A.AUTO_ROLE_CHOICES.includes(r))) return res.status(400).json({ error: 'Unknown role.' });
+      const roles = [...new Set(b.autoRoles)];
+      entries.push(['assistant_auto_roles', JSON.stringify(roles)]); detail.autoRoles = roles;
+    }
+    await A.setSettings(user, entries);
+    await A.audit(user, 'actions', detail);
+    return res.json(await payload());
+  }
+
   if (b.cap !== undefined) {
     const cap = Number(b.cap);
     if (!Number.isInteger(cap) || cap < 1 || cap > 10000) return res.status(400).json({ error: 'Daily limit must be a whole number from 1 to 10000.' });
@@ -119,8 +133,14 @@ router.post('/chat', ah(async (req, res) => {
 // Save on an action card: { action, fields } → the app's own route, as this person (utils/actionRunner.js re-checks the fields
 // and dispatches through app.js, so login, role, approval and demo rules apply exactly as on screen).
 router.post('/act', ah(async (req, res) => {
-  const { action, fields } = req.body || {};
-  const out = await require('../utils/actionRunner').runAction(req.user, String(action || ''), fields && typeof fields === 'object' ? fields : {});
+  const { action, fields, auto } = req.body || {};
+  const out = await require('../utils/actionRunner').runAction(req.user, String(action || ''), fields && typeof fields === 'object' ? fields : {}, { auto: auto === true });
+  res.status(out.ok ? 200 : out.status >= 500 ? 500 : [403, 409].includes(out.status) ? out.status : 400).json(out);
+}));
+
+// Undo on an Auto save: { token } from /act's answer (signed, this login, 30 minutes).
+router.post('/undo', ah(async (req, res) => {
+  const out = await require('../utils/actionRunner').undoAction(req.user, req.body?.token);
   res.status(out.ok ? 200 : out.status >= 500 ? 500 : out.status === 403 ? 403 : 400).json(out);
 }));
 
@@ -160,7 +180,9 @@ router.get('/starters', ah(async (req, res) => {
      GROUP BY LOWER(TRIM(question)) HAVING COUNT(*) >= 2 ORDER BY n DESC, MAX(at) DESC LIMIT 3`,
     [req.user.username, wallClock(new Date(Date.now() - 60 * 86400e3)), req.user.username]
   );
-  res.json({ usual: rows.map((r) => r.q), defaults: require('../utils/assistantChat').STARTERS });
+  // `auto`: whether this person may switch the chat to Auto (Settings → AI). The server checks again on every save.
+  const s = await A.getSettings();
+  res.json({ usual: rows.map((r) => r.q), defaults: require('../utils/assistantChat').STARTERS, auto: A.autoAllowed(s, req.user.role) });
 }));
 
 module.exports = router;

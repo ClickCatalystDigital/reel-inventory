@@ -12,7 +12,9 @@ const DEFAULT_MODEL = 'google/gemma-4-26b-a4b-it';
 const JEV_MODEL = 'typesafe/jev-1.13';
 const MODES = ['show', 'write'];
 const DEFAULT_CAP = 100;
-const KEYS = ['assistant_model', 'assistant_key_enc', 'assistant_key_last4', 'assistant_mode', 'assistant_cap', 'assistant_data_access'];
+const KEYS = ['assistant_model', 'assistant_key_enc', 'assistant_key_last4', 'assistant_mode', 'assistant_cap', 'assistant_data_access', 'assistant_actions', 'assistant_auto_roles'];
+// Roles that can use the chat at all (app.js guard), so the only ones Auto can be given to.
+const AUTO_ROLE_CHOICES = ['admin', 'manager', 'user'];
 
 const headers = (key) => ({ authorization: `Bearer ${key}`, 'content-type': 'application/json', 'x-title': 'LS TECH' });
 const timeout = () => AbortSignal.timeout(15000);
@@ -40,8 +42,14 @@ async function getSettings() {
     // Public demo: the data is made up, so data questions are on without a recorded approval.
     dataAccess: process.env.DEMO_MODE === '1' ? { on: true, demo: true } : da && da.on ? da : { on: false, ...da },
     jevModel: JEV_MODEL,
+    // Changes from the assistant (action cards, MCP actions): on unless switched off. Auto: off for every role until ticked.
+    actionsOn: r.assistant_actions !== 'off',
+    autoRoles: (parseJSON(r.assistant_auto_roles, []) || []).filter((x) => AUTO_ROLE_CHOICES.includes(x)),
   };
 }
+
+// Whether this person's Auto may save this action at once. The server's answer, never the browser's.
+const autoAllowed = (s, role, action) => !!(s.actionsOn && s.autoRoles.includes(role) && (!action || action.auto));
 
 async function setSettings(user, entries) {
   const at = nowIST();
@@ -168,6 +176,6 @@ async function usedToday() {
 
 module.exports = {
   CREDITS_URL, DEFAULT_MODEL, JEV_MODEL, MODES, DEFAULT_CAP,
-  getSettings, setSettings, getKey, saveKey, audit,
+  getSettings, setSettings, getKey, saveKey, audit, autoAllowed, AUTO_ROLE_CHOICES,
   openRouterError, getBalance, listModels, jevDecide, writeAnswer, logAsk, useQuestion, usedToday,
 };

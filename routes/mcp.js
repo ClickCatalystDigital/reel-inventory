@@ -49,6 +49,7 @@ function tools() {
       description: `Prepare one change for the person to approve. Returns a preview, anything missing, and a confirm_token. Show the preview to the person and only call confirm_action after they agree. Dates are YYYY-MM-DD; a * marks a required field; record fields take an id or a name.\nActions:\n${catalogue}`,
       inputSchema: { type: 'object', properties: { action: { type: 'string', enum: ACTIONS.map((a) => a.key) }, fields: { type: 'object', description: 'Field values by name' } }, required: ['action', 'fields'] },
       async run({ action, fields }, user) {
+        if (!(await require('../utils/assistant').getSettings()).actionsOn) throw new Error('Changes from the assistant are switched off in Settings → AI');
         const c = await check(action, fields || {});
         const preview = Object.fromEntries(c.fields.map((f) => [f.label, f.type === 'ref' ? f.display || f.value : f.value]));
         if (!c.ready) {
