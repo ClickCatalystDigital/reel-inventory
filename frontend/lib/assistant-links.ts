@@ -18,6 +18,7 @@ export interface DraftField {
 export interface ActionDraft {
   kind: "action"; action: string; risk: "create" | "change" | "delete"; summary: string;
   fields: DraftField[]; values: Record<string, string | number | null>; missing: string[]; errors: string[]; ready: boolean;
+  auto?: boolean; // this person's Auto may save it at once (the server checks again)
 }
 export interface Reply {
   type: "text" | "table" | "ask" | "draft";

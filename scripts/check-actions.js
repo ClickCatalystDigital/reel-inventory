@@ -200,8 +200,59 @@ const { runAction } = require('../utils/actionRunner');
   const missing = await runAction(owner, 'add_client', {});
   assert.ok(!missing.ok && /Missing: poc_name/.test(missing.error));
 
+  // ---- 3. Auto mode (Settings → AI). A scratch copy, so the settings rows may be written; put back to the defaults after. ----
+  const { undoAction } = require('../utils/actionRunner');
+  const setAuto = (actions, roles) => require('../utils/assistant').setSettings('check', [['assistant_actions', actions], ['assistant_auto_roles', JSON.stringify(roles)]]);
+  const auto = (who, key, fields) => runAction(who, key, fields, { auto: true });
+  const undo = async (r, who = owner) => { assert.ok(r.ok && r.undo_token, `auto save should give an undo: ${r.error}`); const u = await undoAction(who, r.undo_token); assert.ok(u.ok, `undo: ${u.error}`); };
+  const tag2 = `${tag}A`;
+  await setAuto('on', ['admin']);
+  // a role not ticked, and an always-confirm action, get the card (nothing saved)
+  assert.ok((await auto(store, 'add_task', { title: `${tag2} no`, due_date: day })).needsConfirm, 'staff not ticked for Auto');
+  assert.ok(!(await one('SELECT id FROM crm_tasks WHERE title = ?', [`${tag2} no`])));
+  const keep = (await one("SELECT id FROM crm_tasks WHERE status = 'open' ORDER BY id DESC")).id;
+  assert.ok((await auto(owner, 'delete_task', { task: keep })).needsConfirm, 'a delete always confirms');
+  assert.ok(await one('SELECT id FROM crm_tasks WHERE id = ?', [keep]));
+  assert.ok((await auto(owner, 'log_client_note', { client: neha, body: 'x' })).needsConfirm, 'no clean reverse: card only');
+  // saved at once, then undone through the routes' own reverse
+  const added = await auto(owner, 'add_item', { item_code: tag2, description: 'Auto part', default_spq: 500 });
+  assert.ok(added.ok && added.undo_token);
+  const ed = await auto(owner, 'edit_item', { item: tag2, description: 'Auto part, edited' });
+  await undo(ed);
+  assert.equal((await one('SELECT description FROM items WHERE item_code = ?', [tag2])).description, 'Auto part');
+  await run('set_item_price', { item: tag2, sale_rate: 1, hsn_code: '8542' }); // the partner store needs invoice details
+  const inw = await auto(owner, 'inward_stock', { item: tag2, num_reels: 2, store: 'primary' });
+  const r2s = (await S.queryAll("SELECT reel_number FROM reels WHERE item_code = ? AND status = 'In Stock' ORDER BY reel_number", [tag2])).map((r) => r.reel_number);
+  await undo(await auto(owner, 'transfer_stock', { unit: r2s[0], to_store: 'secondary' }));
+  assert.equal((await one('SELECT store_code FROM reels WHERE reel_number = ?', [r2s[0]])).store_code, 'primary');
+  await undo(await auto(owner, 'ship_reels', { reels: r2s[1], customer: co, invoice_number: `${tag2}-INV` }));
+  assert.equal((await one('SELECT status FROM reels WHERE reel_number = ?', [r2s[1]])).status, 'In Stock');
+  await undo(inw);
+  assert.equal((await one("SELECT COUNT(*) AS n FROM reels WHERE item_code = ? AND status != 'Deleted'", [tag2])).n, 0);
+  await undo(await auto(owner, 'add_task', { title: `${tag2} task`, due_date: day }));
+  assert.ok(!(await one('SELECT id FROM crm_tasks WHERE title = ?', [`${tag2} task`])));
+  const pooja = (await one('SELECT id, status FROM crm_contacts WHERE poc_name = ?', [market('Pooja Iyer')]));
+  await undo(await auto(owner, 'set_client_stage', { client: pooja.id, status: 'lost' }));
+  assert.equal((await one('SELECT status FROM crm_contacts WHERE id = ?', [pooja.id])).status, pooja.status);
+  await undo(added);
+  assert.equal((await one('SELECT status FROM items WHERE item_code = ?', [tag2])).status, 'Deleted');
+  // staff ticked for Auto: their stock entries still go for approval (no undo), their task saves at once
+  await setAuto('on', ['admin', 'user']);
+  const sp = await auto(store, 'inward_stock', { item: 'SS34', num_reels: 1, store: 'primary' });
+  assert.ok(sp.needsConfirm, 'staff inward: no clean undo for staff, so the card (and then approval)');
+  await undo(await auto(store, 'add_task', { title: `${tag2} staff`, due_date: day }), store);
+  // an undo token is this login's only
+  const other = await auto(owner, 'add_task', { title: `${tag2} mine`, due_date: day });
+  assert.equal((await undoAction(store, other.undo_token)).status, 403);
+  await undoAction(owner, other.undo_token);
+  // switched off: no changes at all, Auto or not
+  await setAuto('off', ['admin']);
+  assert.equal((await runAction(owner, 'add_task', { title: `${tag2} off`, due_date: day })).status, 403);
+  assert.ok(!require('../utils/assistant').autoAllowed(await require('../utils/assistant').getSettings(), 'admin'));
+  await setAuto('on', []);
+
   const untested = ACTIONS.map((a) => a.key).filter((k) => !done.includes(k));
   assert.deepEqual(untested, [], `not run end to end: ${untested.join(', ')}`);
-  console.log(`check-actions: ${cases.length} sentences filled, all ${ACTIONS.length} actions ran end to end, role checks held`);
+  console.log(`check-actions: ${cases.length} sentences filled, all ${ACTIONS.length} actions ran end to end, role checks held, Auto + Undo held`);
   process.exit(0);
 })().catch((e) => { console.error(e.message); process.exit(1); });

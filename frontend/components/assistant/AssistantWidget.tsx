@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ArrowUp, ArrowUpRight, ChevronDown, Lock, RotateCcw, ThumbsDown, ThumbsUp, X } from "lucide-react";
 import { useAuth } from "@/lib/auth";
+import type { AutoDone } from "./ActionCard";
 import { cn } from "@/lib/utils";
 import { capitalize } from "@/lib/crm";
 import { safePath, type Briefing, type Reply } from "@/lib/assistant-links";
@@ -20,6 +21,7 @@ interface Msg {
   role: "user" | "assistant";
   content?: string; // user text, or a plain-text rendering of the reply (sent back as history)
   reply?: Reply;
+  autoDone?: AutoDone; // Auto mode saved this draft at once (no card)
   error?: { text: string; link?: string; linkLabel?: string };
   fb?: boolean; // thumbs given: true = good, false = bad
 }
@@ -81,6 +83,13 @@ export function AssistantWidget() {
 
   // LS Tech staff only (admin, manager, user). Gelco roles and clients never get the bubble; the server enforces it too.
   const canUse = ["admin", "manager", "user"].includes(user?.role ?? "");
+  // Manual / Auto (Settings → AI picks the roles). Remembered per person in this browser; the server decides each save.
+  const [autoAllowed, setAutoAllowed] = useState(false);
+  const modeKey = `lsai_mode_${user?.username ?? ""}`;
+  const [autoMode, setAutoMode] = useState(false);
+  useEffect(() => { setAutoMode(store.get(modeKey) === "auto"); }, [modeKey]);
+  const toggleMode = () => setAutoMode((a) => { store.set(modeKey, a ? "manual" : "auto"); return !a; });
+  const auto = autoAllowed && autoMode;
   const locked = DEMO && demoAi?.left === 0;
 
   useEffect(() => {
@@ -139,6 +148,7 @@ export function AssistantWidget() {
     fetch("/api/assistant/starters").then((r) => (r.ok ? r.json() : null)).then((d) => {
       if (!d) return;
       setUsual(d.usual ?? []);
+      setAutoAllowed(!!d.auto);
       if (d.defaults?.length) setDefaults(d.defaults);
     }).catch(() => {});
   }, [open, canUse]);
@@ -180,7 +190,15 @@ export function AssistantWidget() {
         if (!res.ok || !data?.reply) {
           setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", error: { text: data?.error || "Something went wrong. Please try again.", link: data?.link, linkLabel: data?.linkLabel } }]);
         } else {
-          setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", reply: data.reply, content: replyText(data.reply) }]);
+          // Auto: an add or edit the server marked safe saves now; anything it refuses (needsConfirm) shows the card as usual.
+          let autoDone: AutoDone | undefined;
+          const d = data.reply.draft;
+          if (auto && data.reply.type === "draft" && d?.auto && d.ready) {
+            const out = await fetch("/api/assistant/act", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: d.action, fields: d.values, auto: true }) })
+              .then((r) => r.json()).catch(() => null);
+            if (out?.ok) autoDone = out;
+          }
+          setMsgs((m) => [...m, { id: idRef.current++, role: "assistant", reply: data.reply, autoDone, content: autoDone ? `Done: ${autoDone.summary}` : replyText(data.reply) }]);
           if (data.reply.type === "table") contextRef.current = data.reply.context ?? null;
           else if (data.reply.type === "text") contextRef.current = null;
           if (data.meta) setQuota({ used: data.meta.used, cap: data.meta.cap });
@@ -191,7 +209,7 @@ export function AssistantWidget() {
         setBusy(false);
       }
     },
-    [msgs, text, busy, pathname, locked]
+    [msgs, text, busy, pathname, locked, auto]
   );
 
   // Cue Cards (/cue-cards): "Ask" opens the panel and sends that prompt, as if typed.
@@ -380,8 +398,8 @@ export function AssistantWidget() {
                   </>
                 ) : m.reply?.type === "draft" && m.reply.draft ? (
                   <>
-                    {m.reply.text && <p className="text-[12.5px] text-muted-foreground">{m.reply.text}</p>}
-                    <ActionCard draft={m.reply.draft} onNavigate={closeOnPhone} />
+                    {m.reply.text && !m.autoDone && <p className="text-[12.5px] text-muted-foreground">{m.reply.text}</p>}
+                    <ActionCard draft={m.reply.draft} autoDone={m.autoDone} onNavigate={closeOnPhone} />
                   </>
                 ) : m.reply ? (
                   <>
@@ -441,6 +459,12 @@ export function AssistantWidget() {
             placeholder="Ask about stock, shipments, POs…"
             className="max-h-28 min-h-9 flex-1 resize-none bg-transparent px-2.5 py-2 text-base outline-none placeholder:text-muted-foreground/70 md:text-sm"
           />
+          {autoAllowed && (
+            <button type="button" onClick={toggleMode} aria-pressed={autoMode} title={autoMode ? "Auto: adds and edits save at once, with Undo" : "Manual: every change waits for Save"}
+              className={cn("h-9 shrink-0 rounded-lg px-2 text-[11px] font-medium transition-colors", autoMode ? "bg-foreground/10 text-foreground" : "text-muted-foreground hover:text-foreground")}>
+              {autoMode ? "Auto" : "Manual"}
+            </button>
+          )}
           <button
             type="submit"
             disabled={busy || !text.trim()}
@@ -450,7 +474,7 @@ export function AssistantWidget() {
             <ArrowUp className="size-4" />
           </button>
         </div>
-        <p className="mt-1.5 text-center text-[10px] text-muted-foreground/70">Live data · changes only when you press Save{quota ? ` · ${quota.used}/${quota.cap} questions today` : ""}</p>
+        <p className="mt-1.5 text-center text-[10px] text-muted-foreground/70">Live data · {auto ? "Auto: adds and edits save at once" : "changes only when you press Save"}{quota ? ` · ${quota.used}/${quota.cap} questions today` : ""}</p>
       </form>
     </div>
     </>

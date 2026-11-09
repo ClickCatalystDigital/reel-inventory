@@ -5,7 +5,7 @@
 const A = require('./assistant');
 const E = require('./assistantEntities');
 const { TOOLS, BY_KEY } = require('./assistantTools');
-const { ACTIONS, fill } = require('./assistantActions');
+const { ACTIONS, ACTION_BY_KEY, fill } = require('./assistantActions');
 const { GUIDE, SCREEN_LABEL, pickSections } = require('./assistantGuide');
 const { istDateString, queryAll, queryOne } = require('../db/schema');
 const brand = require('./brand');
@@ -280,9 +280,11 @@ async function turn({ user, role = 'admin', messages, path, dry, context }) {
         }
       }
     }
+    if (pick && !settings.actionsOn) return done(text('Changes from the assistant are switched off in Settings. Make this change on its screen; I can still answer questions.'), kind, `action:${pick}`);
     if (pick) {
       const c = await fill(pick, question, today);
-      return done({ type: 'draft', text: c.ready ? "Here's what I'll do. Check it and press Save; nothing changes until you do." : 'Fill in what’s missing, check it and press Save.', draft: { kind: 'action', ...c } }, kind, `action:${pick}`);
+      // auto: this person's Auto may save it at once (Settings → AI, and the task has a clean Undo). /act checks again.
+      return done({ type: 'draft', text: c.ready ? "Here's what I'll do. Check it and press Save; nothing changes until you do." : 'Fill in what’s missing, check it and press Save.', draft: { kind: 'action', ...c, auto: A.autoAllowed(settings, role, ACTION_BY_KEY[pick]) } }, kind, `action:${pick}`);
     }
     // No task fits, Jev wasn't sure it was a request at all, and a look-up clearly fits: it was a question.
     // A clear request we can't do ("change my password") gets a plain no, not neighbouring data.
