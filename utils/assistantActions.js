@@ -295,6 +295,11 @@ const ACTIONS = [
     request: (v) => ({ method: 'POST', path: `/api/po/${v.po}/cancel`, body: {} }),
     summary: (v, l) => `Cancel ${l.po}`, link: () => '/orders' },
 
+  { key: 'delete_po', about: 'Delete (remove permanently) a customer purchase order entered by mistake or twice, with its lines, dispatch lots and documents.', risk: 'delete',
+    fields: [ref('po', 'PO', 'open_po')],
+    request: (v) => ({ method: 'DELETE', path: `/api/po/${v.po}`, body: {} }),
+    summary: (v, l) => `Delete ${l.po} permanently`, link: () => '/docs#po' },
+
   // ---- procurement (buying from suppliers) ----
   { key: 'create_procurement', about: 'Order stock from a supplier: a new procurement (purchase) order for an item and quantity, as a draft.', risk: 'create',
     fields: [need(field('supplier', 'Supplier', 'text', { pick: /\b(?:from|with)\s+([A-Z][\w&.]*(?:\s+[A-Z][\w&.]*){0,4})/ })), ref('item', 'Item', 'item'), need(field('qty', 'Quantity', 'number', num(QTY))),

@@ -137,6 +137,9 @@ const { runAction } = require('../utils/actionRunner');
   await go('dispatch_po', { po: po.result.id, dispatch_date: day });
   const po2 = await go('create_po', { customer: co, po_number: `${tag}/2` });
   await go('cancel_po', { po: po2.result.id });
+  const po3 = await go('create_po', { customer: co, po_number: `${tag}/3`, item: tag, qty: 10 });
+  await go('delete_po', { po: po3.result.id });
+  assert.ok(!(await one('SELECT id FROM crm_purchase_orders WHERE id = ?', [po3.result.id])), 'PO deleted');
 
   const pr = await go('create_procurement', { supplier: `${tag} Supplier`, item: tag, qty: 1000 });
   await go('set_procurement_stage', { proc_item: (await one('SELECT id FROM procurement_items WHERE proc_id = ?', [pr.result.id])).id, stage: 'Under QC' });
@@ -234,6 +237,48 @@ const { runAction } = require('../utils/actionRunner');
   const pooja = (await one('SELECT id, status FROM crm_contacts WHERE poc_name = ?', [market('Pooja Iyer')]));
   await undo(await auto(owner, 'set_client_stage', { client: pooja.id, status: 'lost' }));
   assert.equal((await one('SELECT status FROM crm_contacts WHERE id = ?', [pooja.id])).status, pooja.status);
+  // every other Auto action: saved at once, changed something, and Undo put it back exactly
+  const autoDone = ['add_item', 'edit_item', 'inward_stock', 'transfer_stock', 'ship_reels', 'add_task', 'set_client_stage'];
+  const snap = async (sql, args) => JSON.stringify(await S.queryAll(sql, args));
+  const roundTrip = async (key, fields, sql, args = []) => {
+    const was = await snap(sql, args);
+    const r = await auto(owner, key, fields);
+    assert.ok(r.ok && r.undo_token, `${key} in Auto: ${r.error || 'no undo'}`);
+    assert.notEqual(await snap(sql, args), was, `${key} changed nothing`);
+    await undo(r);
+    assert.equal(await snap(sql, args), was, `${key}: Undo should put it back`);
+    autoDone.push(key);
+  };
+  await roundTrip('set_item_price', { item: tag2, sale_rate: 3, gst_rate: 12 }, 'SELECT invoice_name, hsn_code, sale_rate, gst_rate FROM items WHERE item_code = ?', [tag2]);
+  await roundTrip('add_client', { poc_name: `${tag2} Lead` }, 'SELECT id FROM crm_contacts WHERE poc_name = ?', [`${tag2} Lead`]);
+  await roundTrip('set_client_watch', { client: imran, severity: (await one('SELECT severity FROM crm_contacts WHERE id = ?', [imran])).severity === 1 ? 2 : 1 }, 'SELECT poc_name, designation, email, phone, status, severity FROM crm_contacts WHERE id = ?', [imran]);
+  await roundTrip('edit_client', { client: pooja.id, email: 'auto@example.com', designation: 'Buyer' }, 'SELECT poc_name, designation, email, phone, status, severity FROM crm_contacts WHERE id = ?', [pooja.id]);
+  await run('add_task', { title: `${tag2} rt`, due_date: day });
+  const tid2 = (await one('SELECT id FROM crm_tasks WHERE title = ?', [`${tag2} rt`])).id;
+  const taskSql = 'SELECT status, due_date, assigned_to FROM crm_tasks WHERE id = ?';
+  await roundTrip('complete_task', { task: tid2 }, taskSql, [tid2]);
+  await roundTrip('reschedule_task', { task: tid2, due_date: '2026-12-30' }, taskSql, [tid2]);
+  await roundTrip('assign_task', { task: tid2, assignee: 'manager' }, taskSql, [tid2]);
+  await run('complete_task', { task: tid2 });
+  await roundTrip('reopen_task', { task: tid2 }, 'SELECT status FROM crm_tasks WHERE id = ?', [tid2]);
+  await roundTrip('create_po', { customer: co, po_number: `${tag2}/P` }, 'SELECT id FROM crm_purchase_orders WHERE po_number = ?', [`${tag2}/P`]);
+  const poQ = (await run('create_po', { customer: co, po_number: `${tag2}/Q`, item: tag2, qty: 50, unit_price: 2 })).result.id;
+  const poSql = 'SELECT company_id, contact_id, order_date, expected_dispatch_date, notes FROM crm_purchase_orders WHERE id = ?';
+  await roundTrip('set_po_dispatch_date', { po: poQ, expected_dispatch_date: '2026-12-29' }, poSql, [poQ]);
+  await roundTrip('edit_po', { po: poQ, order_date: '2026-11-02', customer: voltix }, poSql, [poQ]);
+  await roundTrip('add_po_line', { po: poQ, item: 'SS34', qty: 10 }, 'SELECT id, item_code, quantity_ordered FROM crm_po_items WHERE po_id = ?', [poQ]);
+  const lineQ = (await one('SELECT id FROM crm_po_items WHERE po_id = ?', [poQ])).id;
+  await roundTrip('edit_po_line', { line: lineQ, qty: 77, unit_price: 2.2 }, 'SELECT quantity_ordered, unit_price FROM crm_po_items WHERE id = ?', [lineQ]);
+  await roundTrip('add_dispatch_lot', { line: ss34line, qty: 5, dispatch_date: '2026-12-02' }, 'SELECT id, quantity FROM po_dispatches WHERE po_id = ?', [sys2]);
+  await roundTrip('edit_dispatch_lot', { lot: stmLot, qty: 4999, dispatch_date: '2026-12-03' }, 'SELECT quantity, dispatch_date, notes FROM po_dispatches WHERE id = ?', [stmLot]);
+  const stage = (await one('SELECT stage FROM procurement_items WHERE id = ?', [lm358])).stage;
+  await roundTrip('set_procurement_stage', { proc_item: lm358, stage: stage === 'In Transit' ? 'Under QC' : 'In Transit' }, 'SELECT stage FROM procurement_items WHERE id = ?', [lm358]);
+  await roundTrip('edit_procurement', { proc: prc1, expected_date: '2026-12-24' }, 'SELECT expected_date, status FROM procurement_orders WHERE id = ?', [prc1]);
+  await roundTrip('set_invoice_rate', { invoice: '10001', item: 'RC0603-10K', rate: 0.09, gst_rate: 12 }, "SELECT item_code, description, hsn_code, rate, gst_rate FROM sales_invoice_items WHERE invoice_no = '10001' ORDER BY item_code");
+  const noAuto = ACTIONS.filter((a) => a.auto && !autoDone.includes(a.key)).map((a) => a.key);
+  assert.deepEqual(noAuto, [], `Auto + Undo not checked: ${noAuto.join(', ')}`);
+  // every delete is always-confirm, and nothing always-confirm can save in Auto
+  assert.deepEqual(ACTIONS.filter((a) => (a.risk === 'delete' && !a.confirm) || (a.confirm && a.auto)).map((a) => a.key), []);
   await undo(added);
   assert.equal((await one('SELECT status FROM items WHERE item_code = ?', [tag2])).status, 'Deleted');
   // staff ticked for Auto: their stock entries still go for approval (no undo), their task saves at once
@@ -253,6 +298,6 @@ const { runAction } = require('../utils/actionRunner');
 
   const untested = ACTIONS.map((a) => a.key).filter((k) => !done.includes(k));
   assert.deepEqual(untested, [], `not run end to end: ${untested.join(', ')}`);
-  console.log(`check-actions: ${cases.length} sentences filled, all ${ACTIONS.length} actions ran end to end, role checks held, Auto + Undo held`);
+  console.log(`check-actions: ${cases.length} sentences filled, all ${ACTIONS.length} actions ran end to end, role checks held, Auto + Undo round-tripped for ${autoDone.length} actions`);
   process.exit(0);
 })().catch((e) => { console.error(e.message); process.exit(1); });

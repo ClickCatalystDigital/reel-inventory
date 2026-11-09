@@ -42,6 +42,9 @@ const CARDS = [
   ['today', X, 'Approve request {inward_request} but make it 2 reels', act('edit_approve_request')],
   ['today', X, 'The {task} task is done', act('complete_task')],
   ['today', X, 'Move the {task} task to Friday', act('reschedule_task')],
+  ['today', X, 'Reopen the {done_task} task', act('reopen_task')],
+  ['today', X, 'Give the {task} task to {colleague}', act('assign_task')],
+  ['today', X, 'Delete the {task} task', act('delete_task')],
 
   ['stock', D, 'How many reels of {item} do we have, in each store?', tool('stock_for_item')],
   ['stock', D, 'What is running low?', tool('low_stock')],
@@ -56,6 +59,7 @@ const CARDS = [
   ['stock', X, 'Add item BC817-40 NPN transistor SOT-23, 3000 per reel', act('add_item')],
   ['stock', X, 'Set the rate of {item} to 4.9', act('set_item_price')],
   ['stock', X, 'Change the SPQ of {item} to 2000', act('edit_item')],
+  ['stock', X, 'Archive {item}, we no longer sell it', act('archive_item')],
 
   ['moves', D, 'What came in last week?', tool('inward_history')],
   ['moves', D, 'What did we ship to {customer} this month?', tool('outward_by_customer')],
@@ -77,10 +81,21 @@ const CARDS = [
   ['orders', X, 'Move the {po} dispatch date to the 28th', act('set_po_dispatch_date')],
   ['orders', X, 'Change the quantity of the {po_line} to 8000', act('edit_po_line')],
   ['orders', X, 'Move the {dispatch_lot} to the 28th', act('edit_dispatch_lot')],
+  ['orders', X, 'Release the stock reserved for the {reserved_line}', act('release_reservation')],
+  ['orders', X, 'Add 3000 {item} to {draft_po}', act('add_po_line')],
+  ['orders', X, 'Remove the {po_line}', act('remove_po_line')],
+  ['orders', X, 'Change the customer on {draft_po} to {customer}', act('edit_po')],
+  ['orders', X, 'Plan a dispatch lot of 2000 for the {po_line} on the 28th', act('add_dispatch_lot')],
+  ['orders', X, 'Delete the {dispatch_lot}', act('delete_dispatch_lot')],
+  ['orders', X, 'Mark {po} as dispatched today', act('dispatch_po')],
+  ['orders', X, 'Cancel {draft_po}, the customer dropped it', act('cancel_po')],
+  ['orders', X, 'Delete {draft_po} permanently, it was entered twice', act('delete_po')],
 
   ['buying', X, 'Order 10000 {item} from {supplier} at 3.1', act('create_procurement')],
   ['buying', X, 'The {proc_item} order from the supplier is under QC now', act('set_procurement_stage')],
   ['buying', X, 'Approve bill {doc}', act('approve_document')],
+  ['buying', X, 'Reject bill {doc}, wrong GSTIN', act('reject_document')],
+  ['buying', X, 'Cancel procurement order {proc}', act('cancel_procurement')],
   ['buying', X, '{proc} is now expected next Friday', act('edit_procurement')],
   ['buying', X, 'Set the rate of {sales_line} to 0.07', act('set_invoice_rate')],
   ['buying', X, 'Remind me to chase payment on voucher {voucher} next Monday', act('set_payment_reminder')],
@@ -94,6 +109,9 @@ const CARDS = [
   ['clients', X, 'Log a call with {contact}: wants 15k next month', act('log_client_note')],
   ['clients', X, 'Put {contact} on the watch list', act('set_client_watch')],
   ['clients', X, 'Add a task to call {contact} on Friday', act('add_task')],
+  ['clients', X, '{contact} is now qualified', act('set_client_stage')],
+  ['clients', X, `Update {contact}'s phone to ${PHONE}`, act('edit_client')],
+  ['clients', X, 'Delete the client {contact}', act('delete_client')],
 ].map(([area, level, q, expect]) => ({ area, level, q, expect }));
 
 // One real record per slot, the kind each card needs (an item with stock, a confirmed PO, a pending request…).
@@ -108,6 +126,9 @@ const SLOT_SQL = {
   company: 'SELECT co.name AS v FROM crm_notes n JOIN crm_contacts c ON c.id = n.contact_id JOIN crm_companies co ON co.id = c.company_id ORDER BY n.id DESC LIMIT 1',
   contact: "SELECT poc_name AS v FROM crm_contacts WHERE status != 'lost' ORDER BY id LIMIT 1",
   task: "SELECT title AS v FROM crm_tasks WHERE status = 'open' AND contact_id IS NULL ORDER BY length(title) LIMIT 1",
+  done_task: "SELECT title AS v FROM crm_tasks WHERE status = 'done' ORDER BY length(title) LIMIT 1",
+  colleague: "SELECT username AS v FROM users WHERE role IN ('manager', 'user') ORDER BY id LIMIT 1",
+  reserved_line: "SELECT pi.item_code || ' line on ' || p.po_number AS v FROM reels r JOIN crm_po_items pi ON pi.id = r.reserved_po_item_id JOIN crm_purchase_orders p ON p.id = pi.po_id WHERE r.status = 'In Stock' ORDER BY p.id LIMIT 1",
   request: "SELECT id AS v FROM requests WHERE status = 'pending' ORDER BY id LIMIT 1",
   request2: "SELECT id AS v FROM requests WHERE status = 'pending' ORDER BY id DESC LIMIT 1",
   po: "SELECT po_number AS v FROM crm_purchase_orders WHERE status = 'confirmed' ORDER BY id DESC LIMIT 1",
@@ -129,7 +150,7 @@ const short = (slot, v) => {
   let s = String(v).split(' — ')[0].split(',')[0].split(':')[0].trim();
   if (['customer', 'company', 'supplier'].includes(slot)) s = s.replace(/\s+(pvt\.?|private|ltd\.?|limited|llp|inc\.?|distributors|co\.?)(\s|$).*$/i, '').trim();
   if (slot === 'item_word') s = `${s.split(' ')[0].toLowerCase().replace(/s$/, '')}s`; // "Varistor 14D471K" → "varistors"
-  return slot === 'task' ? s.charAt(0).toLowerCase() + s.slice(1) : s;
+  return slot === 'task' || slot === 'done_task' ? s.charAt(0).toLowerCase() + s.slice(1) : s;
 };
 
 async function fillCards() {

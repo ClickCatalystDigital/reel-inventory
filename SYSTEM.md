@@ -327,7 +327,7 @@ Admin-only assistant modelled on SB Ops' OPS AI; **Both parts are built.** Plan:
 ## 6c-2. Ohm AI does tasks, Cue Cards, Claude/ChatGPT connection (added 2026-11-08)
 
 Same harness as Atelier AI (savistar-ops).
-- **Actions** (`utils/assistantActions.js`, 46): one registry entry per task (about, risk, fields, request, summary, link) drives Jev's choice, the chat card, validation, the log and the MCP schema. Stock (inward, ship reels/boxes, transfer, undo transfer/shipment, approve/reject requests, edit-then-approve a request, reserve/release), catalog (add, edit, rate/HSN/GST, archive), clients (add, note, stage, watch list, details, delete), tasks (add, done, reopen, move, assign, delete), customer POs (new, customer/order date, add/edit/remove line, confirm, dispatch, dispatch date, add/edit/delete dispatch lot, cancel), procurement (new, expected date/ordered, stage, cancel), supplier bills (approve, reject), partner-store sales invoice rate/HSN/GST (one line per card), payment reminder on a sales voucher. Edit actions send the stored record with only the changed fields, since several routes overwrite fields they are not given (PO PATCH, dispatch-lot PUT, sales-invoice PUT). Skipped on purpose: uploads, logins, settings, AI extraction, bulk deletes, QuickBooks settings, the password-gated Reports delete, and keying in a supplier bill by hand (`POST /api/invoices/manual` makes an empty bill that a second request fills by id; the runner sends fixed request lists).
+- **Actions** (`utils/assistantActions.js`, 47; `delete_po` added 2026-11-09): one registry entry per task (about, risk, fields, request, summary, link) drives Jev's choice, the chat card, validation, the log and the MCP schema. Stock (inward, ship reels/boxes, transfer, undo transfer/shipment, approve/reject requests, edit-then-approve a request, reserve/release), catalog (add, edit, rate/HSN/GST, archive), clients (add, note, stage, watch list, details, delete), tasks (add, done, reopen, move, assign, delete), customer POs (new, customer/order date, add/edit/remove line, confirm, dispatch, dispatch date, add/edit/delete dispatch lot, cancel), procurement (new, expected date/ordered, stage, cancel), supplier bills (approve, reject), partner-store sales invoice rate/HSN/GST (one line per card), payment reminder on a sales voucher. Edit actions send the stored record with only the changed fields, since several routes overwrite fields they are not given (PO PATCH, dispatch-lot PUT, sales-invoice PUT). Skipped on purpose: uploads, logins, settings, AI extraction, bulk deletes, QuickBooks settings, the password-gated Reports delete, and keying in a supplier bill by hand (`POST /api/invoices/manual` makes an empty bill that a second request fills by id; the runner sends fixed request lists).
 - **Runner** (`utils/actionRunner.js`): dispatches the route's own request through `app.js` in-process (`app.handle` with a mock req/res, Bearer token of the person), so login, client/staff guards, role checks, staff approvals (`pending`), the demo guard and the owner-pass golden scope all apply. An action may be several requests (mixed-item shipment = one per item).
 - **Chat**: KINDS `action` → one extra Jev choice over the actions under neutral ids (a0…); unsure → prefer the task whose required records/reel numbers resolve; a hesitant action next to a ≥90% look-up is answered as data. Reply `type: 'draft'` → `frontend/components/assistant/ActionCard.tsx` (every field editable, deletes red) → `POST /api/assistant/act` (re-checked; staff + demo allowed). Nothing is written without Save.
 - **Cue Cards** (`/cue-cards`, cog menu; `utils/cueCards.js`, `GET /api/assistant/cue-cards`): L1 Know, L2 Diagnose, L5 Execute live, L3/L4 "Coming"; `{slots}` filled from this DB's records, so cards read right on live, demo and US demo. Ask fires `assistant:ask` → the widget sends it.
@@ -343,6 +343,29 @@ Spec: `ahrom-labs/docs/assistant-auto-mode-plan.md` (same for Atelier, Ember, Da
 - **Server decides**: `utils/assistant.js autoAllowed(settings, role, action)`. Chat drafts carry `auto` (this person may auto-save this one); `POST /api/assistant/act {auto:true}` re-checks and answers `needsConfirm` (409) otherwise; success adds `undo_token` (JWT, audience `assistant-undo`, this login, 30 min) → `POST /api/assistant/undo {token}` replays the reverse through the routes as that person. Staff stock entries still go for approval (no Auto for them: their reverse needs admin/manager). Log kinds `action_auto` / `action_undo`.
 - **Chat**: `GET /api/assistant/starters` returns `auto` (role allowed); the composer shows a small Manual / Auto button left of Send (per person in `localStorage.lsai_mode_<username>`). In Auto a ready, auto-eligible draft is saved right away and shown as "Done: … · Undo"; anything else shows the usual card. MCP is unchanged (always propose → confirm).
 - **Check**: `scripts/check-actions.js` section 3 (role not ticked, always-confirm, card-only, undo for add/edit item, inward, transfer, ship, task, client stage; token bound to the login; switch off).
+
+### Write routes vs Ohm AI actions (audit 2026-11-09)
+
+Every POST/PUT/PATCH/DELETE the frontend calls. **44 covered (1 of them added: `delete_po`), 31 left out**.
+
+| Area | Covered by an action | Left out (why) |
+|---|---|---|
+| Stock | inward, outward/grouped, outward/undo, transfer, transfer/undo | inward/undo (shared password gate) |
+| Requests | requests/:id approve, reject, edit-approve | daily-gate/approve (Gelco roles, which have no assistant) |
+| Reservations | orders/:po/lines/:l reserve, release | — |
+| Catalog | items POST, PUT, PUT invoice, DELETE | items/bulk-visibility (bulk) |
+| Clients | clients POST, PUT, DELETE, notes | clients/bulk-delete (bulk) |
+| Tasks | tasks POST, PATCH, done, reopen, assign, DELETE | — |
+| Customer POs | po POST, PATCH, items POST/PATCH/DELETE, confirm, dispatch, cancel, **DELETE** (added) | orders/:po/docs POST, orders/docs/:id DELETE (files) |
+| Dispatch lots | orders/dispatches POST, PUT, DELETE | — |
+| Procurement | procurement POST, PUT, stage, cancel | — |
+| Docs / bills | invoices/:id approve, reject (also from a task) | invoices/upload, invoices/attachment POST/DELETE, invoices/:id DELETE, gelco-docs/upload, gelco-docs/:id DELETE (files); invoices/manual (two-step form); PUT invoices/:id (editing AI-read fields beside the PDF) |
+| Sales / finance | sales-invoices/:no PUT, finance/sales/:v/reminder | sales-invoices/:no POST, outward/next-invoice-number, labels/packing-list, dashboard/delete-preview (made by the screen, not a change) |
+| Reports | — | dashboard/delete (bulk, password) |
+| People / settings | — | settings/users POST/PUT/DELETE, login, demo/pass (users, passwords); assistant/settings, assistant/test, assistant/connections DELETE (admin settings) |
+| The assistant | — | assistant/chat, act, undo, feedback (the assistant itself) |
+
+Every action has an end-to-end case in `scripts/check-actions.js`, every Auto action an Auto + Undo round trip (state compared before and after), and every action at least one Cue Card (`utils/cueCards.js`).
 
 ## 6d. Public demo — electronics-erp.ahromlabs.com (added 2026-10-13)
 
