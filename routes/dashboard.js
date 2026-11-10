@@ -378,13 +378,14 @@ router.get('/analytics', ah(async (req, res) => {
     SELECT i.item_code, i.description,
       COUNT(r.id) as in_stock_reels,
       SUM(r.quantity) as total_quantity,
-      MAX(o.outward_date) as last_outward_date,
-      CAST(julianday('now') - julianday(MAX(o.outward_date)) AS INTEGER) as days_since_last_outward
+      -- last shipment from ANY reel of the item: fully shipped reels are no longer In Stock, so joining the outwards to
+      -- the in-stock reels only saw part-shipped ones and most items looked never shipped
+      (SELECT MAX(o.outward_date) FROM outwards o JOIN reels s ON s.reel_number = o.reel_number WHERE s.item_code = i.item_code) as last_outward_date,
+      CAST(julianday('now') - julianday((SELECT MAX(o.outward_date) FROM outwards o JOIN reels s ON s.reel_number = o.reel_number WHERE s.item_code = i.item_code)) AS INTEGER) as days_since_last_outward
     FROM items i
     JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${storeFilter ? ' AND r.store_code = ?' : ''}
-    LEFT JOIN outwards o ON r.reel_number = o.reel_number
     GROUP BY i.item_code
-    HAVING MAX(o.outward_date) IS NULL OR julianday('now') - julianday(MAX(o.outward_date)) > 30
+    HAVING last_outward_date IS NULL OR days_since_last_outward > 30
     ORDER BY days_since_last_outward DESC
   `, sp);
 
