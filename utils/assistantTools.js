@@ -85,10 +85,13 @@ const TOOLS = brand.deep([
     keywords: ['dead stock', 'slow moving', 'not moved', 'not shipped', 'idle', 'stagnant'],
     async run(c) {
       const st = storeSql(c.store, 'r.store_code');
-      const rows = await queryAll(`SELECT i.item_code, i.description, COUNT(r.id) AS reels, SUM(r.quantity) AS qty, MAX(o.outward_date) AS last_outward,
-          CAST(julianday('now') - julianday(MAX(o.outward_date)) AS INTEGER) AS days FROM items i JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${st.sql}
-        LEFT JOIN outwards o ON r.reel_number = o.reel_number GROUP BY i.item_code HAVING MAX(o.outward_date) IS NULL OR julianday('now') - julianday(MAX(o.outward_date)) > 30
-        ORDER BY days DESC, qty DESC`, st.args);
+      // The item's last shipment is from ANY of its reels: a shipped reel is no longer in stock, so joining the outwards
+      // to the in-stock reels never found one and every item looked "never shipped".
+      const rows = await queryAll(`SELECT i.item_code, i.description, COUNT(r.id) AS reels, SUM(r.quantity) AS qty,
+          (SELECT MAX(o.outward_date) FROM outwards o JOIN reels s ON s.reel_number = o.reel_number WHERE s.item_code = i.item_code) AS last_outward
+        FROM items i JOIN reels r ON i.item_code = r.item_code AND r.status = 'In Stock'${st.sql}
+        GROUP BY i.item_code HAVING last_outward IS NULL OR julianday('now') - julianday(last_outward) > 30
+        ORDER BY last_outward IS NOT NULL, last_outward, qty DESC`, st.args);
       return table({ title: `Dead stock — ${E.STORE_NAME[c.store || 'all']}`, summary: `${plural(rows.length, 'item')} with stock and no outward in the last 30 days.`,
         columns: [col('item_code', 'Item code'), col('description', 'Description'), col('reels', 'Reels', 'int'), col('qty', 'Quantity', 'int'), col('last_outward', 'Last outward', 'date')],
         rows: rows.slice(0, CAP).map((r) => ({ ...r, reels: Number(r.reels), qty: Number(r.qty), last_outward: r.last_outward ? String(r.last_outward).slice(0, 10) : 'never' })),
