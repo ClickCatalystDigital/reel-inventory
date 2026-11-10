@@ -9,7 +9,7 @@ const { getDailyReportData } = require('./dailyReport');
 const E = require('./assistantEntities');
 const brand = require('./brand');
 const ST = require('./assistantStats');
-const { locale } = require('./market');
+const { locale, money } = require('./market');
 
 const n = (x) => Number(x || 0).toLocaleString(locale());
 const plural = (k, w) => `${n(k)} ${w}${Number(k) === 1 ? '' : 's'}`;
@@ -17,7 +17,9 @@ const CAP = 25;
 const storeSql = (store, col = 'store_code') => (store && store !== 'all' ? { sql: ` AND ${col} = ?`, args: [store] } : { sql: '', args: [] });
 const bounds = (p) => (p && p.from ? { from: `${p.from} 00:00:00`, to: `${p.to} 23:59:59` } : null);
 const col = (key, label, type = 'text') => ({ key, label, type });
-const table = (o) => ({ rows: [], total: o.rows ? o.rows.length : 0, ...o });
+// A name ending in a full stop ("Brightline Appliances Inc.") at the end of a sentence would print "Inc.."; keep one.
+const oneStop = (t) => (typeof t === 'string' ? t.replace(/(?<!\.)\.\.(?!\.)/g, '.') : t);
+const table = (o) => ({ rows: [], total: o.rows ? o.rows.length : 0, ...o, title: oneStop(o.title), summary: oneStop(o.summary), note: oneStop(o.note) });
 
 const TOOLS = brand.deep([
   {
@@ -253,8 +255,8 @@ const TOOLS = brand.deep([
         const sh = new Map(shipped.rows.map((r) => [r.item_code, Number(r.qty)]));
         const rows = items.rows.map((i) => ({ item_code: i.item_code || '(unmatched line)', ordered: Number(i.quantity_ordered) || 0, shipped: sh.get(i.item_code) || 0, price: i.unit_price === null ? '—' : String(i.unit_price), value: Math.round((Number(i.quantity_ordered) || 0) * Number(i.unit_price || 0)) }));
         const tv = rows.reduce((a, r) => a + r.value, 0);
-        return table({ title: `PO ${c.po.po_number}`, summary: `${c.po.po_number} — ${c.po.status}${c.po.company ? ` — ${c.po.company}` : ''}; ${plural(rows.length, 'line')}; value ${n(tv)}.`, columns: [col('item_code', 'Item code'), col('ordered', 'Ordered', 'int'), col('shipped', 'Shipped', 'int'), col('price', 'Unit price', 'int'), col('value', 'Value', 'int')], rows,
-          note: 'Shipped = outwards tied to this PO. Value = ordered quantity × unit price on the PO line (the PO does not record a currency).' });
+        return table({ title: `PO ${c.po.po_number}`, summary: `${c.po.po_number} — ${c.po.status}${c.po.company ? ` — ${c.po.company}` : ''}; ${plural(rows.length, 'line')}; value ${money(Math.round(tv), 0)}.`, columns: [col('item_code', 'Item code'), col('ordered', 'Ordered', 'int'), col('shipped', 'Shipped', 'int'), col('price', 'Unit price', 'int'), col('value', 'Value', 'int')], rows,
+          note: 'Shipped = outwards tied to this PO. Value = ordered quantity × unit price on the PO line, in the currency of the PO screen.' });
       }
       const q = c.question.toLowerCase(); const status = ['draft', 'confirmed', 'dispatched', 'cancelled'].find((s) => q.includes(s)) || (/\bopen\b|\bnot dispatched\b|\bpending\b/.test(q) ? 'confirmed' : null);
       const cust = c.customer ? ` AND co.name IN (${c.customer.variants.map(() => '?').join(',')})` : '';
@@ -263,10 +265,10 @@ const TOOLS = brand.deep([
         FROM crm_purchase_orders p LEFT JOIN crm_companies co ON co.id = p.company_id WHERE 1=1${status ? ' AND p.status = ?' : ''}${cust} ORDER BY p.id DESC LIMIT ?`, [...(status ? [status] : []), ...(c.customer ? c.customer.variants : []), CAP]);
       const counts = await queryAll('SELECT status, COUNT(*) AS n FROM crm_purchase_orders GROUP BY status');
       const tv = rows.reduce((a, r) => a + Number(r.value), 0);
-      return table({ title: `Purchase orders${status ? ` — ${status}` : ''}`, summary: `${plural(rows.length, 'PO')} shown, together worth ${n(Math.round(tv))}. All POs: ${counts.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`,
+      return table({ title: `Purchase orders${status ? ` — ${status}` : ''}`, summary: `${plural(rows.length, 'PO')} shown, together worth ${money(Math.round(tv), 0)}. All POs: ${counts.map((r) => `${n(r.n)} ${r.status}`).join(', ')}.`,
         columns: [col('po_number', 'PO'), col('status', 'Status'), col('company', 'Customer'), col('order_date', 'Ordered', 'date'), col('expected_dispatch_date', 'Dispatch by', 'date'), col('lines', 'Lines', 'int'), col('value', 'Value', 'int')],
         rows: rows.map((r) => ({ ...r, lines: Number(r.lines), value: Math.round(Number(r.value)), order_date: r.order_date || '—', expected_dispatch_date: r.expected_dispatch_date || '—', company: r.company || '—' })),
-        note: 'Value = ordered quantity × unit price on the PO lines (no currency is recorded). Shipments themselves carry no prices.', link: { path: '/outward', label: 'Open Outward' } });
+        note: 'Value = ordered quantity × unit price on the PO lines, in the currency of the PO screen. Shipments themselves carry no prices.', link: { path: '/outward', label: 'Open Outward' } });
     },
   },
   {
