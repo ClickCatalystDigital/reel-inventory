@@ -91,7 +91,11 @@ async function itemCandidates(question) {
     const hay = norm(`${it.item_code} ${it.description}`);
     const codeHay = norm(it.item_code);
     let score = 0, hits = 0;
+    const words = hay.split(/[^a-z0-9]+/);
     for (const t of toks) {
+      // "run out in 30 days": a number of up to 3 digits is a quantity or a period, not part of a code (STM32G030),
+      // unless it is a whole word there. Longer numbers ("0603", "4148") still match inside codes.
+      if (/^\d{1,3}$/.test(t) && !words.includes(t)) continue;
       if (hay.includes(t)) { hits++; score += (/\d/.test(t) ? 3 : 1.5) + Math.min(t.length, 8) / 8 + (codeHay.includes(t) ? 1 : 0); }
     }
     if (hits) scored.push({ code: it.item_code, label: it.description, hits, score: score + (hits === toks.length ? 4 : 0) });
