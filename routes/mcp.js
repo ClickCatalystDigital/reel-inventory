@@ -14,7 +14,10 @@ const brand = require('../utils/brand');
 
 const router = express.Router();
 const DEMO = process.env.DEMO_MODE === '1';
-router.use((req, res, next) => (DEMO ? res.status(404).json({ error: 'Not available in the demo' }) : next()));
+// The demo has no MCP. Only this router's own paths are refused: it is mounted at the app's root, so a bare
+// router.use() here answered every request in the demo with 404 (the whole demo app stopped working).
+const demoOff = (req, res, next) => (DEMO ? res.status(404).json({ error: 'Not available in the demo' }) : next());
+router.use(['/mcp', '/oauth', '/.well-known'], demoOff);
 
 const secret = () => process.env.SESSION_SECRET;
 const signConfirm = (user, action, values) => jwt.sign({ u: user.username, a: action, v: values }, secret(), { expiresIn: '10m', audience: 'mcp-confirm' });
@@ -131,7 +134,7 @@ router.post('/oauth/token', async (req, res) => {
 
 // ---- signed in (mounted after the login check in app.js) ----
 const signedIn = express.Router();
-signedIn.use((req, res, next) => (DEMO ? res.status(404).json({ error: 'Not available in the demo' }) : next()));
+signedIn.use(['/api/oauth', '/api/assistant/connections'], demoOff);
 // The consent page (frontend /oauth/authorize) asks what it is approving: the app's name, or why it can't connect.
 signedIn.get('/api/oauth/check', async (req, res) => {
   try {
