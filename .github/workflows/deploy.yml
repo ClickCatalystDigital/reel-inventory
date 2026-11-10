@@ -53,6 +53,9 @@ jobs:
         run: npm run deploy:demo -- --var BUILD_COMMIT:$GITHUB_SHA || (echo "retrying once" && sleep 20 && npm run deploy:demo -- --var BUILD_COMMIT:$GITHUB_SHA)
       - name: Check the demo serves this commit
         run: node scripts/wait-for-commit.mjs https://electronics-erp.ahromlabs.com "$GITHUB_SHA" /demo
+      # The page can load while every API answers 404 (10 Nov 2026: a router mounted at the root refused all of them).
+      - name: Check the demo's API answers (401 without a login, not 404)
+        run: test "$(curl -s -o /dev/null -w '%{http_code}' https://electronics-erp.ahromlabs.com/api/items)" = 401
 
   client:
     needs: demo
