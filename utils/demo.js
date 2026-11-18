@@ -97,18 +97,21 @@ async function returnAiQuestion(req) {
   if (token && token !== '1') await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used - 1 WHERE token = ? AND ai_used > 0', args: [token] });
 }
 
-// Emails the lead to us through ahromlabs.com (its /api/demo-lead, shared DEMO_LEAD_KEY). Never blocks or
-// fails the visitor's entry: the lead is already saved, so a mail problem is only logged.
+// Emails the lead to us through ahromlabs.com (its /api/demo-lead, shared DEMO_LEAD_KEY), before it is saved here.
+// Returns ahromlabs.com's message when it finds the email made up; any other problem is only logged, never blocks.
 async function emailLead(lead) {
-  if (!process.env.DEMO_LEAD_KEY) return;
+  if (!process.env.DEMO_LEAD_KEY) return null;
   try {
     const res = await fetch('https://ahromlabs.com/api/demo-lead', {
       method: 'POST', signal: AbortSignal.timeout(5000),
       headers: { 'content-type': 'application/json', 'x-demo-key': process.env.DEMO_LEAD_KEY },
       body: JSON.stringify({ demo: 'electronics', name: lead.name, company: lead.company, email: lead.email, phone: lead.phone, about: lead.business }),
     });
+    // 422: ahromlabs.com found the email made up (no mail server, placeholder, temporary inbox); show its message.
+    if (res.status === 422) return (await res.json().catch(() => ({}))).error || 'Please use your real email address.';
     if (!res.ok) console.error('demo lead email failed', res.status);
   } catch (e) { console.error('demo lead email failed', e.message); }
+  return null;
 }
 
 const router = express.Router();
@@ -139,13 +142,15 @@ router.post('/lead', async (req, res, next) => {
     const lead = { name: clip(b.name, 120), company: clip(b.company, 160), email: clip(b.email, 160).toLowerCase(), phone: clip(b.phone, 40), business: clip(b.business, 200) };
     if (!lead.name || !lead.company) return res.status(400).json({ error: 'Name and company are required' });
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(lead.email)) return res.status(400).json({ error: 'Enter a valid email' });
+    // Sent to ahromlabs.com first: a made-up email is refused there and the visitor isn't saved or let in.
+    const refused = await emailLead(lead);
+    if (refused) return res.status(400).json({ error: refused });
     const db = await readyLeads();
     const token = randomBytes(18).toString('base64url');
     await db.execute({
       sql: 'INSERT INTO demo_leads (name, company, email, phone, business, ip, user_agent, token) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
       args: [lead.name, lead.company, lead.email, lead.phone || null, lead.business || null, req.headers['cf-connecting-ip'] || null, clip(req.headers['user-agent'], 300) || null, token],
     });
-    await emailLead(lead);
     res.cookie('demo_lead', token, { ...COOKIE, maxAge: 30 * 24 * 60 * 60 * 1000 });
     res.json({ ok: true });
   } catch (err) { next(err); }
