@@ -72,14 +72,35 @@ async function leadsTable(db) {
   }
   // wrong owner-pass tries, per visitor IP per day (passLocked below)
   await db.execute('CREATE TABLE IF NOT EXISTS demo_pass_tries (ip TEXT NOT NULL, day TEXT NOT NULL, n INTEGER NOT NULL DEFAULT 0, PRIMARY KEY (ip, day))');
+  // guest-pass browsers (takeGuestUse); pass_id tells one GUEST_PASS from the next
+  await db.execute('CREATE TABLE IF NOT EXISTS demo_guests (token TEXT PRIMARY KEY, pass_id TEXT NOT NULL, ai_used INTEGER NOT NULL DEFAULT 0, created_at DATETIME DEFAULT CURRENT_TIMESTAMP)');
 }
+
+// Guest pass: a second PIN (the Worker secret GUEST_PASS, 4+ characters) for people we send the demo to, typed in the same
+// "Have a demo pass?" box or opened as /demo#pass=<PIN>. It skips the form (no lead saved) and opens the demo in at most
+// GUEST_USES browsers per PIN, counted in demo_guests (the nightly reset never touches it); a new PIN starts a fresh count.
+// A guest browser is view-only: guard() refuses every change while its demo_lead cookie starts with "guest.". It gets the
+// visitor's AI_QUESTIONS, counted on its demo_guests row. No GUEST_PASS, no guest pass. Same as savistar-ops and shanti-ops.
+const GUEST_USES = 5;
+const guestKey = () => (process.env.GUEST_PASS && process.env.GUEST_PASS.length >= 4 ? process.env.GUEST_PASS : null);
+const isGuest = (req) => (leadToken(req) || '').startsWith('guest.');
+// A new guest browser's token, or null once this PIN has opened GUEST_USES browsers. One statement, so two at once can't
+// both take the last use.
+async function takeGuestUse() {
+  const token = `guest.${randomBytes(18).toString('base64url')}`;
+  const id = createHmac('sha256', guestKey()).update('demo-guest-pass').digest('base64url').slice(0, 16);
+  const r = await (await readyLeads()).execute({ sql: 'INSERT INTO demo_guests (token, pass_id) SELECT ?, ? WHERE (SELECT COUNT(*) FROM demo_guests WHERE pass_id = ?) < ?', args: [token, id, id, GUEST_USES] });
+  return r.rowsAffected === 1 ? token : null;
+}
+// Visitors' questions are counted on their lead row, guests' on their demo_guests row.
+const aiTable = (req) => (isGuest(req) ? 'demo_guests' : 'demo_leads');
 
 // Questions this visitor has left (0 when unknown).
 async function aiLeft(req) {
   if (isOwnerPass(req)) return AI_QUESTIONS; // shown as "no limit"
   const token = leadToken(req);
   if (!token || token === '1') return 0;
-  const r = await (await readyLeads()).execute({ sql: 'SELECT ai_used FROM demo_leads WHERE token = ?', args: [token] });
+  const r = await (await readyLeads()).execute({ sql: `SELECT ai_used FROM ${aiTable(req)} WHERE token = ?`, args: [token] });
   return r.rows.length ? Math.max(0, AI_QUESTIONS - Number(r.rows[0].ai_used)) : 0;
 }
 // Takes one question atomically; false when none are left.
@@ -87,14 +108,14 @@ async function takeAiQuestion(req) {
   if (isOwnerPass(req)) return true;
   const token = leadToken(req);
   if (!token || token === '1') return false;
-  const r = await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used + 1 WHERE token = ? AND ai_used < ?', args: [token, AI_QUESTIONS] });
+  const r = await (await readyLeads()).execute({ sql: `UPDATE ${aiTable(req)} SET ai_used = ai_used + 1 WHERE token = ? AND ai_used < ?`, args: [token, AI_QUESTIONS] });
   return r.rowsAffected === 1;
 }
 // Gives it back when the answer failed (OpenRouter down, etc.), so a visitor never loses one to an error.
 async function returnAiQuestion(req) {
   if (isOwnerPass(req)) return;
   const token = leadToken(req);
-  if (token && token !== '1') await (await readyLeads()).execute({ sql: 'UPDATE demo_leads SET ai_used = ai_used - 1 WHERE token = ? AND ai_used > 0', args: [token] });
+  if (token && token !== '1') await (await readyLeads()).execute({ sql: `UPDATE ${aiTable(req)} SET ai_used = ai_used - 1 WHERE token = ? AND ai_used > 0`, args: [token] });
 }
 
 // Emails the lead to us through ahromlabs.com (its /api/demo-lead, shared DEMO_LEAD_KEY), before it is saved here.
@@ -116,7 +137,7 @@ async function emailLead(lead) {
 
 const router = express.Router();
 
-router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLead(req), owner: isOwnerPass(req) }));
+router.get('/roles', (req, res) => res.json({ roles: DEMO_ROLES, hasLead: hasLead(req), owner: isOwnerPass(req), guest: isGuest(req) }));
 
 // The widget asks this on load: hidden when the demo has no AI key, locked when left is 0.
 router.get('/ai', async (req, res, next) => {
@@ -130,6 +151,13 @@ router.post('/pass', async (req, res, next) => {
     const ip = req.headers['cf-connecting-ip'] || 'unknown';
     if (await passLocked(ip)) return res.status(429).json({ error: 'Too many tries. Try again tomorrow.' });
     const given = req.body?.pass;
+    // The guest pass (view-only, GUEST_USES browsers per PIN): a week in this browser.
+    if (guestKey() && typeof given === 'string' && same(given, guestKey())) {
+      const token = await takeGuestUse();
+      if (!token) return res.status(403).json({ error: `This pass has been used ${GUEST_USES} times and has expired. Ask us for a new one, or fill in the form.` });
+      res.cookie('demo_lead', token, { ...COOKIE, maxAge: 7 * 24 * 60 * 60 * 1000 });
+      return res.json({ ok: true, guest: true });
+    }
     if (!passKey() || typeof given !== 'string' || !same(given, passKey())) { await passFailed(ip); return res.status(403).json({ error: 'That pass is not valid.' }); }
     res.cookie('demo_lead', ownerPassToken(), { ...COOKIE, maxAge: 365 * 24 * 60 * 60 * 1000 });
     res.json({ ok: true });
@@ -176,6 +204,8 @@ const AI_OPEN = ['/api/assistant/chat', '/api/assistant/starters', '/api/assista
 function guard(req, res, next) {
   const write = !['GET', 'HEAD', 'OPTIONS'].includes(req.method);
   const path = req.originalUrl.split('?')[0];
+  // Guest pass: view-only. Only asking the assistant gets through (saving its cards doesn't); logout is a GET.
+  if (write && isGuest(req) && path !== '/api/assistant/chat') return res.status(403).json({ error: 'This demo pass is view-only, so nothing can be changed.' });
   if (path.startsWith('/api/assistant') && !AI_OPEN.includes(path)) return res.status(403).json({ error: 'Not available in the demo' });
   const hit = BLOCKED.some((p) => path === p || path.startsWith(p + '/'));
   if (hit && write) return res.status(403).json({ error: 'Not available in the demo' });

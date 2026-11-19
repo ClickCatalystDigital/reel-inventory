@@ -38,9 +38,11 @@ export default function DemoPage() {
   const [error, setError] = useState("");
   const [passOpen, setPassOpen] = useState(false);
   const [pin, setPin] = useState("");
+  const [guest, setGuest] = useState(false);
   async function usePass(pass: string) {
     setBusy("pass"); setError("");
-    try { await post("/api/demo/pass", { pass }); setOwner(true); setStep("roles"); }
+    // the guest pass (view-only) also skips to the roles, but keeps the box open for the owner pass
+    try { const r = await post("/api/demo/pass", { pass }); if (r?.guest) setGuest(true); else setOwner(true); setStep("roles"); }
     catch (e) { setError(e instanceof Error ? e.message : "Something went wrong"); setPin(""); }
     finally { setBusy(null); }
   }
@@ -51,11 +53,14 @@ export default function DemoPage() {
     const pass = new URLSearchParams(window.location.hash.slice(1)).get("pass");
     if (pass) history.replaceState(null, "", window.location.pathname);
     (pass ? fetch("/api/demo/pass", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pass }) }).catch(() => null) : Promise.resolve(null))
+      // say why a pass didn't work (e.g. a guest pass that has been used up) instead of just showing the form
+      .then((r) => (r && !r.ok ? r.json().then((d) => setError(d.error || "That pass is not valid.")).catch(() => {}) : null))
       .then(() => fetch("/api/demo/roles"))
       .then((r) => r.json())
       .then((d) => {
         setRoles(d.roles || []);
         setOwner(!!d.owner);
+        setGuest(!!d.guest);
         setStep(d.hasLead ? "roles" : "form");
       })
       .catch(() => setStep("form"));
@@ -186,7 +191,7 @@ export default function DemoPage() {
           ) : (
             <div className="grid gap-2 sm:grid-cols-2">
               <p className={`text-xs sm:col-span-2 ${owner ? "font-medium text-primary" : "text-muted-foreground"}`}>
-                {owner ? "Owner mode: your changes in this browser are saved." : "Visitor mode: changes are wiped every night."}
+                {owner ? "Owner mode: your changes in this browser are saved." : guest ? "View-only pass: look around as any login; nothing can be changed." : "Visitor mode: changes are wiped every night."}
               </p>
               {roles.map((r) => (
                 <button

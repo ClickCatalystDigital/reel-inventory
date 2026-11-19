@@ -6,13 +6,16 @@ import { DemoWhatsApp } from "./DemoWhatsApp";
 
 export function DemoBanner() {
   const [owner, setOwner] = useState(false);
+  const [guest, setGuest] = useState(false);
   useEffect(() => {
-    fetch("/api/demo/roles").then((r) => r.json()).then((d) => setOwner(!!d.owner)).catch(() => {});
+    fetch("/api/demo/roles").then((r) => r.json()).then((d) => { setOwner(!!d.owner); setGuest(!!d.guest); }).catch(() => {});
   }, []);
   return (
     <div data-demo-pill className="fixed bottom-24 left-1/2 z-50 -translate-x-1/2 whitespace-nowrap rounded-full border bg-background/95 px-3 py-1.5 text-xs text-muted-foreground shadow-md backdrop-blur md:bottom-4 print:hidden">
       {owner ? (
         <span className="font-medium text-primary">Owner mode<span className="hidden sm:inline"> · changes saved</span></span>
+      ) : guest ? (
+        <span className="font-medium">View-only pass</span>
       ) : (
         <>Demo<span className="hidden sm:inline"> · resets nightly</span></>
       )}{" "}
