@@ -84,11 +84,12 @@ async function leadsTable(db) {
 const GUEST_USES = 5;
 const guestKey = () => (process.env.GUEST_PASS && process.env.GUEST_PASS.length >= 4 ? process.env.GUEST_PASS : null);
 const isGuest = (req) => (leadToken(req) || '').startsWith('guest.');
-// A new guest browser's token, or null once this PIN has opened GUEST_USES browsers. One statement, so two at once can't
+// A new guest browser's token, or null once this PIN has opened GUEST_USES browsers on this demo (host: the India and US
+// builds share a leads DB, and each gets its own 5). One statement, so two at once can't
 // both take the last use.
-async function takeGuestUse() {
+async function takeGuestUse(host) {
   const token = `guest.${randomBytes(18).toString('base64url')}`;
-  const id = createHmac('sha256', guestKey()).update('demo-guest-pass').digest('base64url').slice(0, 16);
+  const id = createHmac('sha256', guestKey()).update(`demo-guest-pass:${host}`).digest('base64url').slice(0, 16);
   const r = await (await readyLeads()).execute({ sql: 'INSERT INTO demo_guests (token, pass_id) SELECT ?, ? WHERE (SELECT COUNT(*) FROM demo_guests WHERE pass_id = ?) < ?', args: [token, id, id, GUEST_USES] });
   return r.rowsAffected === 1 ? token : null;
 }
@@ -153,7 +154,7 @@ router.post('/pass', async (req, res, next) => {
     const given = req.body?.pass;
     // The guest pass (view-only, GUEST_USES browsers per PIN): a week in this browser.
     if (guestKey() && typeof given === 'string' && same(given, guestKey())) {
-      const token = await takeGuestUse();
+      const token = await takeGuestUse(req.headers.host || '');
       if (!token) return res.status(403).json({ error: `This pass has been used ${GUEST_USES} times and has expired. Ask us for a new one, or fill in the form.` });
       res.cookie('demo_lead', token, { ...COOKIE, maxAge: 7 * 24 * 60 * 60 * 1000 });
       return res.json({ ok: true, guest: true });
